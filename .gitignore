@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Runtime/logs
+app.log
+*.log
+
+# Local data artifacts
+uploads/
+*.xls
+*.xlsx
+consolidated_price.xlsx
+
+# Local caches/state
+onliner_cache.json
+onliner_id_cache.json
+onliner_id_cache.backup.json
+onliner_market_cache.json
+onliner_product_cache.json
+id_mismatch_report.json
+id_mismatch_report_sample.json
+manual_id_bindings.json
+category_overrides.json
+category_markups.json
+category_visibility.json
+
+# macOS
+.DS_Store
