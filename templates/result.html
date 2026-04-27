@@ -3137,24 +3137,31 @@ function initOnlinerDbWidget(){
 
     if(gsheetBtn){
         gsheetBtn.addEventListener('click', function(){
-            var cfg = (uploadAppSettings && uploadAppSettings.onliner_db_import) ? uploadAppSettings.onliner_db_import : {};
-            var sid = String((cfg && cfg.google_sheet_id) || '').trim();
-            var sname = String((cfg && cfg.google_sheet_name) || '').trim() || 'All_Catalog';
-            if(!sid){
-                alert('Укажи ID Google таблицы в Настройках: "Onliner DB: ID Google таблицы".');
-                return;
-            }
-
             gsheetBtn.disabled = true;
-            gsheetBtn.textContent = 'Скачиваю...';
-            if(importWrap) importWrap.style.display = 'block';
-            if(importBar)  importBar.style.width = '2%';
-            if(importMsg)  importMsg.textContent  = 'Подключаюсь к Google Sheets…';
+            gsheetBtn.textContent = 'Загружаю настройки...';
 
-            fetch('/api/onliner-db-import-gsheet', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({sheet_id: sid, sheet_name: sname})
+            // Fetch settings first (result.html doesn't share uploadAppSettings from upload.html)
+            fetch('/api/app-settings')
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                var settings = (d && d.settings) || {};
+                var dbImport = settings.onliner_db_import || {};
+                var sid = String(dbImport.google_sheet_id || '').trim();
+                var sname = String(dbImport.google_sheet_name || '').trim() || 'All_Catalog';
+                if(!sid){
+                    throw new Error('ID Google таблицы не настроен. Проверьте .env (ONLINER_DB_SHEET_NAME) или обратитесь к администратору.');
+                }
+
+                gsheetBtn.textContent = 'Скачиваю...';
+                if(importWrap) importWrap.style.display = 'block';
+                if(importBar)  importBar.style.width = '2%';
+                if(importMsg)  importMsg.textContent  = 'Подключаюсь к Google Sheets…';
+
+                return fetch('/api/onliner-db-import-gsheet', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({sheet_id: sid, sheet_name: sname})
+                });
             })
             .then(function(r){ return r.json(); })
             .then(function(d){
