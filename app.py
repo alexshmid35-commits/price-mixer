@@ -15002,13 +15002,45 @@ def api_auto_refresh_settings_update():
 
 @app.route("/api/app-settings")
 def api_app_settings():
-    return jsonify({"status": "ok", "settings": load_app_settings()})
+    data = load_app_settings()
+    # Redact secrets before sending to frontend
+    b2b = data.get("onliner_b2b")
+    if isinstance(b2b, dict):
+        if str(b2b.get("client_secret") or "").strip():
+            b2b["client_secret"] = "••••••••"
+    sources = data.get("api_sources")
+    if isinstance(sources, dict):
+        for key in ("iven", "tradex"):
+            src = sources.get(key)
+            if isinstance(src, dict) and str(src.get("file_url") or "").strip():
+                src["file_url"] = "••••••••"
+        ntech = sources.get("ntech")
+        if isinstance(ntech, dict):
+            if str(ntech.get("password") or "").strip():
+                ntech["password"] = "••••••••"
+    return jsonify({"status": "ok", "settings": data})
 
 
 @app.route("/api/app-settings", methods=["POST"])
 def api_app_settings_update():
     payload = request.get_json(silent=True) or {}
     current = load_app_settings()
+    # Preserve secrets from .env if frontend sends empty/redacted values
+    b2b = payload.get("onliner_b2b")
+    if isinstance(b2b, dict):
+        if not str(b2b.get("client_secret") or "").strip() or b2b.get("client_secret") == "••••••••":
+            b2b["client_secret"] = current.get("onliner_b2b", {}).get("client_secret", "")
+    sources = payload.get("api_sources")
+    if isinstance(sources, dict):
+        for key in ("iven", "tradex"):
+            src = sources.get(key)
+            if isinstance(src, dict):
+                if not str(src.get("file_url") or "").strip() or src.get("file_url") == "••••••••":
+                    src["file_url"] = current.get("api_sources", {}).get(key, {}).get("file_url", "")
+        ntech = sources.get("ntech")
+        if isinstance(ntech, dict):
+            if not str(ntech.get("password") or "").strip() or ntech.get("password") == "••••••••":
+                ntech["password"] = current.get("api_sources", {}).get("ntech", {}).get("password", "")
     merged = _deep_merge_dict(current, payload if isinstance(payload, dict) else {})
     saved = save_app_settings(merged)
     return jsonify({"status": "ok", "settings": saved})
