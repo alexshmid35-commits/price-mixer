@@ -35,3 +35,5 @@ category_visibility.json
 .DS_Store
 *.db
 ai2025-*.json
+*.db-*
+server.pid
