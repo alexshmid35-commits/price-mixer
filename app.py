@@ -1189,7 +1189,45 @@ def load_app_settings():
             data = json.load(f)
     except Exception:
         data = {}
-    return _normalize_app_settings(data)
+    data = _normalize_app_settings(data)
+    # Overlay secrets from environment (.env) so they never live in JSON
+    try:
+        from config import cfg as _env_cfg
+        # Onliner B2B
+        b2b = data.setdefault("onliner_b2b", {})
+        if not str(b2b.get("client_id") or "").strip():
+            b2b["client_id"] = _env_cfg.onliner_b2b_client_id
+        if not str(b2b.get("client_secret") or "").strip():
+            b2b["client_secret"] = _env_cfg.onliner_b2b_client_secret
+        # Google Sheets
+        export = data.setdefault("export", {})
+        if not str(export.get("google_sheets_spreadsheet_url_or_id") or "").strip():
+            export["google_sheets_spreadsheet_url_or_id"] = _env_cfg.google_sheets_spreadsheet_id
+        if not str(export.get("google_sheets_service_account_json") or "").strip():
+            export["google_sheets_service_account_json"] = _env_cfg.google_sheets_sa_json
+        # Onliner DB import
+        db_import = data.setdefault("onliner_db_import", {})
+        if not str(db_import.get("google_sheet_id") or "").strip():
+            db_import["google_sheet_id"] = _env_cfg.google_sheets_spreadsheet_id
+        # API sources
+        sources = data.setdefault("api_sources", {})
+        # IVEN
+        iven = sources.setdefault("iven", {})
+        if not str(iven.get("file_url") or "").strip():
+            iven["file_url"] = _env_cfg.iven_file_url
+        # Tradex
+        tradex = sources.setdefault("tradex", {})
+        if not str(tradex.get("file_url") or "").strip():
+            tradex["file_url"] = _env_cfg.tradex_file_url
+        # N-Tech
+        ntech = sources.setdefault("ntech", {})
+        if not str(ntech.get("username") or "").strip():
+            ntech["username"] = _env_cfg.ntech_username
+        if not str(ntech.get("password") or "").strip():
+            ntech["password"] = _env_cfg.ntech_password
+    except Exception:
+        pass
+    return data
 
 
 def save_app_settings(settings):

@@ -10,12 +10,12 @@
     ],
     "only_pc_suppliers": [],
     "only_pc_price_name": "N-tech_TGPC_Beznal",
-    "google_sheets_spreadsheet_url_or_id": "11zEGNWLqcOxhlm6SubOlW2xFvjQSrJAJJaUm-ga8iHM",
+    "google_sheets_spreadsheet_url_or_id": "",
     "google_sheets_tab": "Price",
-    "google_sheets_service_account_json": "ai2025-462421-df1d36f12313.json"
+    "google_sheets_service_account_json": ""
   },
   "onliner_db_import": {
-    "google_sheet_id": "11zEGNWLqcOxhlm6SubOlW2xFvjQSrJAJJaUm-ga8iHM",
+    "google_sheet_id": "",
     "google_sheet_name": "All_Catalog"
   },
   "ui": {
@@ -32,8 +32,8 @@
     "enabled": true,
     "base_url": "https://b2bapi.onliner.by",
     "price_api_base_url": "https://price.api.onliner.by",
-    "client_id": "e2867a869b3a074fe3fb",
-    "client_secret": "43985ffcd3a94665a82975502b6341c5bc0a1759",
+    "client_id": "",
+    "client_secret": "",
     "token_url": "https://b2bapi.onliner.by/oauth/token",
     "verify_ssl": true,
     "timeout_sec": 20
@@ -81,7 +81,7 @@
       "supplier": "IVEN",
       "mode": "direct_file",
       "verify_ssl": false,
-      "file_url": "https://iven.pro:800/?price=2&format=xlsx&login=Impulse2&password=c5af7e523b77114cac9268a02f2b7c3564f409e2"
+      "file_url": ""
     },
     "tradex": {
       "enabled": true,
@@ -89,7 +89,7 @@
       "supplier": "Tradex",
       "mode": "direct_file",
       "verify_ssl": false,
-      "file_url": "https://api.b2bit.by/api/v1/price/xlsx/MhHkTiXuUL7uk9iOjznUc9FcGMDnKQ84-9.xlsx"
+      "file_url": ""
     },
     "ntech": {
       "enabled": true,
@@ -99,8 +99,8 @@
       "verify_ssl": false,
       "auth_url": "https://api.nt-d.by/authorization/login",
       "price_url": "https://api.nt-d.by/price/download_buh",
-      "username": "impulse.trade2.by@gmail.com",
-      "password": "Impulse2020@"
+      "username": "",
+      "password": ""
     }
   },
   "uploads_cleanup": {
