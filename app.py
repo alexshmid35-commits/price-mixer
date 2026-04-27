@@ -1205,10 +1205,14 @@ def load_app_settings():
             export["google_sheets_spreadsheet_url_or_id"] = _env_cfg.google_sheets_spreadsheet_id
         if not str(export.get("google_sheets_service_account_json") or "").strip():
             export["google_sheets_service_account_json"] = _env_cfg.google_sheets_sa_json
+        if not str(export.get("google_sheets_tab") or "").strip():
+            export["google_sheets_tab"] = _env_cfg.google_sheets_tab
         # Onliner DB import
         db_import = data.setdefault("onliner_db_import", {})
         if not str(db_import.get("google_sheet_id") or "").strip():
             db_import["google_sheet_id"] = _env_cfg.google_sheets_spreadsheet_id
+        if not str(db_import.get("google_sheet_name") or "").strip():
+            db_import["google_sheet_name"] = _env_cfg.onliner_db_sheet_name
         # API sources
         sources = data.setdefault("api_sources", {})
         # IVEN
@@ -1242,9 +1246,11 @@ def save_app_settings(settings):
     if isinstance(export, dict):
         export["google_sheets_spreadsheet_url_or_id"] = ""
         export["google_sheets_service_account_json"] = ""
+        export["google_sheets_tab"] = ""
     db_import = payload.get("onliner_db_import")
     if isinstance(db_import, dict):
         db_import["google_sheet_id"] = ""
+        db_import["google_sheet_name"] = ""
     sources = payload.get("api_sources")
     if isinstance(sources, dict):
         for key in ("iven", "tradex"):

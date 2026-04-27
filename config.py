@@ -57,6 +57,16 @@ class Config:
     google_sheets_spreadsheet_id = _env_str(
         "GOOGLE_SHEETS_SPREADSHEET_ID", "11zEGNWLqcOxhlm6SubOlW2xFvjQSrJAJJaUm-ga8iHM"
     )
+    google_sheets_tab = _env_str(
+        "GOOGLE_SHEETS_TAB", "Price"
+    )
+    onliner_db_sheet_name = _env_str(
+        "ONLINER_DB_SHEET_NAME", "All_Catalog"
+    )
+    # original line replaced below
+    google_sheets_spreadsheet_id = _env_str(
+        "GOOGLE_SHEETS_SPREADSHEET_ID", "11zEGNWLqcOxhlm6SubOlW2xFvjQSrJAJJaUm-ga8iHM"
+    )
 
     # Onliner B2B
     onliner_b2b_client_id = _env_str("ONLINER_B2B_CLIENT_ID", "")
