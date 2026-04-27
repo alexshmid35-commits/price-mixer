@@ -3188,15 +3188,32 @@ ONLINER_DB_GSHEET_CACHE_TTL_SEC = 12 * 60 * 60
 
 
 def _catalog_import_worker(filepath: str, file_ext: str, cleanup_file: bool = True):
-    """Background worker: parse CSV/XLSX and bulk-insert into SQLite."""
+    """Background worker: parse CSV/XLSX and bulk-insert ONLY NEW items into SQLite."""
     global _catalog_import_status
     with _CATALOG_IMPORT_LOCK:
         _catalog_import_status.update({
             "running": True, "total": 0, "done": 0, "inserted": 0,
-            "skipped": 0, "message": "Читаю файл...", "percent": 0, "finished_at": None,
+            "skipped": 0, "existing": 0, "message": "Загружаю список существующих товаров...",
+            "percent": 0, "finished_at": None,
         })
 
     try:
+        # ── Preload existing onliner_ids into memory set ─────────────────
+        existing_ids = set()
+        try:
+            with _DB_WRITE_LOCK:
+                with _db_connection() as conn:
+                    cursor = conn.execute("SELECT onliner_id FROM onliner_catalog")
+                    existing_ids = {row[0] for row in cursor.fetchall()}
+        except Exception as e:
+            print(f"[db_import] Warning: could not preload existing IDs: {e}", flush=True)
+
+        existing_count = len(existing_ids)
+        print(f"[db_import] Existing products in DB: {existing_count:,}", flush=True)
+
+        with _CATALOG_IMPORT_LOCK:
+            _catalog_import_status["message"] = f"В базе {existing_count:,} товаров. Читаю файл..."
+
         # ── Read file ────────────────────────────────────────────────────
         if file_ext in (".xlsx", ".xls"):
             import openpyxl
@@ -3216,12 +3233,13 @@ def _catalog_import_worker(filepath: str, file_ext: str, cleanup_file: bool = Tr
         total = len(rows)
         with _CATALOG_IMPORT_LOCK:
             _catalog_import_status["total"] = total
-            _catalog_import_status["message"] = f"Импортирую {total:,} строк..."
+            _catalog_import_status["message"] = f"В файле {total:,} строк. Фильтрую новые..."
 
-        # ── Bulk insert in batches ───────────────────────────────────────
+        # ── Bulk insert in batches (only new IDs) ────────────────────────
         BATCH = 2000
         inserted = 0
         skipped = 0
+        already_existing = 0
         now_ts = int(time.time())
 
         for batch_start in range(0, total, BATCH):
@@ -3241,6 +3259,11 @@ def _catalog_import_worker(filepath: str, file_ext: str, cleanup_file: bool = Tr
                 oid = normalize_onliner_id(oid_raw)
                 if not oid:
                     skipped += 1
+                    continue
+
+                # ── KEY: skip if already in DB ───────────────────────────
+                if oid in existing_ids:
+                    already_existing += 1
                     continue
 
                 # Primary name = full Onliner name (H), fallback = category + short model
@@ -3265,19 +3288,23 @@ def _catalog_import_worker(filepath: str, file_ext: str, cleanup_file: bool = Tr
                         name_rows.append((nk2, oid, alt_name))
 
             try:
-                with _DB_WRITE_LOCK:
-                    with _db_connection() as conn:
-                        conn.executemany(
-                            "INSERT OR REPLACE INTO onliner_catalog "
-                            "(onliner_id, name, url, source, updated_at) VALUES (?,?,?,?,?)",
-                            prod_rows,
-                        )
-                        conn.executemany(
-                            "INSERT OR REPLACE INTO name_index "
-                            "(name_key, onliner_id, raw_name) VALUES (?,?,?)",
-                            name_rows,
-                        )
-                        conn.commit()
+                if prod_rows:
+                    with _DB_WRITE_LOCK:
+                        with _db_connection() as conn:
+                            conn.executemany(
+                                "INSERT OR IGNORE INTO onliner_catalog "
+                                "(onliner_id, name, url, source, updated_at) VALUES (?,?,?,?,?)",
+                                prod_rows,
+                            )
+                            conn.executemany(
+                                "INSERT OR IGNORE INTO name_index "
+                                "(name_key, onliner_id, raw_name) VALUES (?,?,?)",
+                                name_rows,
+                            )
+                            conn.commit()
+                    # Update in-memory set with newly inserted IDs
+                    for pr in prod_rows:
+                        existing_ids.add(pr[0])
                 inserted += len(prod_rows)
             except Exception as e:
                 print(f"[db_import] batch error: {e}", flush=True)
@@ -3287,18 +3314,19 @@ def _catalog_import_worker(filepath: str, file_ext: str, cleanup_file: bool = Tr
             with _CATALOG_IMPORT_LOCK:
                 _catalog_import_status.update({
                     "done": done, "inserted": inserted, "skipped": skipped,
-                    "percent": pct,
-                    "message": f"Импортировано {inserted:,} из {total:,} ({pct}%)",
+                    "existing": already_existing, "percent": pct,
+                    "message": f"Обработано {done:,} из {total:,} | Новых: {inserted:,} | Уже было: {already_existing:,}",
                 })
 
+        new_total = existing_count + inserted
         with _CATALOG_IMPORT_LOCK:
             _catalog_import_status.update({
                 "running": False, "done": total, "inserted": inserted,
-                "skipped": skipped, "percent": 100,
-                "message": f"Готово! Добавлено {inserted:,} товаров, пропущено {skipped:,}.",
+                "skipped": skipped, "existing": already_existing, "percent": 100,
+                "message": f"Готово! Всего в базе: {new_total:,} (+{inserted:,} новых, {already_existing:,} уже было)",
                 "finished_at": int(time.time()),
             })
-        print(f"[db_import] Done. inserted={inserted}, skipped={skipped}", flush=True)
+        print(f"[db_import] Done. existing_before={existing_count}, new_inserted={inserted}, skipped={skipped}, already_existing={already_existing}, total_now={new_total}", flush=True)
 
     except Exception as e:
         with _CATALOG_IMPORT_LOCK:
