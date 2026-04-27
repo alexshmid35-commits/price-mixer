@@ -1233,6 +1233,28 @@ def load_app_settings():
 def save_app_settings(settings):
     payload = _normalize_app_settings(settings)
     invalidate_onliner_b2b_token()
+    # Strip secrets before writing to JSON (they live in .env only)
+    b2b = payload.get("onliner_b2b")
+    if isinstance(b2b, dict):
+        b2b["client_id"] = ""
+        b2b["client_secret"] = ""
+    export = payload.get("export")
+    if isinstance(export, dict):
+        export["google_sheets_spreadsheet_url_or_id"] = ""
+        export["google_sheets_service_account_json"] = ""
+    db_import = payload.get("onliner_db_import")
+    if isinstance(db_import, dict):
+        db_import["google_sheet_id"] = ""
+    sources = payload.get("api_sources")
+    if isinstance(sources, dict):
+        for key in ("iven", "tradex"):
+            src = sources.get(key)
+            if isinstance(src, dict):
+                src["file_url"] = ""
+        ntech = sources.get("ntech")
+        if isinstance(ntech, dict):
+            ntech["username"] = ""
+            ntech["password"] = ""
     with open(APP_SETTINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     save_onliner_api_settings(payload.get("cache_api", {}))

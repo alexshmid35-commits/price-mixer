@@ -96,7 +96,7 @@
       "label": "N-Tech",
       "supplier": "N-Tech",
       "mode": "ntech_json",
-      "verify_ssl": false,
+      "verify_ssl": true,
       "auth_url": "https://api.nt-d.by/authorization/login",
       "price_url": "https://api.nt-d.by/price/download_buh",
       "username": "",
