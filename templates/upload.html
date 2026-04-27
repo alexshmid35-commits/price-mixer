@@ -1,0 +1,1178 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Price Mixer</title><style># ============================================================
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, 'Segoe UI', sans-serif; background: #f8fafd; color: #202124; }
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+h1 { font-size: 28px; margin-bottom: 8px; letter-spacing: -.02em; }
+h1 span { color: #1a73e8; }
+.subtitle { color: #5f6368; margin-bottom: 30px; font-size: 15px; }
+a { color: #1a73e8; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.btn { display: inline-block; padding: 10px 24px; background: #1a73e8; color: #fff; border: 1px solid #1a73e8; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .15s, border-color .15s; text-decoration: none; box-shadow: none; }
+.btn:hover { background: #1765cc; border-color: #1765cc; text-decoration: none; color: #fff; }
+.btn-outline { background: #fff; border: 1px solid #cfd8e3; color: #374151; }
+.btn-outline:hover { background: #f8f9fa; border-color: #b9c7d8; color: #202124; }
+.card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: none; margin-bottom: 20px; border: 1px solid #d9e2f1; }
+.upload-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.upload-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings-modal { position: fixed; inset: 0; background: rgba(15,23,42,.36); display: none; align-items: center; justify-content: center; z-index: 1200; backdrop-filter: blur(2px); padding: 16px; overflow: auto; }
+.settings-modal.active { display: flex; }
+.settings-sheet { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: #f8fafd; border: 1px solid #d9e2f1; border-radius: 12px; box-shadow: 0 20px 48px rgba(15,23,42,.22); padding: 14px; }
+.settings-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-bottom: 8px; margin-bottom: 12px; border-bottom: 1px solid #d9e2f1; }
+.settings-title { font-size: 15px; font-weight: 700; color: #1f2937; }
+.settings-close { padding: 7px 12px; }
+.settings-card { background: #fff; border: 1px solid #d9e2f1; border-radius: 8px; padding: 14px; }
+.settings-note { font-size: 13px; color: #5f6368; line-height: 1.45; }
+.settings-list { margin-top: 10px; padding-left: 18px; color: #5f6368; font-size: 13px; line-height: 1.5; }
+.settings-form { display: grid; gap: 12px; }
+.settings-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.settings-tab { padding: 8px 12px; border: 1px solid #cfd8e3; border-radius: 999px; background: #fff; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.settings-tab:hover { background: #f8fafc; border-color: #b9c7d8; }
+.settings-tab.active { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+.settings-pane { display: none; gap: 12px; }
+.settings-pane.active { display: grid; }
+.settings-section { border: 1px solid #d9e2f1; border-radius: 8px; background: #fff; padding: 12px; }
+.settings-section h3 { font-size: 14px; color: #1f2937; margin-bottom: 8px; }
+.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.settings-field { display: flex; flex-direction: column; gap: 5px; }
+.settings-field label { font-size: 12px; color: #5f6368; font-weight: 500; }
+.settings-field input, .settings-field select, .settings-field textarea { width: 100%; padding: 8px 10px; border: 1px solid #cfd8e3; border-radius: 4px; font-size: 13px; background: #fff; }
+.settings-field textarea { min-height: 86px; resize: vertical; }
+.settings-field.wide { grid-column: 1 / -1; }
+.settings-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; }
+.settings-checkbox input { width: 15px; height: 15px; }
+.settings-help { margin-top: 6px; font-size: 12px; color: #64748b; line-height: 1.45; white-space: pre-wrap; }
+.settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+@media (max-width: 900px) {
+  .settings-grid { grid-template-columns: 1fr; }
+  .settings-tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  .settings-tab { white-space: nowrap; }
+  .settings-sheet { width: min(100%, calc(100vw - 20px)); max-height: calc(100vh - 20px); padding: 12px; }
+  .settings-modal { padding: 10px; align-items: flex-start; }
+}
+
+.drop-zone { border: 3px dashed #d0d0e0; border-radius: 16px; padding: 50px 30px; text-align: center; transition: border-color .2s, background .2s; cursor: pointer; }
+.drop-zone:hover, .drop-zone.drag-over { border-color: #6c63ff; background: #f8f7ff; }
+.drop-zone.has-files { border-color: #4caf50; background: #f0faf0; }
+.drop-zone input[type=file] { display: none; }
+.drop-zone .icon { font-size: 48px; margin-bottom: 12px; }
+.drop-zone .main-text { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.drop-zone .sub-text { font-size: 14px; color: #888; }
+.file-list { margin-top: 20px; text-align: left; }
+.file-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #f8f7ff; border-radius: 8px; margin-bottom: 6px; font-size: 14px; }
+.file-item .fname { font-weight: 500; flex: 1; }
+.file-item input[type="text"] { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; width: 150px; font-size: 13px; }
+.file-item input[type="text"]:focus { border-color: #6c63ff; outline: none; }
+.file-item .remove { color: #e74c3c; cursor: pointer; font-size: 18px; padding: 0 4px; }
+.actions { text-align: center; margin-top: 20px; }
+.error { background: #fff0f0; color: #c0392b; padding: 14px 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #c0392b; }
+.spinner { display: none; text-align: center; padding: 40px; }
+.spinner.active { display: block; }
+.spinner .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #6c63ff; margin: 0 4px; animation: bounce .6s infinite alternate; }
+.spinner .dot:nth-child(2) { animation-delay: .2s; }
+.spinner .dot:nth-child(3) { animation-delay: .4s; }
+@keyframes bounce { to { transform: translateY(-10px); opacity: .5; } }
+.hint { margin-top: 16px; font-size: 13px; color: #888; }
+.api-sources-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.api-source-item { border: 1px solid #d9e2f1; border-radius: 8px; padding: 16px; background: #fbfdff; display: flex; flex-direction: column; gap: 10px; }
+.api-source-title { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.api-source-title strong { font-size: 16px; color: #202124; }
+.api-source-supplier { font-size: 12px; color: #5f6368; }
+.api-source-badge { padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #eef3fd; color: #1a73e8; white-space: nowrap; }
+.api-source-badge.error { background: #fdeeee; color: #d93025; }
+.api-source-badge.ready { background: #e6f4ea; color: #137333; }
+.api-source-badge.disabled { background: #f1f3f4; color: #5f6368; }
+.api-source-progress { height: 8px; border-radius: 999px; background: #e9eef6; overflow: hidden; }
+.api-source-progress > span { display: block; height: 100%; width: 0%; background: #1a73e8; transition: width .2s; }
+.api-source-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #5f6368; }
+.api-source-message { font-size: 12px; color: #5f6368; min-height: 18px; }
+.api-source-time { font-size: 12px; color: #64748b; min-height: 16px; }
+.api-source-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.api-history-card { margin-top: 14px; border-top: 1px solid #e5eaf3; padding-top: 14px; }
+.api-history-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 0; flex-wrap: wrap; }
+.api-history-title { font-size: 14px; font-weight: 600; color: #1f2937; }
+.api-history-note { font-size: 12px; color: #64748b; }
+.api-history-toggle { flex-shrink: 0; padding: 6px 12px; font-size: 12px; }
+.api-history-body { display: none; margin-top: 10px; }
+.api-history-body.is-open { display: block; }
+.api-history-list { display: flex; flex-direction: column; gap: 8px; }
+.api-history-row { display: grid; grid-template-columns: 120px 90px 90px minmax(0,1fr) 130px 120px; gap: 10px; align-items: center; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 10px 12px; }
+.api-history-col { font-size: 12px; color: #334155; }
+.api-history-col strong { color: #111827; }
+.api-history-status { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.api-history-status.ok { background: #e6f4ea; color: #137333; }
+.api-history-status.error { background: #fdeeee; color: #d93025; }
+.api-history-status.run { background: #eef3fd; color: #1a73e8; }
+.api-history-empty { font-size: 12px; color: #64748b; padding: 8px 0; }
+@media (max-width: 900px) {
+  .api-history-row { grid-template-columns: 1fr; gap: 6px; }
+}
+.busy-overlay { position: fixed; inset: 0; background: rgba(248,250,253,.82); display: none; align-items: center; justify-content: center; z-index: 1400; backdrop-filter: blur(2px); }
+.busy-overlay.active { display: flex; }
+.busy-box { width: min(420px, calc(100vw - 32px)); border: 1px solid #d9e2f1; border-radius: 12px; background: #fff; box-shadow: 0 20px 48px rgba(15,23,42,.16); padding: 22px; text-align: center; }
+.busy-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #dbe7ff; border-top-color: #1a73e8; margin: 0 auto 14px; animation: spin 0.8s linear infinite; }
+.busy-title { font-size: 16px; font-weight: 700; color: #1f2937; }
+.busy-text { margin-top: 8px; font-size: 13px; color: #5f6368; line-height: 1.45; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style></head><body>
+<div class="container">
+<h1>Price <span>Mixer</span></h1>
+<p class="subtitle">Загрузите прайсы и укажите имя поставщика для каждого файла</p>
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<form method="POST" action="/upload" enctype="multipart/form-data" id="upload-form">
+<div class="card">
+    <div class="drop-zone" id="drop-zone">
+        <div class="icon">&#128193;</div>
+        <div class="main-text">Перетащите файлы сюда или нажмите для выбора</div>
+        <div class="sub-text">Поддерживаются .xls и .xlsx</div>
+        <input type="file" name="files" id="file-input" multiple accept=".xls,.xlsx">
+    </div>
+    <div class="file-list" id="file-list"></div>
+    <div class="hint">Для каждого файла укажите имя поставщика (например: BN, Tradex, TGPC)</div>
+    <div class="actions" id="actions-area" style="display:none; margin-top:12px;">
+        <button type="submit" class="btn" id="submit-btn">Обработать прайсы</button>
+    </div>
+</div>
+<div class="card" id="api-sources-card">
+    <h2 style="font-size:20px; margin-bottom:8px;">Загрузка через API</h2>
+    <p class="subtitle" style="margin-bottom:16px;">Выгрузи прайс по ссылке/API, дождись 100% и обработай его тем же пайплайном, что и ручную загрузку.</p>
+    <div class="api-sources-grid" id="api-sources-grid"></div>
+    <div id="api-process-ready-wrap" style="display:none;justify-content:center;margin:12px 0 0;">
+        <button type="button" class="btn btn-outline" id="api-process-ready-btn">Обработать все готовые API-прайсы</button>
+    </div>
+    <div class="api-history-card">
+        <div class="api-history-head">
+            <div>
+                <div class="api-history-title">История API-выгрузок</div>
+                <div class="api-history-note">Последние загрузки и обработки по API-источникам.</div>
+            </div>
+            <button type="button" class="btn btn-outline api-history-toggle" id="api-history-toggle-btn">Показать историю</button>
+        </div>
+        <div class="api-history-body" id="api-history-body">
+            <div class="api-history-list" id="api-history-list"></div>
+        </div>
+    </div>
+</div>
+<div class="spinner" id="spinner">
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    <p style="margin-top:16px; color:#666;">Обработка прайсов... Это может занять до минуты.</p>
+</div>
+</form>
+</div>
+<div class="busy-overlay" id="busy-overlay">
+    <div class="busy-box">
+        <div class="busy-spinner"></div>
+        <div class="busy-title" id="busy-title">Обрабатываем прайс</div>
+        <div class="busy-text" id="busy-text">Это может занять несколько секунд. Окно не зависло, просто идёт обработка.</div>
+    </div>
+</div>
+<script>
+var dt = new DataTransfer();
+var fileInput = document.getElementById('file-input');
+var dropZone = document.getElementById('drop-zone');
+var fileList = document.getElementById('file-list');
+var actionsArea = document.getElementById('actions-area');
+
+(function setupUploadSettingsUI(){
+    var container = document.querySelector('.container');
+    if(!container){ return; }
+    var h1 = container.querySelector('h1');
+    var subtitle = container.querySelector('.subtitle');
+    if(h1 && subtitle && !container.querySelector('.upload-head')){
+        var head = document.createElement('div');
+        head.className = 'upload-head';
+        var titleWrap = document.createElement('div');
+        h1.parentNode.insertBefore(head, h1);
+        titleWrap.appendChild(h1);
+        titleWrap.appendChild(subtitle);
+        head.appendChild(titleWrap);
+        var actions = document.createElement('div');
+        actions.className = 'upload-head-actions';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-outline';
+        btn.id = 'open-settings-btn';
+        btn.textContent = 'Настройки';
+        actions.appendChild(btn);
+        head.appendChild(actions);
+    }
+
+    if(!document.getElementById('settings-modal')){
+        var modal = document.createElement('div');
+        modal.id = 'settings-modal';
+        modal.className = 'settings-modal';
+        modal.innerHTML =
+            '<div class="settings-sheet">' +
+                '<div class="settings-head">' +
+                    '<div class="settings-title">Настройки</div>' +
+                    '<button type="button" class="btn btn-outline settings-close" id="close-settings-btn">Закрыть</button>' +
+                '</div>' +
+                '<div class="settings-card">' +
+                    '<div class="settings-note">Здесь будут жить дополнительные настройки миксера.</div>' +
+                    '<ul class="settings-list">' +
+                        '<li>параметры поиска и проверки ID</li>' +
+                        '<li>рабочие переключатели для отдельных поставщиков</li>' +
+                        '<li>другие будущие опции, которые ты захочешь вынести отдельно</li>' +
+                    '</ul>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(modal);
+    }
+
+    var settingsModal = document.getElementById('settings-modal');
+    var openBtn = document.getElementById('open-settings-btn');
+    var closeBtn = document.getElementById('close-settings-btn');
+    if(openBtn && settingsModal){
+        openBtn.addEventListener('click', function(){
+            settingsModal.classList.add('active');
+        });
+    }
+    if(closeBtn && settingsModal){
+        closeBtn.addEventListener('click', function(){
+            settingsModal.classList.remove('active');
+        });
+    }
+    if(settingsModal){
+        settingsModal.addEventListener('click', function(e){
+            if(e.target && e.target.id === 'settings-modal'){
+                settingsModal.classList.remove('active');
+            }
+        });
+    }
+})();
+
+var uploadAppSettings = null;
+
+(function enhanceUploadSettingsUI(){
+    var settingsModal = document.getElementById('settings-modal');
+    if(!settingsModal){ return; }
+    settingsModal.innerHTML = `
+        <div class="settings-sheet">
+            <div class="settings-head">
+                <div class="settings-title">Настройки</div>
+                <button type="button" class="btn btn-outline settings-close" id="close-settings-btn">Закрыть</button>
+            </div>
+            <div class="settings-form">
+                <div class="settings-tabs">
+                    <button type="button" class="settings-tab active" data-settings-tab="general">Основные</button>
+                    <button type="button" class="settings-tab" data-settings-tab="api">API и секреты</button>
+                </div>
+                <div class="settings-pane active" data-settings-pane="general">
+                    <div class="settings-section">
+                        <h3>1. Выгрузка</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-export-include-without-id"> Выгружать товары без ID</label></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-ui-show-checks-block"> Показывать блок проверок</label></div>
+                            <div class="settings-field"><label for="st-export-price-name">Имя выгружаемого прайса</label><input id="st-export-price-name" type="text" placeholder="consolidated_price"></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-export-keep-lowest-price-per-id"> Не выгружать дубли OnlinerID (оставлять строку с минимальной ценой)</label></div>
+                            <div class="settings-field"><label for="st-export-only-pc-price-name">Имя прайса при выгрузке только ПЭВМ</label><input id="st-export-only-pc-price-name" type="text" placeholder="N-tech_TGPC_Beznal"></div>
+                            <div class="settings-field wide">
+                                <label for="st-export-skip-duplicate-suppliers">Не включать в выгрузку товары с одинаковыми OnlinerID для поставщиков</label>
+                                <textarea id="st-export-skip-duplicate-suppliers" spellcheck="false" placeholder="Например: TGPC"></textarea>
+                                <div class="settings-help">По одному поставщику на строку. Если у поставщика один и тот же OnlinerID стоит у разных товаров, такие конфликтные строки не попадут в скачиваемый прайс.</div>
+                            </div>
+                            <div class="settings-field wide">
+                                <label for="st-export-only-pc-suppliers">Выгружать только ПЭВМ для поставщиков</label>
+                                <textarea id="st-export-only-pc-suppliers" spellcheck="false" placeholder="Например: TGPC"></textarea>
+                                <div class="settings-help">По одному поставщику на строку. Для этих поставщиков в скачиваемый прайс попадут только строки ПЭВМ / системных блоков.</div>
+                            </div>
+                            <div class="settings-field wide">
+                                <label for="st-google-sheet-url-or-id">Google Таблица — ссылка или ID</label>
+                                <input id="st-google-sheet-url-or-id" type="text" placeholder="https://docs.google.com/spreadsheets/d/.../edit или только ID">
+                                <div class="settings-help">Для кнопки «В Google Таблицу» на странице результата. Таблицу нужно расшарить на e-mail сервисного аккаунта из JSON (роль «Редактор»).</div>
+                            </div>
+                            <div class="settings-field"><label for="st-google-sheet-tab">Имя листа (вкладки)</label><input id="st-google-sheet-tab" type="text" placeholder="Прайс N-Tech"></div>
+                            <div class="settings-field wide">
+                                <label for="st-google-sa-json">Путь к JSON ключу сервисного аккаунта</label>
+                                <input id="st-google-sa-json" type="text" placeholder="google-service-account.json">
+                                <div class="settings-help">Файл из Google Cloud (IAM → сервисные аккаунты → ключи → JSON). Можно: имя файла рядом с app.py, подпапка (например secrets/key.json), полный путь или ~/Downloads/key.json. После правок обязательно нажмите «Сохранить настройки».</div>
+                            </div>
+                            <div class="settings-field wide">
+                                <label for="st-db-gsheet-id">Onliner DB: ID Google таблицы</label>
+                                <input id="st-db-gsheet-id" type="text" placeholder="ID таблицы для импорта каталога Onliner">
+                            </div>
+                            <div class="settings-field"><label for="st-db-gsheet-sheet">Onliner DB: Лист</label><input id="st-db-gsheet-sheet" type="text" placeholder="All_Catalog"></div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h3>3. Поставщики</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field wide">
+                                <label for="st-supplier-rules">Правила автоопределения поставщика по имени файла</label>
+                                <textarea id="st-supplier-rules" spellcheck="false"></textarea>
+                                <div class="settings-help">Каждая строка: часть_имени_файла=ИмяПоставщика
+Пример:
+price_bn=TGPC
+tradex=Tradex
+1374=BN-1374</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-section" style="display:none;">
+                        <h3>5. Подбор Без OnlinerID</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field"><label for="st-noid-max-candidates">Кандидатов показывать</label><input id="st-noid-max-candidates" type="number" min="10" max="150"></div>
+                            <div class="settings-field"><label for="st-noid-max-queries">Запросов на поиск</label><input id="st-noid-max-queries" type="number" min="1" max="8"></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-noid-prefer-paren-model"> Сначала учитывать модель в скобках</label></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-noid-prefer-article"> Учитывать article-like токены и модели</label></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-noid-include-brand"> Добавлять бренд в поисковые запросы</label></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-noid-require-category-hint"> Жестко фильтровать кандидатов по категории</label></div>
+                            <div class="settings-field wide">
+                                <label for="st-noid-category-rules">Правила по категориям и комплектующим</label>
+                                <textarea id="st-noid-category-rules" spellcheck="false"></textarea>
+                                <div class="settings-help">Это JSON по категориям. Поля:
+query_hint - подсказка к запросу
+must_contain - слова, которые желательно видеть в Onliner
+ignore_words - слова, которые нужно занижать
+
+Редактируй под свои категории.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h3>6. Очистка Uploads</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field"><label for="st-cleanup-keep-sessions">Хранить последних сессий</label><input id="st-cleanup-keep-sessions" type="number" min="3" max="200"></div>
+                            <div class="settings-field"><label for="st-cleanup-keep-days">Хранить сессии, дней</label><input id="st-cleanup-keep-days" type="number" min="1" max="90"></div>
+                            <div class="settings-field"><label for="st-cleanup-keep-api-hours">Хранить временные API-файлы, часов</label><input id="st-cleanup-keep-api-hours" type="number" min="1" max="168"></div>
+                            <div class="settings-help">Чистим только старые папки в uploads. Глобальные кэши, ручные ID, категории, наценки и сравнение с прошлой выгрузкой не трогаются.</div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h3>7. Проверка ID</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field"><label for="st-verify-threshold">Порог совпадения названия</label><input id="st-verify-threshold" type="number" min="0.1" max="0.99" step="0.01"></div>
+                            <div class="settings-field"><label for="st-verify-api-no-name-status">Если API не вернул название</label><select id="st-verify-api-no-name-status"><option value="review">Проверить</option><option value="mismatch">Несовпадение</option></select></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-verify-trust-manual"> Ручное подтверждение считать абсолютным OK</label></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-verify-force-refresh"> При проверке ID всегда заново ходить в API</label></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-verify-require-priority"> Совпадением считать только article/model причины</label></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-pane" data-settings-pane="api">
+                    <div class="settings-section">
+                        <h3>2. Кэш и API</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-api-allow-direct"> Разрешить прямые запросы к Onliner</label></div>
+                            <div class="settings-field"><label for="st-api-retry-attempts">Повторов запроса</label><input id="st-api-retry-attempts" type="number" min="1" max="12"></div>
+                            <div class="settings-field"><label for="st-api-backoff-sec">Пауза между повторами, сек</label><input id="st-api-backoff-sec" type="number" min="0" max="5" step="0.1"></div>
+                            <div class="settings-field"><label for="st-api-proxy-cooldown">Cooldown прокси, сек</label><input id="st-api-proxy-cooldown" type="number" min="10" max="3600"></div>
+                            <div class="settings-field"><label for="st-api-max-workers">Параллельных запросов</label><input id="st-api-max-workers" type="number" min="1" max="24"></div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h3>2.1 Onliner B2B API</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-b2b-enabled"> Включить Onliner B2B API</label></div>
+                            <div class="settings-field"><label for="st-b2b-base-url">Base URL</label><input id="st-b2b-base-url" type="text" placeholder="https://b2bapi.onliner.by"></div>
+                            <div class="settings-field"><label for="st-b2b-token-url">Token URL</label><input id="st-b2b-token-url" type="text" placeholder="https://b2bapi.onliner.by/oauth/token"></div>
+                            <div class="settings-field wide"><label for="st-b2b-price-api-url">Price API (экспорт позиций)</label><input id="st-b2b-price-api-url" type="text" placeholder="https://price.api.onliner.by"></div>
+                            <div class="settings-field"><label for="st-b2b-client-id">Client ID</label><input id="st-b2b-client-id" type="text" placeholder="Client ID"></div>
+                            <div class="settings-field"><label for="st-b2b-client-secret">Client Secret</label><input id="st-b2b-client-secret" type="password" placeholder="Client Secret"></div>
+                            <div class="settings-field"><label for="st-b2b-timeout-sec">Timeout, сек</label><input id="st-b2b-timeout-sec" type="number" min="5" max="120"></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-b2b-verify-ssl"> Проверять SSL у B2B API</label></div>
+                            <div class="settings-field wide">
+                                <button type="button" class="btn btn-outline" id="test-b2b-btn">Проверить B2B</button>
+                                <div class="settings-help" id="st-b2b-test-note">Проверяет получение OAuth-токена и запрос <code>/shop</code>.</div>
+                            </div>
+                            <div class="settings-field wide">
+                                <button type="button" class="btn btn-outline" id="probe-b2b-btn">Тест B2B данных</button>
+                                <div class="settings-help" id="st-b2b-probe-note">Пробует получить список разделов, производителей и товаров через B2B API.</div>
+                            </div>
+                            <div class="settings-help">Ключи из приложения <code>onliner-b2b-api</code> в кабинете Onliner. Рыночные цены в прайсе: сначала быстрый запрос к публичному catalog API; при отсутствии данных — запасной путь через <code>price.api.onliner.by</code>. Подбор без OnlinerID и тесты B2B по-прежнему используют каталог B2B.</div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h3>4. Источники API</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field wide">
+                                <label class="settings-checkbox"><input type="checkbox" id="st-src-iven-enabled"> IVEN активен</label>
+                            </div>
+                            <div class="settings-field"><label for="st-src-iven-supplier">Имя поставщика IVEN</label><input id="st-src-iven-supplier" type="text"></div>
+                            <div class="settings-field"><label for="st-src-iven-url">URL файла IVEN</label><input id="st-src-iven-url" type="text" placeholder="https://...xlsx"></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-src-iven-verify-ssl"> Проверять SSL у IVEN</label></div>
+                            <div class="settings-field wide">
+                                <label class="settings-checkbox"><input type="checkbox" id="st-src-tradex-enabled"> Tradex активен</label>
+                            </div>
+                            <div class="settings-field"><label for="st-src-tradex-supplier">Имя поставщика Tradex</label><input id="st-src-tradex-supplier" type="text"></div>
+                            <div class="settings-field"><label for="st-src-tradex-url">URL файла Tradex</label><input id="st-src-tradex-url" type="text" placeholder="https://...xlsx"></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-src-tradex-verify-ssl"> Проверять SSL у Tradex</label></div>
+                            <div class="settings-field wide">
+                                <label class="settings-checkbox"><input type="checkbox" id="st-src-ntech-enabled"> N-Tech активен</label>
+                            </div>
+                            <div class="settings-field"><label for="st-src-ntech-supplier">Имя поставщика N-Tech</label><input id="st-src-ntech-supplier" type="text"></div>
+                            <div class="settings-field"><label for="st-src-ntech-auth-url">Auth URL N-Tech</label><input id="st-src-ntech-auth-url" type="text"></div>
+                            <div class="settings-field"><label for="st-src-ntech-price-url">Price URL N-Tech</label><input id="st-src-ntech-price-url" type="text"></div>
+                            <div class="settings-field"><label for="st-src-ntech-username">Логин N-Tech</label><input id="st-src-ntech-username" type="text"></div>
+                            <div class="settings-field"><label for="st-src-ntech-password">Пароль N-Tech</label><input id="st-src-ntech-password" type="password"></div>
+                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-src-ntech-verify-ssl"> Проверять SSL у N-Tech</label></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-actions">
+                    <button type="button" class="btn btn-outline" id="reset-settings-btn">Сбросить</button>
+                    <button type="button" class="btn" id="save-settings-btn">Сохранить настройки</button>
+                </div>
+                <div class="settings-note" id="settings-save-note"></div>
+            </div>
+        </div>`;
+
+    function rulesToText(rules){
+        if(!Array.isArray(rules)){ return ''; }
+        return rules.map(function(it){
+            return String((it && it.pattern) || '').trim() + '=' + String((it && it.supplier) || '').trim();
+        }).filter(Boolean).join('\n');
+    }
+
+    function textToRules(text){
+        return String(text || '').split(/\r?\n/).map(function(line){
+            var raw = String(line || '').trim();
+            if(!raw || raw.indexOf('=') < 0){ return null; }
+            var parts = raw.split('=');
+            var pattern = String(parts.shift() || '').trim();
+            var supplier = String(parts.join('=') || '').trim();
+            if(!pattern || !supplier){ return null; }
+            return {pattern: pattern, supplier: supplier};
+        }).filter(Boolean);
+    }
+
+    function applySettingsToForm(settings){
+        uploadAppSettings = settings || {};
+        var exportCfg = uploadAppSettings.export || {};
+        var uiCfg = uploadAppSettings.ui || {};
+        var cacheApi = uploadAppSettings.cache_api || {};
+        var b2b = uploadAppSettings.onliner_b2b || {};
+        var suppliers = uploadAppSettings.suppliers || {};
+        var apiSources = uploadAppSettings.api_sources || {};
+        var dbGsheet = uploadAppSettings.onliner_db_import || {};
+        var uploadsCleanup = uploadAppSettings.uploads_cleanup || {};
+        var iven = apiSources.iven || {};
+        var tradex = apiSources.tradex || {};
+        var ntech = apiSources.ntech || {};
+        var noId = uploadAppSettings.no_id_search || {};
+        var verifyId = uploadAppSettings.verify_id || {};
+        document.getElementById('st-export-include-without-id').checked = !!exportCfg.include_without_id;
+        document.getElementById('st-ui-show-checks-block').checked = (uiCfg.show_checks_block !== false);
+        document.getElementById('st-export-price-name').value = exportCfg.price_name || 'consolidated_price';
+        document.getElementById('st-export-keep-lowest-price-per-id').checked = !!exportCfg.keep_lowest_price_per_onliner_id;
+        document.getElementById('st-export-only-pc-price-name').value = exportCfg.only_pc_price_name || 'N-tech_TGPC_Beznal';
+        document.getElementById('st-export-skip-duplicate-suppliers').value = Array.isArray(exportCfg.exclude_duplicate_id_suppliers) ? exportCfg.exclude_duplicate_id_suppliers.join('\n') : '';
+        document.getElementById('st-export-only-pc-suppliers').value = Array.isArray(exportCfg.only_pc_suppliers) ? exportCfg.only_pc_suppliers.join('\n') : '';
+        document.getElementById('st-google-sheet-url-or-id').value = exportCfg.google_sheets_spreadsheet_url_or_id || '';
+        document.getElementById('st-google-sheet-tab').value = exportCfg.google_sheets_tab || 'Прайс N-Tech';
+        document.getElementById('st-google-sa-json').value = exportCfg.google_sheets_service_account_json || '';
+        document.getElementById('st-db-gsheet-id').value = dbGsheet.google_sheet_id || '';
+        document.getElementById('st-db-gsheet-sheet').value = dbGsheet.google_sheet_name || 'All_Catalog';
+        document.getElementById('st-api-allow-direct').checked = !!cacheApi.allow_direct;
+        document.getElementById('st-api-retry-attempts').value = cacheApi.retry_attempts || 3;
+        document.getElementById('st-api-backoff-sec').value = cacheApi.backoff_sec || 0.6;
+        document.getElementById('st-api-proxy-cooldown').value = cacheApi.proxy_cooldown_sec || 180;
+        document.getElementById('st-api-max-workers').value = cacheApi.max_parallel_workers || 10;
+        document.getElementById('st-b2b-enabled').checked = !!b2b.enabled;
+        document.getElementById('st-b2b-base-url').value = b2b.base_url || 'https://b2bapi.onliner.by';
+        document.getElementById('st-b2b-token-url').value = b2b.token_url || 'https://b2bapi.onliner.by/oauth/token';
+        document.getElementById('st-b2b-price-api-url').value = b2b.price_api_base_url || 'https://price.api.onliner.by';
+        document.getElementById('st-b2b-client-id').value = b2b.client_id || '';
+        document.getElementById('st-b2b-client-secret').value = b2b.client_secret || '';
+        document.getElementById('st-b2b-timeout-sec').value = b2b.timeout_sec || 20;
+        document.getElementById('st-b2b-verify-ssl').checked = (b2b.verify_ssl !== false);
+        document.getElementById('st-supplier-rules').value = rulesToText(suppliers.filename_rules || []);
+        document.getElementById('st-src-iven-enabled').checked = !!iven.enabled;
+        document.getElementById('st-src-iven-supplier').value = iven.supplier || 'IVEN';
+        document.getElementById('st-src-iven-url').value = iven.file_url || '';
+        document.getElementById('st-src-iven-verify-ssl').checked = !!iven.verify_ssl;
+        document.getElementById('st-src-tradex-enabled').checked = !!tradex.enabled;
+        document.getElementById('st-src-tradex-supplier').value = tradex.supplier || 'Tradex';
+        document.getElementById('st-src-tradex-url').value = tradex.file_url || '';
+        document.getElementById('st-src-tradex-verify-ssl').checked = !!tradex.verify_ssl;
+        document.getElementById('st-src-ntech-enabled').checked = !!ntech.enabled;
+        document.getElementById('st-src-ntech-supplier').value = ntech.supplier || 'N-Tech';
+        document.getElementById('st-src-ntech-auth-url').value = ntech.auth_url || '';
+        document.getElementById('st-src-ntech-price-url').value = ntech.price_url || '';
+        document.getElementById('st-src-ntech-username').value = ntech.username || '';
+        document.getElementById('st-src-ntech-password').value = ntech.password || '';
+        document.getElementById('st-src-ntech-verify-ssl').checked = !!ntech.verify_ssl;
+        document.getElementById('st-cleanup-keep-sessions').value = uploadsCleanup.keep_last_sessions || 20;
+        document.getElementById('st-cleanup-keep-days').value = uploadsCleanup.keep_days || 7;
+        document.getElementById('st-cleanup-keep-api-hours').value = uploadsCleanup.keep_api_fetch_hours || 12;
+        document.getElementById('st-noid-max-candidates').value = noId.max_candidates || 80;
+        document.getElementById('st-noid-max-queries').value = noId.max_queries || 4;
+        document.getElementById('st-noid-prefer-paren-model').checked = !!noId.prefer_paren_model;
+        document.getElementById('st-noid-prefer-article').checked = !!noId.prefer_article_tokens;
+        document.getElementById('st-noid-include-brand').checked = !!noId.include_brand_token;
+        document.getElementById('st-noid-require-category-hint').checked = !!noId.require_category_hint;
+        document.getElementById('st-noid-category-rules').value = noId.category_rules_text || '';
+        document.getElementById('st-verify-threshold').value = verifyId.match_threshold || 0.74;
+        document.getElementById('st-verify-api-no-name-status').value = verifyId.api_no_name_status || 'review';
+        document.getElementById('st-verify-trust-manual').checked = !!verifyId.trust_manual_confirmed;
+        document.getElementById('st-verify-force-refresh').checked = !!verifyId.force_refresh_api;
+        document.getElementById('st-verify-require-priority').checked = !!verifyId.require_article_or_model_priority;
+    }
+
+    function collectSettingsForm(){
+        return {
+            export: {
+                include_without_id: document.getElementById('st-export-include-without-id').checked,
+                price_name: document.getElementById('st-export-price-name').value,
+                keep_lowest_price_per_onliner_id: document.getElementById('st-export-keep-lowest-price-per-id').checked,
+                only_pc_price_name: document.getElementById('st-export-only-pc-price-name').value,
+                exclude_duplicate_id_suppliers: String(document.getElementById('st-export-skip-duplicate-suppliers').value || '').split(/\r?\n/).map(function(v){
+                    return String(v || '').trim();
+                }).filter(Boolean),
+                only_pc_suppliers: String(document.getElementById('st-export-only-pc-suppliers').value || '').split(/\r?\n/).map(function(v){
+                    return String(v || '').trim();
+                }).filter(Boolean),
+                google_sheets_spreadsheet_url_or_id: document.getElementById('st-google-sheet-url-or-id').value,
+                google_sheets_tab: document.getElementById('st-google-sheet-tab').value,
+                google_sheets_service_account_json: document.getElementById('st-google-sa-json').value
+            },
+            onliner_db_import: {
+                google_sheet_id: document.getElementById('st-db-gsheet-id').value,
+                google_sheet_name: document.getElementById('st-db-gsheet-sheet').value
+            },
+            ui: {
+                show_checks_block: document.getElementById('st-ui-show-checks-block').checked
+            },
+            cache_api: {
+                allow_direct: document.getElementById('st-api-allow-direct').checked,
+                retry_attempts: document.getElementById('st-api-retry-attempts').value,
+                backoff_sec: document.getElementById('st-api-backoff-sec').value,
+                proxy_cooldown_sec: document.getElementById('st-api-proxy-cooldown').value,
+                max_parallel_workers: document.getElementById('st-api-max-workers').value
+            },
+            onliner_b2b: {
+                enabled: document.getElementById('st-b2b-enabled').checked,
+                base_url: document.getElementById('st-b2b-base-url').value,
+                token_url: document.getElementById('st-b2b-token-url').value,
+                price_api_base_url: document.getElementById('st-b2b-price-api-url').value,
+                client_id: document.getElementById('st-b2b-client-id').value,
+                client_secret: document.getElementById('st-b2b-client-secret').value,
+                timeout_sec: document.getElementById('st-b2b-timeout-sec').value,
+                verify_ssl: document.getElementById('st-b2b-verify-ssl').checked
+            },
+            suppliers: {
+                filename_rules: textToRules(document.getElementById('st-supplier-rules').value)
+            },
+            api_sources: {
+                iven: {
+                    enabled: document.getElementById('st-src-iven-enabled').checked,
+                    supplier: document.getElementById('st-src-iven-supplier').value,
+                    file_url: document.getElementById('st-src-iven-url').value,
+                    verify_ssl: document.getElementById('st-src-iven-verify-ssl').checked
+                },
+                tradex: {
+                    enabled: document.getElementById('st-src-tradex-enabled').checked,
+                    supplier: document.getElementById('st-src-tradex-supplier').value,
+                    file_url: document.getElementById('st-src-tradex-url').value,
+                    verify_ssl: document.getElementById('st-src-tradex-verify-ssl').checked
+                },
+                ntech: {
+                    enabled: document.getElementById('st-src-ntech-enabled').checked,
+                    supplier: document.getElementById('st-src-ntech-supplier').value,
+                    auth_url: document.getElementById('st-src-ntech-auth-url').value,
+                    price_url: document.getElementById('st-src-ntech-price-url').value,
+                    username: document.getElementById('st-src-ntech-username').value,
+                    password: document.getElementById('st-src-ntech-password').value,
+                    verify_ssl: document.getElementById('st-src-ntech-verify-ssl').checked
+                }
+            },
+            uploads_cleanup: {
+                keep_last_sessions: document.getElementById('st-cleanup-keep-sessions').value,
+                keep_days: document.getElementById('st-cleanup-keep-days').value,
+                keep_api_fetch_hours: document.getElementById('st-cleanup-keep-api-hours').value
+            },
+            no_id_search: {
+                max_candidates: document.getElementById('st-noid-max-candidates').value,
+                max_queries: document.getElementById('st-noid-max-queries').value,
+                prefer_paren_model: document.getElementById('st-noid-prefer-paren-model').checked,
+                prefer_article_tokens: document.getElementById('st-noid-prefer-article').checked,
+                include_brand_token: document.getElementById('st-noid-include-brand').checked,
+                require_category_hint: document.getElementById('st-noid-require-category-hint').checked,
+                category_rules_text: document.getElementById('st-noid-category-rules').value
+            },
+            verify_id: {
+                match_threshold: document.getElementById('st-verify-threshold').value,
+                api_no_name_status: document.getElementById('st-verify-api-no-name-status').value,
+                trust_manual_confirmed: document.getElementById('st-verify-trust-manual').checked,
+                force_refresh_api: document.getElementById('st-verify-force-refresh').checked,
+                require_article_or_model_priority: document.getElementById('st-verify-require-priority').checked
+            }
+        };
+    }
+
+    function activateSettingsTab(tabName){
+        var tabs = settingsModal.querySelectorAll('[data-settings-tab]');
+        var panes = settingsModal.querySelectorAll('[data-settings-pane]');
+        tabs.forEach(function(tab){
+            tab.classList.toggle('active', tab.getAttribute('data-settings-tab') === tabName);
+        });
+        panes.forEach(function(pane){
+            pane.classList.toggle('active', pane.getAttribute('data-settings-pane') === tabName);
+        });
+    }
+
+    function loadAppSettingsToModal(){
+        var note = document.getElementById('settings-save-note');
+        if(note){ note.textContent = 'Загрузка настроек...'; }
+        fetch('/api/app-settings').then(function(r){ return r.json(); }).then(function(d){
+            if(!d || d.status !== 'ok'){ throw new Error('load_failed'); }
+            applySettingsToForm(d.settings || {});
+            if(note){ note.textContent = ''; }
+            updateFileList();
+            loadApiSourceStatuses();
+        }).catch(function(){
+            if(note){ note.textContent = 'Не удалось загрузить настройки.'; }
+        });
+    }
+
+    function saveAppSettingsFromModal(){
+        var note = document.getElementById('settings-save-note');
+        if(note){ note.textContent = 'Сохраняю настройки...'; }
+        fetch('/api/app-settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(collectSettingsForm())
+        }).then(function(r){ return r.json(); }).then(function(d){
+            if(!d || d.status !== 'ok'){ throw new Error('save_failed'); }
+            applySettingsToForm(d.settings || {});
+            updateFileList();
+            if(note){ note.textContent = 'Настройки сохранены.'; }
+        }).catch(function(){
+            if(note){ note.textContent = 'Не удалось сохранить настройки.'; }
+        });
+    }
+
+    function testOnlinerB2BFromModal(){
+        var btn = document.getElementById('test-b2b-btn');
+        var note = document.getElementById('st-b2b-test-note');
+        if(btn){ btn.disabled = true; }
+        if(note){ note.textContent = 'Проверяю B2B OAuth...'; }
+        fetch('/api/app-settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(collectSettingsForm())
+        }).then(function(r){ return r.json(); }).then(function(d){
+            if(!d || d.status !== 'ok'){ throw new Error('save_failed'); }
+            applySettingsToForm(d.settings || {});
+            return fetch('/api/onliner-b2b-test', {method: 'POST'});
+        }).then(function(r){ return r.json(); }).then(function(d){
+            if(!d || d.status !== 'ok'){
+                throw new Error((d && d.message) || 'b2b_test_failed');
+            }
+            if(note){
+                note.textContent = 'B2B OK. /shop → HTTP ' + String(d.http_status || 0) + ', token TTL: ' + String(d.expires_in || 0) + ' сек.';
+            }
+        }).catch(function(err){
+            if(note){ note.textContent = 'B2B ошибка: ' + String((err && err.message) || err || 'unknown'); }
+        }).finally(function(){
+            if(btn){ btn.disabled = false; }
+        });
+    }
+
+    function probeOnlinerB2BDataFromModal(){
+        var btn = document.getElementById('probe-b2b-btn');
+        var note = document.getElementById('st-b2b-probe-note');
+        if(btn){ btn.disabled = true; }
+        if(note){ note.textContent = 'Проверяю живые B2B данные...'; }
+        fetch('/api/app-settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(collectSettingsForm())
+        }).then(function(r){ return r.json(); }).then(function(d){
+            if(!d || d.status !== 'ok'){ throw new Error('save_failed'); }
+            applySettingsToForm(d.settings || {});
+            return fetch('/api/onliner-b2b-probe', {method: 'POST'});
+        }).then(function(r){ return r.json(); }).then(function(d){
+            if(!d || d.status !== 'ok'){
+                throw new Error((d && d.message) || 'b2b_probe_failed');
+            }
+            if(note){
+                var extra = '';
+                if((d.sections_count || 0) <= 0 || !(d.manufacturers_count || 0)){
+                    extra = ' Тип sections: ' + String(d.sections_payload_type || '-') +
+                        ', ключи: ' + String((d.sections_payload_keys || []).join(', ') || '-');
+                }
+                note.textContent =
+                    'B2B данные OK. ' +
+                    'Разделов: ' + String(d.sections_count || 0) +
+                    ', производителей: ' + String(d.manufacturers_count || 0) +
+                    ', товаров: ' + String(d.products_count || 0) +
+                    '. ' + String(d.message || '') + extra;
+            }
+        }).catch(function(err){
+            if(note){ note.textContent = 'B2B данные: ошибка: ' + String((err && err.message) || err || 'unknown'); }
+        }).finally(function(){
+            if(btn){ btn.disabled = false; }
+        });
+    }
+
+    var openBtn = document.getElementById('open-settings-btn');
+    var closeBtn = document.getElementById('close-settings-btn');
+    if(openBtn){
+        openBtn.onclick = function(){
+            settingsModal.classList.add('active');
+            loadAppSettingsToModal();
+        };
+    }
+    if(closeBtn){
+        closeBtn.onclick = function(){
+            settingsModal.classList.remove('active');
+        };
+    }
+    var saveBtn = document.getElementById('save-settings-btn');
+    if(saveBtn){ saveBtn.onclick = saveAppSettingsFromModal; }
+    var testB2bBtn = document.getElementById('test-b2b-btn');
+    if(testB2bBtn){ testB2bBtn.onclick = testOnlinerB2BFromModal; }
+    var probeB2bBtn = document.getElementById('probe-b2b-btn');
+    if(probeB2bBtn){ probeB2bBtn.onclick = probeOnlinerB2BDataFromModal; }
+    var resetBtn = document.getElementById('reset-settings-btn');
+    if(resetBtn){ resetBtn.onclick = loadAppSettingsToModal; }
+    settingsModal.querySelectorAll('[data-settings-tab]').forEach(function(tab){
+        tab.onclick = function(){
+            activateSettingsTab(tab.getAttribute('data-settings-tab') || 'general');
+        };
+    });
+    settingsModal.onclick = function(e){
+        if(e.target && e.target.id === 'settings-modal'){
+            settingsModal.classList.remove('active');
+        }
+    };
+    activateSettingsTab('general');
+    loadAppSettingsToModal();
+})();
+
+var apiSourcePollTimer = null;
+var apiSourceAutoProcessMap = {};
+var apiReadySources = [];
+var busyOverlay = document.getElementById('busy-overlay');
+var busyTitleEl = document.getElementById('busy-title');
+var busyTextEl = document.getElementById('busy-text');
+var busyStageTimer = null;
+var busyStageMessages = [];
+var busyStageIndex = 0;
+
+function showBusyOverlay(title, text){
+    if(busyTitleEl){ busyTitleEl.textContent = title || 'Обрабатываем прайс'; }
+    if(busyTextEl){ busyTextEl.textContent = text || 'Это может занять несколько секунд. Окно не зависло, просто идёт обработка.'; }
+    if(busyOverlay){ busyOverlay.classList.add('active'); }
+}
+
+function updateBusyOverlay(title, text){
+    if(busyTitleEl && title){ busyTitleEl.textContent = title; }
+    if(busyTextEl && text){ busyTextEl.textContent = text; }
+}
+
+function startBusyStageRotation(title, messages, intervalMs){
+    if(busyStageTimer){
+        window.clearInterval(busyStageTimer);
+        busyStageTimer = null;
+    }
+    busyStageMessages = Array.isArray(messages) ? messages.slice() : [];
+    busyStageIndex = 0;
+    showBusyOverlay(title, busyStageMessages[0] || 'Идёт обработка...');
+    if(busyStageMessages.length <= 1){ return; }
+    busyStageTimer = window.setInterval(function(){
+        busyStageIndex = (busyStageIndex + 1) % busyStageMessages.length;
+        updateBusyOverlay(title, busyStageMessages[busyStageIndex]);
+    }, intervalMs || 1800);
+}
+
+function hideBusyOverlay(){
+    if(busyStageTimer){
+        window.clearInterval(busyStageTimer);
+        busyStageTimer = null;
+    }
+    busyStageMessages = [];
+    busyStageIndex = 0;
+    if(busyOverlay){ busyOverlay.classList.remove('active'); }
+}
+
+function sourceBadgeClass(state){
+    if(!state || !state.enabled || !state.configured){ return 'api-source-badge disabled'; }
+    if(state.status === 'error'){ return 'api-source-badge error'; }
+    if(state.ready){ return 'api-source-badge ready'; }
+    return 'api-source-badge';
+}
+
+function sourceBadgeText(state){
+    if(!state || !state.enabled){ return 'Выключен'; }
+    if(!state.configured){ return 'Не настроен'; }
+    if(state.status === 'error'){ return 'Ошибка'; }
+    if(state.ready){ return 'Готов'; }
+    if(state.running){ return 'Выгрузка'; }
+    return 'Ожидает';
+}
+
+function formatApiSourceTime(ts){
+    var num = Number(ts || 0);
+    if(!num){ return ''; }
+    var d = new Date(num * 1000);
+    if(!isFinite(d.getTime())){ return ''; }
+    var dd = String(d.getDate()).padStart(2, '0');
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var yyyy = d.getFullYear();
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mi = String(d.getMinutes()).padStart(2, '0');
+    return dd + '.' + mm + '.' + yyyy + ' ' + hh + ':' + mi;
+}
+
+function formatHistorySize(bytes){
+    var num = Number(bytes || 0);
+    if(!num){ return '—'; }
+    if(num >= 1024 * 1024){ return (num / (1024 * 1024)).toFixed(2) + ' MB'; }
+    if(num >= 1024){ return (num / 1024).toFixed(1) + ' KB'; }
+    return num.toLocaleString() + ' B';
+}
+
+function escapeHtml(text){
+    return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderApiHistory(items){
+    var box = document.getElementById('api-history-list');
+    if(!box){ return; }
+    var rows = Array.isArray(items) ? items : [];
+    if(!rows.length){
+        box.innerHTML = '<div class="api-history-empty">История пока пустая.</div>';
+        return;
+    }
+    box.innerHTML = rows.map(function(item){
+        var whenText = formatApiSourceTime(item.finished_at || item.started_at);
+        var typeText = item.event_type === 'process' ? 'Обработка' : 'Выгрузка';
+        var statusClass = item.status === 'error' ? 'error' : (item.status === 'ok' ? 'ok' : 'run');
+        var statusText = item.status === 'error' ? 'Ошибка' : (item.status === 'ok' ? 'Успех' : 'В работе');
+        var details = [];
+        if(item.file_size){ details.push('Файл: ' + formatHistorySize(item.file_size)); }
+        if(item.duration_sec){ details.push('Время: ' + Number(item.duration_sec).toLocaleString() + ' сек'); }
+        if(item.items_count){ details.push('Товаров: ' + Number(item.items_count).toLocaleString()); }
+        if(item.without_id_count || item.without_id_count === 0){ details.push('Без ID: ' + Number(item.without_id_count).toLocaleString()); }
+        var metaText = details.length ? details.join(' • ') : '—';
+        var message = item.message || '';
+        return '' +
+            '<div class="api-history-row">' +
+                '<div class="api-history-col"><strong>' + escapeHtml(item.label || item.source_key || 'Источник') + '</strong><div>' + escapeHtml(item.supplier || '') + '</div></div>' +
+                '<div class="api-history-col">' + escapeHtml(typeText) + '</div>' +
+                '<div class="api-history-col"><span class="api-history-status ' + statusClass + '">' + escapeHtml(statusText) + '</span></div>' +
+                '<div class="api-history-col">' + escapeHtml(message || metaText) + (message && metaText !== '—' ? ('<div class="api-history-note">' + escapeHtml(metaText) + '</div>') : '') + '</div>' +
+                '<div class="api-history-col">' + escapeHtml(whenText || '—') + '</div>' +
+                '<div class="api-history-col">' + escapeHtml(item.file_name || '—') + '</div>' +
+            '</div>';
+    }).join('');
+}
+
+function renderApiSources(items){
+    var grid = document.getElementById('api-sources-grid');
+    if(!grid){ return; }
+    var list = Array.isArray(items) ? items : [];
+    if(list.length === 0){
+        grid.innerHTML = '<div class="settings-note">Пока нет настроенных API-источников.</div>';
+        return;
+    }
+    grid.innerHTML = list.map(function(item){
+        var progress = Math.max(0, Math.min(100, Number(item.progress || 0)));
+        var disabledFetch = (!item.enabled || !item.configured || item.running) ? 'disabled' : '';
+        var disabledFetchProcess = (!item.enabled || !item.configured || item.running) ? 'disabled' : '';
+        var disabledProcess = (!item.ready) ? 'disabled' : '';
+        var autoLabel = apiSourceAutoProcessMap[item.source_key] ? 'Жду 100%' : 'Выгрузить и обработать';
+        var totalText = item.total_bytes ? (' / ' + item.total_bytes.toLocaleString()) : '';
+        var message = item.message || (item.ready ? 'Прайс готов к обработке.' : 'Нажми "Выгрузить", чтобы получить прайс.');
+        var readyAt = item.ready ? formatApiSourceTime(item.finished_at) : '';
+        var timeText = readyAt ? ('Последняя выгрузка: ' + readyAt) : '';
+        var processBtnHtml = item.ready
+            ? ('<button type="button" class="btn api-source-process" data-source="' + item.source_key + '" ' + disabledProcess + '>Обработать</button>')
+            : '';
+        return '' +
+            '<div class="api-source-item" data-source="' + item.source_key + '">' +
+                '<div class="api-source-title">' +
+                    '<div><strong>' + item.label + '</strong><div class="api-source-supplier">Поставщик: ' + item.supplier + '</div></div>' +
+                    '<span class="' + sourceBadgeClass(item) + '">' + sourceBadgeText(item) + '</span>' +
+                '</div>' +
+                '<div class="api-source-progress"><span style="width:' + progress + '%"></span></div>' +
+                '<div class="api-source-meta"><span>' + progress + '%</span><span>' + Number(item.downloaded || 0).toLocaleString() + totalText + '</span></div>' +
+                '<div class="api-source-message">' + message + '</div>' +
+                '<div class="api-source-time">' + timeText + '</div>' +
+                '<div class="api-source-actions">' +
+                    '<button type="button" class="btn btn-outline api-source-fetch" data-source="' + item.source_key + '" ' + disabledFetch + '>Выгрузить</button>' +
+                    '<button type="button" class="btn btn-outline api-source-fetch-process" data-source="' + item.source_key + '" ' + disabledFetchProcess + '>' + autoLabel + '</button>' +
+                    processBtnHtml +
+                '</div>' +
+            '</div>';
+    }).join('');
+}
+
+function scheduleApiSourcePoll(){
+    if(apiSourcePollTimer){ window.clearTimeout(apiSourcePollTimer); }
+    apiSourcePollTimer = window.setTimeout(loadApiSourceStatuses, 1500);
+}
+
+function loadApiSourceStatuses(){
+    fetch('/api/source-fetch-status').then(function(r){ return r.json(); }).then(function(d){
+        if(!d || d.status !== 'ok'){ throw new Error('status_failed'); }
+        var items = Array.isArray(d.items) ? d.items : [];
+        apiReadySources = items.filter(function(it){ return !!it.ready; }).map(function(it){ return String(it.source_key || '').trim(); }).filter(Boolean);
+        var processAllBtn = document.getElementById('api-process-ready-btn');
+        var processAllWrap = document.getElementById('api-process-ready-wrap');
+        if(processAllBtn){
+            var readyCount = apiReadySources.length;
+            processAllBtn.textContent = 'Обработать все готовые API-прайсы (' + readyCount + ')';
+            if(processAllWrap){
+                processAllWrap.style.display = readyCount > 0 ? 'flex' : 'none';
+            }
+        }
+        renderApiHistory(Array.isArray(d.history) ? d.history : []);
+        items.forEach(function(it){
+            if(apiSourceAutoProcessMap[it.source_key]){
+                if(it.ready){
+                    delete apiSourceAutoProcessMap[it.source_key];
+                    processApiSource(it.source_key);
+                } else if(it.status === 'error'){
+                    delete apiSourceAutoProcessMap[it.source_key];
+                    hideBusyOverlay();
+                }
+            }
+        });
+        var activeSource = null;
+        items.forEach(function(it){
+            if(!activeSource && (it.running || apiSourceAutoProcessMap[it.source_key])){ activeSource = it; }
+        });
+        if(activeSource && busyOverlay && busyOverlay.classList.contains('active')){
+            var title = apiSourceAutoProcessMap[activeSource.source_key] ? 'Выгружаем и обрабатываем прайс' : 'Выгружаем прайс';
+            var message = activeSource.message || 'Ждём ответ поставщика...';
+            if(activeSource.status === 'starting'){
+                message = activeSource.message || 'Подготавливаем запрос к поставщику...';
+            } else if(activeSource.status === 'downloading'){
+                if(Number(activeSource.total_bytes || 0) > 0){
+                    message = 'Скачиваем файл: ' + Number(activeSource.downloaded || 0).toLocaleString() + ' / ' + Number(activeSource.total_bytes || 0).toLocaleString();
+                } else {
+                    message = activeSource.message || 'Скачиваем файл поставщика...';
+                }
+            }
+            updateBusyOverlay(title, message);
+        } else if(!Object.keys(apiSourceAutoProcessMap).length && busyOverlay && busyOverlay.classList.contains('active') && !busyStageTimer) {
+            hideBusyOverlay();
+        }
+        renderApiSources(items);
+        if(items.some(function(it){ return !!it.running; }) || Object.keys(apiSourceAutoProcessMap).length){
+            scheduleApiSourcePoll();
+        }
+    }).catch(function(){
+        hideBusyOverlay();
+        renderApiSources([]);
+    });
+}
+
+function startApiSourceFetch(sourceKey){
+    var isIven = String(sourceKey || '').trim().toLowerCase() === 'iven';
+    if(!isIven){
+        showBusyOverlay('Выгружаем прайс', 'Подготавливаем запрос к поставщику...');
+    }
+    fetch('/api/source-fetch-start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({source: sourceKey})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if(!d || d.status !== 'ok'){ throw new Error((d && d.message) || 'fetch_failed'); }
+        loadApiSourceStatuses();
+        scheduleApiSourcePoll();
+    }).catch(function(){
+        if(!isIven){
+            hideBusyOverlay();
+        }
+        loadApiSourceStatuses();
+    });
+}
+
+function startApiSourceFetchAndProcess(sourceKey){
+    var card = document.querySelector('.api-source-item[data-source="' + sourceKey + '"]');
+    var processBtn = card ? card.querySelector('.api-source-process') : null;
+    if(processBtn && !processBtn.disabled){
+        showBusyOverlay('Обрабатываем прайс', 'Файл уже выгружен. Сейчас запускаем обработку и откроем результат.');
+        processApiSource(sourceKey);
+        return;
+    }
+    var isIven = String(sourceKey || '').trim().toLowerCase() === 'iven';
+    apiSourceAutoProcessMap[sourceKey] = true;
+    if(!isIven){
+        showBusyOverlay('Выгружаем и обрабатываем прайс', 'Сначала получим файл у поставщика, потом автоматически запустим обработку.');
+    }
+    startApiSourceFetch(sourceKey);
+    scheduleApiSourcePoll();
+}
+
+function processApiSource(sourceKey){
+    startBusyStageRotation('Обрабатываем прайс', [
+        'Загружаем файл во внутренний конвейер...',
+        'Парсим Excel и определяем колонки...',
+        'Сводим товары и применяем сохранённые правила...',
+        'Подготавливаем результат к открытию...'
+    ], 1700);
+    fetch('/api/source-process', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({source: sourceKey})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if(!d || d.status !== 'ok' || !d.redirect_url){ throw new Error((d && d.message) || 'process_failed'); }
+        window.location.href = d.redirect_url;
+    }).catch(function(err){
+        hideBusyOverlay();
+        alert((err && err.message) ? err.message : 'Не удалось обработать прайс');
+    });
+}
+
+function processReadyApiSources(){
+    if(!Array.isArray(apiReadySources) || apiReadySources.length === 0){
+        alert('Нет готовых API-прайсов для объединенной обработки.');
+        return;
+    }
+    startBusyStageRotation('Объединяем API-прайсы', [
+        'Проверяем готовые выгрузки поставщиков...',
+        'Загружаем файлы во внутренний конвейер...',
+        'Сводим товары по всем выбранным поставщикам...',
+        'Подготавливаем объединенный результат...'
+    ], 1700);
+    fetch('/api/source-process-batch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({sources: apiReadySources})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if(!d || d.status !== 'ok' || !d.redirect_url){ throw new Error((d && d.message) || 'batch_process_failed'); }
+        window.location.href = d.redirect_url;
+    }).catch(function(err){
+        hideBusyOverlay();
+        alert((err && err.message) ? err.message : 'Не удалось объединенно обработать API-прайсы');
+    });
+}
+
+document.addEventListener('click', function(e){
+    var processAllBtn = e.target && e.target.closest ? e.target.closest('#api-process-ready-btn') : null;
+    if(processAllBtn){
+        processReadyApiSources();
+        return;
+    }
+    var fetchBtn = e.target && e.target.closest ? e.target.closest('.api-source-fetch') : null;
+    if(fetchBtn){
+        startApiSourceFetch(fetchBtn.dataset.source);
+        return;
+    }
+    var processBtn = e.target && e.target.closest ? e.target.closest('.api-source-process') : null;
+    if(processBtn){
+        processApiSource(processBtn.dataset.source);
+        return;
+    }
+    var fetchProcessBtn = e.target && e.target.closest ? e.target.closest('.api-source-fetch-process') : null;
+    if(fetchProcessBtn){
+        startApiSourceFetchAndProcess(fetchProcessBtn.dataset.source);
+    }
+});
+
+function detectSupplier(fname) {
+    var fl = fname.toLowerCase();
+    var supplierRules = (((uploadAppSettings || {}).suppliers || {}).filename_rules || []);
+    for (var r = 0; r < supplierRules.length; r++) {
+        var rule = supplierRules[r] || {};
+        var pattern = String(rule.pattern || '').toLowerCase().trim();
+        var supplier = String(rule.supplier || '').trim();
+        if (pattern && supplier && fl.indexOf(pattern) >= 0) return supplier;
+    }
+    if (fl.indexOf('tradex') >= 0) return 'Tradex';
+    if (fl.indexOf('1030z') >= 0) return 'BN-1030Z';
+    if (fl.indexOf('1030') >= 0) return 'BN-1030';
+    if (fl.indexOf('1374') >= 0) return 'BN-1374';
+    if (fl.indexOf('price_bn') >= 0) return 'TGPC';
+    return '';
+}
+
+function updateFileList() {
+    fileList.innerHTML = '';
+    if (dt.files.length === 0) {
+        dropZone.classList.remove('has-files');
+        actionsArea.style.display = 'none';
+        fileInput.value = '';
+        return;
+    }
+    dropZone.classList.add('has-files');
+    actionsArea.style.display = 'block';
+    
+    var fileNames = [];
+    for (var i = 0; i < dt.files.length; i++) {
+        var f = dt.files[i];
+        var detected = detectSupplier(f.name);
+        var div = document.createElement('div');
+        div.className = 'file-item';
+        div.innerHTML = '<span class="fname" data-fname="' + f.name + '">' + f.name + '</span>' +
+            '<input type="text" class="supplier-input" data-fname="' + f.name + '" value="' + detected + '" placeholder="Имя поставщика">' +
+            '<span class="remove" data-fname="'+f.name+'">&times;</span>';
+        fileList.appendChild(div);
+        fileNames.push(f.name);
+    }
+    
+    document.querySelectorAll('.remove').forEach(function(el){
+        el.addEventListener('click', function(e){
+            e.stopPropagation();
+            var fname = this.dataset.fname;
+            var newDt = new DataTransfer();
+            for(var j=0; j<dt.files.length; j++){
+                if(dt.files[j].name !== fname) newDt.items.add(dt.files[j]);
+            }
+            dt = newDt;
+            updateFileList();
+        });
+    });
+}
+
+fileInput.addEventListener('change', function(){
+    for(var i=0; i<this.files.length; i++) dt.items.add(this.files[i]);
+    updateFileList();
+});
+
+dropZone.addEventListener('click', function(){ fileInput.click(); });
+dropZone.addEventListener('dragover', function(e){ e.preventDefault(); this.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', function(e){ this.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', function(e){
+    e.preventDefault(); this.classList.remove('drag-over');
+    for(var i=0; i<e.dataTransfer.files.length; i++) dt.items.add(e.dataTransfer.files[i]);
+    updateFileList();
+});
+
+(function setupApiHistoryToggle(){
+    var btn = document.getElementById('api-history-toggle-btn');
+    var body = document.getElementById('api-history-body');
+    if(!btn || !body){ return; }
+    btn.addEventListener('click', function(){
+        var open = body.classList.toggle('is-open');
+        btn.textContent = open ? 'Скрыть историю' : 'Показать историю';
+    });
+})();
+
+document.getElementById('upload-form').addEventListener('submit', function(e){
+    var inputs = document.querySelectorAll('.supplier-input');
+    for(var i=0; i<inputs.length; i++){
+        var inp = inputs[i];
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'supplier_' + encodeURIComponent(inp.dataset.fname);
+        hidden.value = inp.value;
+        this.appendChild(hidden);
+    }
+    
+    fileInput.files = dt.files;
+    
+    document.getElementById('submit-btn').disabled = true;
+document.getElementById('spinner').classList.add('active');
+    startBusyStageRotation('Обрабатываем прайсы', [
+        'Загружаем файлы и проверяем структуру...',
+        'Парсим Excel и определяем рабочие колонки...',
+        'Сводим товары и подставляем найденные ID...',
+        'Применяем категории и наценки...',
+        'Подготавливаем результат к открытию...'
+    ], 1800);
+});
+</script>
+</body></html>
