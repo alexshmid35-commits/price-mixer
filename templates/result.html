@@ -491,19 +491,14 @@ a:hover { text-decoration: underline; }
         <div class="label">База Onliner ID</div>
         <div id="db-stats-detail" style="margin-top:6px;font-size:12px;color:#6b7280;line-height:1.6;"></div>
         <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-            <button class="btn btn-outline" id="db-rebuild-btn" style="padding:8px 16px;font-size:13px;">Обновить БД</button>
-            <button class="btn btn-outline" id="db-import-catalog-btn" style="padding:8px 16px;font-size:13px;border-color:#0891b2;color:#0891b2;" title="Загрузить CSV/XLSX каталог Onliner (колонки: A=Категория, C=Модель, E=OnlinerID, H=Название)">
-                📥 Загрузить каталог
-            </button>
-            <input type="file" id="db-import-catalog-file" accept=".csv,.xlsx,.xls" style="display:none;">
+            <!-- Обновить БД и Загрузить каталог убраны — используйте Импорт GSheets -->
         </div>
         <!-- Google Sheets import action (sheet/id moved to Settings) -->
         <div id="db-gsheet-row" style="margin-top:10px;display:flex;justify-content:center;">
             <button id="db-gsheet-btn" style="padding:6px 14px;background:linear-gradient(90deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">▶ Импорт GSheets</button>
         </div>
         <div id="db-search-row" style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-            <input id="db-search-query" type="text" placeholder="Поиск по базе: модель, бренд, OnlinerID" style="flex:1;min-width:150px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;color:#374151;">
-            <button id="db-search-btn" style="padding:6px 14px;background:linear-gradient(90deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Найти в БД</button>
+            <input id="db-search-query" type="text" placeholder="🔍 Живой поиск по базе: модель, бренд, OnlinerID..." style="flex:1;min-width:150px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;color:#374151;" oninput="liveSearchDb(this.value)">
         </div>
         <div id="db-search-results" style="display:none;margin-top:10px;border:1px solid #fde68a;border-radius:8px;background:#fffbeb;padding:8px 10px;max-height:220px;overflow:auto;"></div>
         <!-- Import progress -->
@@ -3023,9 +3018,7 @@ function initOnlinerDbWidget(){
     var countEl  = document.getElementById('db-products-count');
     var detailEl = document.getElementById('db-stats-detail');
     var noteEl   = document.getElementById('db-stats-note');
-    var rebuildBtn = document.getElementById('db-rebuild-btn');
     var searchInput = document.getElementById('db-search-query');
-    var searchBtn = document.getElementById('db-search-btn');
     var searchResults = document.getElementById('db-search-results');
 
     function loadDbStats(){
@@ -3043,30 +3036,6 @@ function initOnlinerDbWidget(){
         }).catch(function(){ if(countEl) countEl.textContent = '?'; });
     }
 
-    if(rebuildBtn){
-        rebuildBtn.addEventListener('click', function(){
-            rebuildBtn.disabled = true;
-            rebuildBtn.textContent = 'Обновляю...';
-            if(noteEl) noteEl.textContent = 'Пополняю БД из текущего прайса...';
-            fetch('/api/onliner-db-rebuild', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
-            .then(function(r){ return r.json(); })
-            .then(function(d){
-                rebuildBtn.disabled = false;
-                rebuildBtn.textContent = 'Обновить БД';
-                if(noteEl) noteEl.textContent = d.status === 'ok'
-                    ? 'Добавлено: ' + (d.products||0) + ' товаров, ' + (d.names||0) + ' имён.'
-                    : 'Ошибка: ' + (d.message || '');
-                loadDbStats();
-            }).catch(function(){
-                rebuildBtn.disabled = false;
-                rebuildBtn.textContent = 'Обновить БД';
-            });
-        });
-    }
-
-    // ── Import full Onliner catalog (CSV/XLSX) ──────────────────────────
-    var importBtn  = document.getElementById('db-import-catalog-btn');
-    var importFile = document.getElementById('db-import-catalog-file');
     var importWrap = document.getElementById('db-import-progress-wrap');
     var importBar  = document.getElementById('db-import-progress-bar');
     var importMsg  = document.getElementById('db-import-msg');
@@ -3084,52 +3053,13 @@ function initOnlinerDbWidget(){
             if(importWrap) importWrap.style.display = 'block';
             if(!st.running && st.finished_at){
                 stopImportPoll();
-                if(importBtn){ importBtn.disabled = false; importBtn.textContent = '📥 Загрузить каталог'; }
+                if(gsheetBtn){ gsheetBtn.disabled = false; gsheetBtn.textContent = '▶ Импорт GSheets'; }
                 importBar && (importBar.style.background = st.message && st.message.indexOf('Ошибка') === 0
                     ? 'linear-gradient(90deg,#f87171,#dc2626)'
                     : 'linear-gradient(90deg,#0891b2,#0e7490)');
                 loadDbStats();
             }
         }).catch(function(){});
-    }
-
-    if(importBtn && importFile){
-        importBtn.addEventListener('click', function(){
-            importFile.value = '';
-            importFile.click();
-        });
-        importFile.addEventListener('change', function(){
-            var file = importFile.files[0];
-            if(!file) return;
-            var sizeMb = (file.size / 1024 / 1024).toFixed(1);
-            if(file.size > 120 * 1024 * 1024){
-                alert('Файл слишком большой (' + sizeMb + ' МБ). Максимум 120 МБ.');
-                return;
-            }
-            importBtn.disabled = true;
-            importBtn.textContent = 'Загружаю...';
-            if(importWrap) importWrap.style.display = 'block';
-            if(importBar)  importBar.style.width = '2%';
-            if(importMsg)  importMsg.textContent  = 'Отправляю файл (' + sizeMb + ' МБ)...';
-
-            var fd = new FormData();
-            fd.append('file', file);
-            fetch('/api/onliner-db-import-csv', {method:'POST', body: fd})
-            .then(function(r){ return r.json(); })
-            .then(function(d){
-                if(d.status !== 'started' && d.status !== 'already_running'){
-                    throw new Error(d.message || 'start_failed');
-                }
-                importBtn.textContent = 'Импортирую...';
-                stopImportPoll();
-                importPollTimer = setInterval(pollImportStatus, 1000);
-                pollImportStatus();
-            }).catch(function(e){
-                importBtn.disabled = false;
-                importBtn.textContent = '📥 Загрузить каталог';
-                if(importMsg) importMsg.textContent = 'Ошибка: ' + (e.message || e);
-            });
-        });
     }
 
     // ── Google Sheets direct import ─────────────────────────────────────
@@ -3211,13 +3141,12 @@ function initOnlinerDbWidget(){
         searchResults.innerHTML = html;
     }
 
-    function runDbSearch(){
-        var query = (searchInput ? searchInput.value : '').trim();
+    function runDbSearch(queryOverride){
+        var query = String(queryOverride !== undefined ? queryOverride : (searchInput ? searchInput.value : '')).trim();
         if(!query){
             renderDbSearchResults([], '');
             return;
         }
-        if(searchBtn){ searchBtn.disabled = true; searchBtn.textContent = 'Ищу...'; }
         if(searchResults){
             searchResults.style.display = 'block';
             searchResults.innerHTML = '<div style="font-size:12px;color:#92400e;">Ищу в локальной базе…</div>';
@@ -3236,14 +3165,26 @@ function initOnlinerDbWidget(){
         });
     }
 
-    if(searchBtn){
-        searchBtn.addEventListener('click', runDbSearch);
+    // Live search with debounce
+    var searchDebounceTimer = null;
+    function liveSearchDb(query){
+        if(searchDebounceTimer){ clearTimeout(searchDebounceTimer); }
+        var q = String(query || '').trim();
+        if(!q || q.length < 2){
+            if(searchResults){ searchResults.style.display = 'none'; searchResults.innerHTML = ''; }
+            return;
+        }
+        searchDebounceTimer = setTimeout(function(){
+            runDbSearch(q);
+        }, 350);
     }
     if(searchInput){
+        searchInput.addEventListener('input', function(e){ liveSearchDb(e.target.value); });
         searchInput.addEventListener('keydown', function(e){
             if(e.key === 'Enter'){
                 e.preventDefault();
-                runDbSearch();
+                if(searchDebounceTimer){ clearTimeout(searchDebounceTimer); }
+                runDbSearch(searchInput.value);
             }
         });
     }
@@ -3260,7 +3201,6 @@ function initOnlinerDbWidget(){
             if(importWrap) importWrap.style.display = 'block';
             if(!st.running && st.finished_at){
                 stopImportPoll();
-                if(importBtn){ importBtn.disabled = false; importBtn.textContent = '📥 Загрузить каталог'; }
                 if(gsheetBtn){ gsheetBtn.disabled = false; gsheetBtn.textContent = '▶ Импорт GSheets'; }
                 importBar && (importBar.style.background = st.message && st.message.indexOf('Ошибка') === 0
                     ? 'linear-gradient(90deg,#f87171,#dc2626)'
