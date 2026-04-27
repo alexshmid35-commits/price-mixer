@@ -276,23 +276,6 @@ var uploadAppSettings = null;
                                 <label for="st-export-only-pc-suppliers">Выгружать только ПЭВМ для поставщиков</label>
                                 <textarea id="st-export-only-pc-suppliers" spellcheck="false" placeholder="Например: TGPC"></textarea>
                                 <div class="settings-help">По одному поставщику на строку. Для этих поставщиков в скачиваемый прайс попадут только строки ПЭВМ / системных блоков.</div>
-                            </div>
-                            <div class="settings-field wide">
-                                <label for="st-google-sheet-url-or-id">Google Таблица — ссылка или ID</label>
-                                <input id="st-google-sheet-url-or-id" type="text" placeholder="https://docs.google.com/spreadsheets/d/.../edit или только ID">
-                                <div class="settings-help">Для кнопки «В Google Таблицу» на странице результата. Таблицу нужно расшарить на e-mail сервисного аккаунта из JSON (роль «Редактор»).</div>
-                            </div>
-                            <div class="settings-field"><label for="st-google-sheet-tab">Имя листа (вкладки)</label><input id="st-google-sheet-tab" type="text" placeholder="Прайс N-Tech"></div>
-                            <div class="settings-field wide">
-                                <label for="st-google-sa-json">Путь к JSON ключу сервисного аккаунта</label>
-                                <input id="st-google-sa-json" type="text" placeholder="google-service-account.json">
-                                <div class="settings-help">Файл из Google Cloud (IAM → сервисные аккаунты → ключи → JSON). Можно: имя файла рядом с app.py, подпапка (например secrets/key.json), полный путь или ~/Downloads/key.json. После правок обязательно нажмите «Сохранить настройки».</div>
-                            </div>
-                            <div class="settings-field wide">
-                                <label for="st-db-gsheet-id">Onliner DB: ID Google таблицы</label>
-                                <input id="st-db-gsheet-id" type="text" placeholder="ID таблицы для импорта каталога Onliner">
-                            </div>
-                            <div class="settings-field"><label for="st-db-gsheet-sheet">Onliner DB: Лист</label><input id="st-db-gsheet-sheet" type="text" placeholder="All_Catalog"></div>
                         </div>
                     </div>
                     <div class="settings-section">
@@ -394,11 +377,6 @@ ignore_words - слова, которые нужно занижать
         document.getElementById('st-export-only-pc-price-name').value = exportCfg.only_pc_price_name || 'N-tech_TGPC_Beznal';
         document.getElementById('st-export-skip-duplicate-suppliers').value = Array.isArray(exportCfg.exclude_duplicate_id_suppliers) ? exportCfg.exclude_duplicate_id_suppliers.join('\n') : '';
         document.getElementById('st-export-only-pc-suppliers').value = Array.isArray(exportCfg.only_pc_suppliers) ? exportCfg.only_pc_suppliers.join('\n') : '';
-        document.getElementById('st-google-sheet-url-or-id').value = exportCfg.google_sheets_spreadsheet_url_or_id || '';
-        document.getElementById('st-google-sheet-tab').value = exportCfg.google_sheets_tab || 'Прайс N-Tech';
-        document.getElementById('st-google-sa-json').value = exportCfg.google_sheets_service_account_json || '';
-        document.getElementById('st-db-gsheet-id').value = dbGsheet.google_sheet_id || '';
-        document.getElementById('st-db-gsheet-sheet').value = dbGsheet.google_sheet_name || 'All_Catalog';
         document.getElementById('st-cleanup-keep-sessions').value = uploadsCleanup.keep_last_sessions || 20;
         document.getElementById('st-cleanup-keep-days').value = uploadsCleanup.keep_days || 7;
         document.getElementById('st-cleanup-keep-api-hours').value = uploadsCleanup.keep_api_fetch_hours || 12;
@@ -429,13 +407,6 @@ ignore_words - слова, которые нужно занижать
                 only_pc_suppliers: String(document.getElementById('st-export-only-pc-suppliers').value || '').split(/\r?\n/).map(function(v){
                     return String(v || '').trim();
                 }).filter(Boolean),
-                google_sheets_spreadsheet_url_or_id: document.getElementById('st-google-sheet-url-or-id').value,
-                google_sheets_tab: document.getElementById('st-google-sheet-tab').value,
-                google_sheets_service_account_json: document.getElementById('st-google-sa-json').value
-            },
-            onliner_db_import: {
-                google_sheet_id: document.getElementById('st-db-gsheet-id').value,
-                google_sheet_name: document.getElementById('st-db-gsheet-sheet').value
             },
             ui: {
                 show_checks_block: document.getElementById('st-ui-show-checks-block').checked
