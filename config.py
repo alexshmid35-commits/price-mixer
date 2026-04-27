@@ -85,8 +85,13 @@ class Config:
     onliner_api_proxy_cooldown_sec = _env_int("ONLINER_API_PROXY_COOLDOWN_SEC", 180)
     onliner_api_max_parallel_workers = _env_int("ONLINER_API_MAX_PARALLEL_WORKERS", 10)
 
+    # Admin auth
+    admin_username = _env_str("ADMIN_USERNAME", "admin")
+    admin_password = _env_str("ADMIN_PASSWORD", "")
+
     @classmethod
     def load_app_settings(cls) -> dict:
+
         """Load app_settings.json as a dict."""
         if APP_SETTINGS_PATH.exists():
             with open(APP_SETTINGS_PATH, "r", encoding="utf-8") as f:

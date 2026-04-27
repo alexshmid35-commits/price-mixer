@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 import requests
 from flask import (
+    Response,
     Flask, render_template, render_template_string, request, redirect,
     url_for, send_file, session, jsonify,
 )
@@ -59,6 +60,7 @@ from mixer import (
 )
 
 from price_mixer.api.routes import bp as api_bp
+from config import cfg
 
 # Глобальный прогресс резолвинга
 resolve_status = {"running": False, "resolved": 0, "total": 0, "cached": 0}
@@ -323,6 +325,21 @@ def result_page():
     return render_template("result.html", stats=stats)
 
 
+
+
+@app.before_request
+def require_basic_auth():
+    """Require HTTP Basic Auth for all routes except health/version."""
+    exempt_paths = {"/api/health", "/api/version"}
+    if request.path in exempt_paths:
+        return None
+    auth = request.authorization
+    if not auth or not (auth.username == cfg.admin_username and auth.password == cfg.admin_password):
+        return Response(
+            "Authentication required\n",
+            401,
+            {"WWW-Authenticate": 'Basic realm="Price Mixer"'},
+        )
 @app.after_request
 def add_no_cache_headers(response):
     try:
