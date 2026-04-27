@@ -58,6 +58,8 @@ from mixer import (
     _load_catalog_sheet_index,
 )
 
+from price_mixer.api.routes import bp as api_bp
+
 # Глобальный прогресс резолвинга
 resolve_status = {"running": False, "resolved": 0, "total": 0, "cached": 0}
 market_refresh_status = {
@@ -152,6 +154,7 @@ AUTO_REFRESH_ALLOWED_HOURS = (3, 6, 12)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+app.register_blueprint(api_bp)
 CONSOLIDATED_IO_LOCK = threading.RLock()
 BACKGROUND_STARTED = False
 LAST_ACTIVE_SESSION_DIR = None
