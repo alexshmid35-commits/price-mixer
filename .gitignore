@@ -2,6 +2,12 @@
 __pycache__/
 *.py[cod]
 
+# Environment / Secrets
+.env
+.env.local
+*.json.key
+ai2025-*.json
+
 # Runtime/logs
 app.log
 *.log
