@@ -257,7 +257,6 @@ var uploadAppSettings = null;
             <div class="settings-form">
                 <div class="settings-tabs">
                     <button type="button" class="settings-tab active" data-settings-tab="general">Основные</button>
-                    <button type="button" class="settings-tab" data-settings-tab="api">API и секреты</button>
                 </div>
                 <div class="settings-pane active" data-settings-pane="general">
                     <div class="settings-section">
@@ -351,71 +350,6 @@ ignore_words - слова, которые нужно занижать
                         </div>
                     </div>
                 </div>
-                <div class="settings-pane" data-settings-pane="api">
-                    <div class="settings-section">
-                        <h3>2. Кэш и API</h3>
-                        <div class="settings-grid">
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-api-allow-direct"> Разрешить прямые запросы к Onliner</label></div>
-                            <div class="settings-field"><label for="st-api-retry-attempts">Повторов запроса</label><input id="st-api-retry-attempts" type="number" min="1" max="12"></div>
-                            <div class="settings-field"><label for="st-api-backoff-sec">Пауза между повторами, сек</label><input id="st-api-backoff-sec" type="number" min="0" max="5" step="0.1"></div>
-                            <div class="settings-field"><label for="st-api-proxy-cooldown">Cooldown прокси, сек</label><input id="st-api-proxy-cooldown" type="number" min="10" max="3600"></div>
-                            <div class="settings-field"><label for="st-api-max-workers">Параллельных запросов</label><input id="st-api-max-workers" type="number" min="1" max="24"></div>
-                        </div>
-                    </div>
-                    <div class="settings-section">
-                        <h3>2.1 Onliner B2B API</h3>
-                        <div class="settings-grid">
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-b2b-enabled"> Включить Onliner B2B API</label></div>
-                            <div class="settings-field"><label for="st-b2b-base-url">Base URL</label><input id="st-b2b-base-url" type="text" placeholder="https://b2bapi.onliner.by"></div>
-                            <div class="settings-field"><label for="st-b2b-token-url">Token URL</label><input id="st-b2b-token-url" type="text" placeholder="https://b2bapi.onliner.by/oauth/token"></div>
-                            <div class="settings-field wide"><label for="st-b2b-price-api-url">Price API (экспорт позиций)</label><input id="st-b2b-price-api-url" type="text" placeholder="https://price.api.onliner.by"></div>
-                            <div class="settings-field"><label for="st-b2b-client-id">Client ID</label><input id="st-b2b-client-id" type="text" placeholder="Client ID"></div>
-                            <div class="settings-field"><label for="st-b2b-client-secret">Client Secret</label><input id="st-b2b-client-secret" type="password" placeholder="Client Secret"></div>
-                            <div class="settings-field"><label for="st-b2b-timeout-sec">Timeout, сек</label><input id="st-b2b-timeout-sec" type="number" min="5" max="120"></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-b2b-verify-ssl"> Проверять SSL у B2B API</label></div>
-                            <div class="settings-field wide">
-                                <button type="button" class="btn btn-outline" id="test-b2b-btn">Проверить B2B</button>
-                                <div class="settings-help" id="st-b2b-test-note">Проверяет получение OAuth-токена и запрос <code>/shop</code>.</div>
-                            </div>
-                            <div class="settings-field wide">
-                                <button type="button" class="btn btn-outline" id="probe-b2b-btn">Тест B2B данных</button>
-                                <div class="settings-help" id="st-b2b-probe-note">Пробует получить список разделов, производителей и товаров через B2B API.</div>
-                            </div>
-                            <div class="settings-help">Ключи из приложения <code>onliner-b2b-api</code> в кабинете Onliner. Рыночные цены в прайсе: сначала быстрый запрос к публичному catalog API; при отсутствии данных — запасной путь через <code>price.api.onliner.by</code>. Подбор без OnlinerID и тесты B2B по-прежнему используют каталог B2B.</div>
-                        </div>
-                    </div>
-                    <div class="settings-section">
-                        <h3>4. Источники API</h3>
-                        <div class="settings-grid">
-                            <div class="settings-field wide">
-                                <label class="settings-checkbox"><input type="checkbox" id="st-src-iven-enabled"> IVEN активен</label>
-                            </div>
-                            <div class="settings-field"><label for="st-src-iven-supplier">Имя поставщика IVEN</label><input id="st-src-iven-supplier" type="text"></div>
-                            <div class="settings-field"><label for="st-src-iven-url">URL файла IVEN</label><input id="st-src-iven-url" type="text" placeholder="https://...xlsx"></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-src-iven-verify-ssl"> Проверять SSL у IVEN</label></div>
-                            <div class="settings-field wide">
-                                <label class="settings-checkbox"><input type="checkbox" id="st-src-tradex-enabled"> Tradex активен</label>
-                            </div>
-                            <div class="settings-field"><label for="st-src-tradex-supplier">Имя поставщика Tradex</label><input id="st-src-tradex-supplier" type="text"></div>
-                            <div class="settings-field"><label for="st-src-tradex-url">URL файла Tradex</label><input id="st-src-tradex-url" type="text" placeholder="https://...xlsx"></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-src-tradex-verify-ssl"> Проверять SSL у Tradex</label></div>
-                            <div class="settings-field wide">
-                                <label class="settings-checkbox"><input type="checkbox" id="st-src-ntech-enabled"> N-Tech активен</label>
-                            </div>
-                            <div class="settings-field"><label for="st-src-ntech-supplier">Имя поставщика N-Tech</label><input id="st-src-ntech-supplier" type="text"></div>
-                            <div class="settings-field"><label for="st-src-ntech-auth-url">Auth URL N-Tech</label><input id="st-src-ntech-auth-url" type="text"></div>
-                            <div class="settings-field"><label for="st-src-ntech-price-url">Price URL N-Tech</label><input id="st-src-ntech-price-url" type="text"></div>
-                            <div class="settings-field"><label for="st-src-ntech-username">Логин N-Tech</label><input id="st-src-ntech-username" type="text"></div>
-                            <div class="settings-field"><label for="st-src-ntech-password">Пароль N-Tech</label><input id="st-src-ntech-password" type="password"></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-src-ntech-verify-ssl"> Проверять SSL у N-Tech</label></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="settings-actions">
-                    <button type="button" class="btn btn-outline" id="reset-settings-btn">Сбросить</button>
-                    <button type="button" class="btn" id="save-settings-btn">Сохранить настройки</button>
-                </div>
-                <div class="settings-note" id="settings-save-note"></div>
             </div>
         </div>`;
 
@@ -465,35 +399,6 @@ ignore_words - слова, которые нужно занижать
         document.getElementById('st-google-sa-json').value = exportCfg.google_sheets_service_account_json || '';
         document.getElementById('st-db-gsheet-id').value = dbGsheet.google_sheet_id || '';
         document.getElementById('st-db-gsheet-sheet').value = dbGsheet.google_sheet_name || 'All_Catalog';
-        document.getElementById('st-api-allow-direct').checked = !!cacheApi.allow_direct;
-        document.getElementById('st-api-retry-attempts').value = cacheApi.retry_attempts || 3;
-        document.getElementById('st-api-backoff-sec').value = cacheApi.backoff_sec || 0.6;
-        document.getElementById('st-api-proxy-cooldown').value = cacheApi.proxy_cooldown_sec || 180;
-        document.getElementById('st-api-max-workers').value = cacheApi.max_parallel_workers || 10;
-        document.getElementById('st-b2b-enabled').checked = !!b2b.enabled;
-        document.getElementById('st-b2b-base-url').value = b2b.base_url || 'https://b2bapi.onliner.by';
-        document.getElementById('st-b2b-token-url').value = b2b.token_url || 'https://b2bapi.onliner.by/oauth/token';
-        document.getElementById('st-b2b-price-api-url').value = b2b.price_api_base_url || 'https://price.api.onliner.by';
-        document.getElementById('st-b2b-client-id').value = b2b.client_id || '';
-        document.getElementById('st-b2b-client-secret').value = b2b.client_secret || '';
-        document.getElementById('st-b2b-timeout-sec').value = b2b.timeout_sec || 20;
-        document.getElementById('st-b2b-verify-ssl').checked = (b2b.verify_ssl !== false);
-        document.getElementById('st-supplier-rules').value = rulesToText(suppliers.filename_rules || []);
-        document.getElementById('st-src-iven-enabled').checked = !!iven.enabled;
-        document.getElementById('st-src-iven-supplier').value = iven.supplier || 'IVEN';
-        document.getElementById('st-src-iven-url').value = iven.file_url || '';
-        document.getElementById('st-src-iven-verify-ssl').checked = !!iven.verify_ssl;
-        document.getElementById('st-src-tradex-enabled').checked = !!tradex.enabled;
-        document.getElementById('st-src-tradex-supplier').value = tradex.supplier || 'Tradex';
-        document.getElementById('st-src-tradex-url').value = tradex.file_url || '';
-        document.getElementById('st-src-tradex-verify-ssl').checked = !!tradex.verify_ssl;
-        document.getElementById('st-src-ntech-enabled').checked = !!ntech.enabled;
-        document.getElementById('st-src-ntech-supplier').value = ntech.supplier || 'N-Tech';
-        document.getElementById('st-src-ntech-auth-url').value = ntech.auth_url || '';
-        document.getElementById('st-src-ntech-price-url').value = ntech.price_url || '';
-        document.getElementById('st-src-ntech-username').value = ntech.username || '';
-        document.getElementById('st-src-ntech-password').value = ntech.password || '';
-        document.getElementById('st-src-ntech-verify-ssl').checked = !!ntech.verify_ssl;
         document.getElementById('st-cleanup-keep-sessions').value = uploadsCleanup.keep_last_sessions || 20;
         document.getElementById('st-cleanup-keep-days').value = uploadsCleanup.keep_days || 7;
         document.getElementById('st-cleanup-keep-api-hours').value = uploadsCleanup.keep_api_fetch_hours || 12;
@@ -536,47 +441,9 @@ ignore_words - слова, которые нужно занижать
                 show_checks_block: document.getElementById('st-ui-show-checks-block').checked
             },
             cache_api: {
-                allow_direct: document.getElementById('st-api-allow-direct').checked,
-                retry_attempts: document.getElementById('st-api-retry-attempts').value,
-                backoff_sec: document.getElementById('st-api-backoff-sec').value,
-                proxy_cooldown_sec: document.getElementById('st-api-proxy-cooldown').value,
-                max_parallel_workers: document.getElementById('st-api-max-workers').value
-            },
-            onliner_b2b: {
-                enabled: document.getElementById('st-b2b-enabled').checked,
-                base_url: document.getElementById('st-b2b-base-url').value,
-                token_url: document.getElementById('st-b2b-token-url').value,
-                price_api_base_url: document.getElementById('st-b2b-price-api-url').value,
-                client_id: document.getElementById('st-b2b-client-id').value,
-                client_secret: document.getElementById('st-b2b-client-secret').value,
-                timeout_sec: document.getElementById('st-b2b-timeout-sec').value,
-                verify_ssl: document.getElementById('st-b2b-verify-ssl').checked
             },
             suppliers: {
                 filename_rules: textToRules(document.getElementById('st-supplier-rules').value)
-            },
-            api_sources: {
-                iven: {
-                    enabled: document.getElementById('st-src-iven-enabled').checked,
-                    supplier: document.getElementById('st-src-iven-supplier').value,
-                    file_url: document.getElementById('st-src-iven-url').value,
-                    verify_ssl: document.getElementById('st-src-iven-verify-ssl').checked
-                },
-                tradex: {
-                    enabled: document.getElementById('st-src-tradex-enabled').checked,
-                    supplier: document.getElementById('st-src-tradex-supplier').value,
-                    file_url: document.getElementById('st-src-tradex-url').value,
-                    verify_ssl: document.getElementById('st-src-tradex-verify-ssl').checked
-                },
-                ntech: {
-                    enabled: document.getElementById('st-src-ntech-enabled').checked,
-                    supplier: document.getElementById('st-src-ntech-supplier').value,
-                    auth_url: document.getElementById('st-src-ntech-auth-url').value,
-                    price_url: document.getElementById('st-src-ntech-price-url').value,
-                    username: document.getElementById('st-src-ntech-username').value,
-                    password: document.getElementById('st-src-ntech-password').value,
-                    verify_ssl: document.getElementById('st-src-ntech-verify-ssl').checked
-                }
             },
             uploads_cleanup: {
                 keep_last_sessions: document.getElementById('st-cleanup-keep-sessions').value,
@@ -644,70 +511,8 @@ ignore_words - слова, которые нужно занижать
         });
     }
 
-    function testOnlinerB2BFromModal(){
-        var btn = document.getElementById('test-b2b-btn');
-        var note = document.getElementById('st-b2b-test-note');
-        if(btn){ btn.disabled = true; }
-        if(note){ note.textContent = 'Проверяю B2B OAuth...'; }
-        fetch('/api/app-settings', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(collectSettingsForm())
-        }).then(function(r){ return r.json(); }).then(function(d){
-            if(!d || d.status !== 'ok'){ throw new Error('save_failed'); }
-            applySettingsToForm(d.settings || {});
-            return fetch('/api/onliner-b2b-test', {method: 'POST'});
-        }).then(function(r){ return r.json(); }).then(function(d){
-            if(!d || d.status !== 'ok'){
-                throw new Error((d && d.message) || 'b2b_test_failed');
-            }
-            if(note){
-                note.textContent = 'B2B OK. /shop → HTTP ' + String(d.http_status || 0) + ', token TTL: ' + String(d.expires_in || 0) + ' сек.';
-            }
-        }).catch(function(err){
-            if(note){ note.textContent = 'B2B ошибка: ' + String((err && err.message) || err || 'unknown'); }
-        }).finally(function(){
-            if(btn){ btn.disabled = false; }
-        });
-    }
-
-    function probeOnlinerB2BDataFromModal(){
-        var btn = document.getElementById('probe-b2b-btn');
-        var note = document.getElementById('st-b2b-probe-note');
-        if(btn){ btn.disabled = true; }
-        if(note){ note.textContent = 'Проверяю живые B2B данные...'; }
-        fetch('/api/app-settings', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(collectSettingsForm())
-        }).then(function(r){ return r.json(); }).then(function(d){
-            if(!d || d.status !== 'ok'){ throw new Error('save_failed'); }
-            applySettingsToForm(d.settings || {});
-            return fetch('/api/onliner-b2b-probe', {method: 'POST'});
-        }).then(function(r){ return r.json(); }).then(function(d){
-            if(!d || d.status !== 'ok'){
-                throw new Error((d && d.message) || 'b2b_probe_failed');
-            }
-            if(note){
-                var extra = '';
-                if((d.sections_count || 0) <= 0 || !(d.manufacturers_count || 0)){
-                    extra = ' Тип sections: ' + String(d.sections_payload_type || '-') +
-                        ', ключи: ' + String((d.sections_payload_keys || []).join(', ') || '-');
-                }
-                note.textContent =
-                    'B2B данные OK. ' +
-                    'Разделов: ' + String(d.sections_count || 0) +
-                    ', производителей: ' + String(d.manufacturers_count || 0) +
-                    ', товаров: ' + String(d.products_count || 0) +
-                    '. ' + String(d.message || '') + extra;
-            }
-        }).catch(function(err){
-            if(note){ note.textContent = 'B2B данные: ошибка: ' + String((err && err.message) || err || 'unknown'); }
-        }).finally(function(){
-            if(btn){ btn.disabled = false; }
-        });
-    }
-
+    
+    
     var openBtn = document.getElementById('open-settings-btn');
     var closeBtn = document.getElementById('close-settings-btn');
     if(openBtn){
@@ -723,10 +528,6 @@ ignore_words - слова, которые нужно занижать
     }
     var saveBtn = document.getElementById('save-settings-btn');
     if(saveBtn){ saveBtn.onclick = saveAppSettingsFromModal; }
-    var testB2bBtn = document.getElementById('test-b2b-btn');
-    if(testB2bBtn){ testB2bBtn.onclick = testOnlinerB2BFromModal; }
-    var probeB2bBtn = document.getElementById('probe-b2b-btn');
-    if(probeB2bBtn){ probeB2bBtn.onclick = probeOnlinerB2BDataFromModal; }
     var resetBtn = document.getElementById('reset-settings-btn');
     if(resetBtn){ resetBtn.onclick = loadAppSettingsToModal; }
     settingsModal.querySelectorAll('[data-settings-tab]').forEach(function(tab){
