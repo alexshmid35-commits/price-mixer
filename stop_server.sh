@@ -1,0 +1,32 @@
+#!/bin/zsh
+# Price Mixer — Stop Server (macOS)
+
+PID_FILE="$(dirname "$0")/server.pid"
+
+echo "Stopping Price Mixer server..."
+
+KILLED=0
+
+# Try PID file first (clean stop)
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE")
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+        kill "$PID"
+        echo "Stopped process PID $PID"
+        KILLED=$((KILLED + 1))
+    fi
+    rm -f "$PID_FILE"
+fi
+
+# Fallback: find any python process running app.py
+while IFS= read -r pid; do
+    if [ -n "$pid" ]; then
+        kill "$pid" 2>/dev/null && echo "Stopped process PID $pid" && KILLED=$((KILLED + 1))
+    fi
+done < <(pgrep -f "python.*app\.py" 2>/dev/null)
+
+if [ "$KILLED" -eq 0 ]; then
+    echo "No running Price Mixer server found."
+else
+    echo "Stopped $KILLED process(es)."
+fi

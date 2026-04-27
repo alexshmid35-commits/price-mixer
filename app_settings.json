@@ -1,0 +1,127 @@
+{
+  "export": {
+    "include_without_id": false,
+    "price_name": "Price_Work",
+    "keep_lowest_price_per_onliner_id": true,
+    "exclude_duplicate_id_suppliers": [
+      "N-Tech",
+      "TGPC",
+      "IVEN"
+    ],
+    "only_pc_suppliers": [],
+    "only_pc_price_name": "N-tech_TGPC_Beznal",
+    "google_sheets_spreadsheet_url_or_id": "11zEGNWLqcOxhlm6SubOlW2xFvjQSrJAJJaUm-ga8iHM",
+    "google_sheets_tab": "Price",
+    "google_sheets_service_account_json": "ai2025-462421-df1d36f12313.json"
+  },
+  "onliner_db_import": {
+    "google_sheet_id": "11zEGNWLqcOxhlm6SubOlW2xFvjQSrJAJJaUm-ga8iHM",
+    "google_sheet_name": "All_Catalog"
+  },
+  "ui": {
+    "show_checks_block": true
+  },
+  "cache_api": {
+    "allow_direct": true,
+    "retry_attempts": 3,
+    "backoff_sec": 0.6,
+    "proxy_cooldown_sec": 180,
+    "max_parallel_workers": 10
+  },
+  "onliner_b2b": {
+    "enabled": true,
+    "base_url": "https://b2bapi.onliner.by",
+    "price_api_base_url": "https://price.api.onliner.by",
+    "client_id": "e2867a869b3a074fe3fb",
+    "client_secret": "43985ffcd3a94665a82975502b6341c5bc0a1759",
+    "token_url": "https://b2bapi.onliner.by/oauth/token",
+    "verify_ssl": true,
+    "timeout_sec": 20
+  },
+  "suppliers": {
+    "filename_rules": [
+      {
+        "pattern": "MhHkTiXuUL7uk9iOjznUc9FcGMDnKQ84-9",
+        "supplier": "Tradex"
+      },
+      {
+        "pattern": "tradex",
+        "supplier": "Tradex"
+      },
+      {
+        "pattern": "1030z",
+        "supplier": "IVEN"
+      },
+      {
+        "pattern": "1030",
+        "supplier": "IVEN"
+      },
+      {
+        "pattern": "1374",
+        "supplier": "IVEN"
+      },
+      {
+        "pattern": "price_bn",
+        "supplier": "N-Tech"
+      },
+      {
+        "pattern": "ntech",
+        "supplier": "N-Tech"
+      },
+      {
+        "pattern": "iven",
+        "supplier": "IVEN"
+      }
+    ]
+  },
+  "api_sources": {
+    "iven": {
+      "enabled": true,
+      "label": "IVEN",
+      "supplier": "IVEN",
+      "mode": "direct_file",
+      "verify_ssl": false,
+      "file_url": "https://iven.pro:800/?price=2&format=xlsx&login=Impulse2&password=c5af7e523b77114cac9268a02f2b7c3564f409e2"
+    },
+    "tradex": {
+      "enabled": true,
+      "label": "Tradex",
+      "supplier": "Tradex",
+      "mode": "direct_file",
+      "verify_ssl": false,
+      "file_url": "https://api.b2bit.by/api/v1/price/xlsx/MhHkTiXuUL7uk9iOjznUc9FcGMDnKQ84-9.xlsx"
+    },
+    "ntech": {
+      "enabled": true,
+      "label": "N-Tech",
+      "supplier": "N-Tech",
+      "mode": "ntech_json",
+      "verify_ssl": false,
+      "auth_url": "https://api.nt-d.by/authorization/login",
+      "price_url": "https://api.nt-d.by/price/download_buh",
+      "username": "impulse.trade2.by@gmail.com",
+      "password": "Impulse2020@"
+    }
+  },
+  "uploads_cleanup": {
+    "keep_last_sessions": 20,
+    "keep_days": 7,
+    "keep_api_fetch_hours": 24
+  },
+  "no_id_search": {
+    "max_candidates": 80,
+    "max_queries": 4,
+    "prefer_paren_model": true,
+    "prefer_article_tokens": true,
+    "include_brand_token": true,
+    "require_category_hint": true,
+    "category_rules_text": "{\n  \"Процессор\": {\n    \"query_hint\": \"cpu processor\",\n    \"must_contain\": [\n      \"ryzen\",\n      \"intel\",\n      \"xeon\"\n    ],\n    \"ignore_words\": [\n      \"cooler\"\n    ]\n  },\n  \"Видеокарта\": {\n    \"query_hint\": \"videocard gpu\",\n    \"must_contain\": [\n      \"rtx\",\n      \"gtx\",\n      \"radeon\"\n    ],\n    \"ignore_words\": [\n      \"holder\"\n    ]\n  },\n  \"Оперативная память\": {\n    \"query_hint\": \"dram ddr memory\",\n    \"must_contain\": [\n      \"ddr\",\n      \"dimm\",\n      \"sodimm\"\n    ],\n    \"ignore_words\": [\n      \"ssd\"\n    ]\n  },\n  \"SSD\": {\n    \"query_hint\": \"ssd nvme\",\n    \"must_contain\": [\n      \"ssd\",\n      \"nvme\",\n      \"m.2\"\n    ],\n    \"ignore_words\": [\n      \"dram\"\n    ]\n  },\n  \"Жесткий диск\": {\n    \"query_hint\": \"hdd hard drive\",\n    \"must_contain\": [\n      \"hdd\",\n      \"sata\",\n      \"7200\"\n    ],\n    \"ignore_words\": [\n      \"ssd\"\n    ]\n  }\n}"
+  },
+  "verify_id": {
+    "match_threshold": 0.74,
+    "trust_manual_confirmed": true,
+    "force_refresh_api": true,
+    "api_no_name_status": "review",
+    "require_article_or_model_priority": false
+  }
+}

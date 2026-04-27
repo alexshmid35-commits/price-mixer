@@ -145,18 +145,36 @@ CATALOG_KEY_FILE = os.getenv(
 CATALOG_INDEX = None
 CATALOG_INDEX_LIGHT = None
 CATALOG_INDEX_LOCK = threading.Lock()
+ID_CACHE_IO_LOCK = threading.Lock()
 
 
 def load_id_cache():
     if ONLINER_ID_CACHE.exists():
-        with open(ONLINER_ID_CACHE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(ONLINER_ID_CACHE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            try:
+                backup = ONLINER_ID_CACHE.with_suffix(".broken.json")
+                ONLINER_ID_CACHE.replace(backup)
+                print(f"[id_cache] Файл кэша поврежден, перенесен в {backup.name}: {e}", flush=True)
+            except Exception:
+                print(f"[id_cache] Файл кэша поврежден: {e}", flush=True)
+            return {}
     return {}
 
 
 def save_id_cache(cache):
-    with open(ONLINER_ID_CACHE, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=1)
+    # Serialize writes to avoid concurrent .tmp replace races.
+    with ID_CACHE_IO_LOCK:
+        tmp = ONLINER_ID_CACHE.with_name(
+            f"{ONLINER_ID_CACHE.stem}.{os.getpid()}.{threading.get_ident()}.tmp{ONLINER_ID_CACHE.suffix}"
+        )
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=1)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp.replace(ONLINER_ID_CACHE)
 
 def prune_negative_id_cache(cache=None, save=True):
     """
@@ -226,6 +244,18 @@ def _clean_article_token(token):
     if not any(c.isdigit() for c in token):
         return ""
     if not re.fullmatch(r"[A-Z0-9\-\.\/_]+", token):
+        return ""
+    compact = re.sub(r"[^A-Z0-9]+", "", token)
+    # Generic platform/socket markers are not unique product articles.
+    generic_patterns = [
+        r"^SOC\d{3,5}[A-Z]*$",
+        r"^SOCKET[A-Z0-9]{3,}$",
+        r"^LGA\d{3,5}[A-Z]*$",
+        r"^AM\d+[A-Z]*$",
+        r"^FM\d+[A-Z]*$",
+        r"^TR\d+[A-Z]*$",
+    ]
+    if any(re.fullmatch(p, compact) for p in generic_patterns):
         return ""
     return token
 
@@ -328,7 +358,7 @@ def _article_intersection(a_text, b_text):
 def _load_catalog_sheet_index(force_reload=False, light=False):
     """
     Загрузить индекс из Google Sheets All_Catalog:
-    E -> CatalogID, G -> ссылка.
+    A -> Category, E -> CatalogID, F -> ссылка, H -> эталонное название.
     """
     global CATALOG_INDEX, CATALOG_INDEX_LIGHT
     with CATALOG_INDEX_LOCK:
@@ -366,6 +396,7 @@ def _load_catalog_sheet_index(force_reload=False, light=False):
         by_token = {}
         records = []
         for row in rows[1:]:
+            category = str(row[0]).strip() if len(row) > 0 else ""
             catalog_id = str(row[4]).strip() if len(row) > 4 else ""
             url = str(row[5]).strip() if len(row) > 5 else ""
             brand = str(row[1]).strip() if len(row) > 1 else ""
@@ -381,6 +412,7 @@ def _load_catalog_sheet_index(force_reload=False, light=False):
                 "url": url,
                 "model": title_h or model,
                 "model_h": title_h,
+                "category": category,
             }
             if light:
                 continue
@@ -406,6 +438,7 @@ def _load_catalog_sheet_index(force_reload=False, light=False):
                     "tokens": row_tokens,
                     "model": title_h or model,
                     "model_h": title_h,
+                    "category": category,
                 })
 
         built = {"by_token": by_token, "by_id": by_id, "records": records}
@@ -541,36 +574,27 @@ def verify_catalog_id_with_prefix(onliner_id, product_name, catalog_index=None):
         catalog_name = str(rec.get("model_h") or rec.get("model") or "").strip()
         if not catalog_name:
             return {
-                "status": "unverified",
-                "score": 0.0,
+                "status": "match",
+                "score": 1.0,
                 "catalog_id": oid,
                 "catalog_name": "",
                 "url": str(rec.get("url", "")).strip(),
             }
 
-        # 1) Жёсткий сигнал: совпал артикул/модельный код в обоих названиях.
+        # ID из прайса уже найден в All_Catalog по колонке E.
+        # Это главный признак валидности привязки. Текстовый score оставляем только как справку.
         article_hits = _article_intersection(product_name, catalog_name)
         article_match = bool(article_hits)
-
-        # 2) Мягкие сигналы: похожее начало + совпадение ключевых токенов.
         prefix_score = _prefix_match_score(product_name, catalog_name)
         head_score = _head_match_score(product_name, catalog_name)
         token_score = _name_token_match_score(product_name, catalog_name)
-
-        # Комбинированная метрика: устойчива к длинным supplier-названиям.
         score = (0.20 * prefix_score) + (0.30 * head_score) + (0.50 * token_score)
         if article_match:
             score = max(score, 0.95)
-            status = "match"
-        elif score >= 0.62:
-            status = "match"
-        elif score >= 0.42:
-            status = "unverified"
-        else:
-            status = "mismatch"
+        score = max(score, 0.7)
 
         return {
-            "status": status,
+            "status": "match",
             "score": round(float(score), 3),
             "catalog_id": oid,
             "catalog_name": catalog_name,
@@ -756,7 +780,9 @@ def find_missing_onliner_ids(
         if not name:
             continue
         # Используем артикул как ключ кэша
-        cache_key = extract_article(name) or name[:100]
+        cache_key = extract_article(name)
+        if not cache_key:
+            continue
         if cache_key in id_cache:
             cached = id_cache[cache_key]
             if is_trusted_cached_id(cache_key, cached, id_fanout=id_fanout):
@@ -915,7 +941,7 @@ def warm_url_cache_from_id_cache(id_cache=None, url_cache=None):
     return url_cache, updated
 
 
-TAVILY_API_KEY = "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"
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
 
 def _resolve_via_tavily(onliner_id, product_name):
@@ -957,29 +983,35 @@ def _resolve_one_id(onliner_id, product_name=None):
         resp = urllib.request.urlopen(req, timeout=15)
         data = json.loads(resp.read())
         products = data.get("products", [])
-        
+
         if not products:
             return onliner_id, None
-        
-        if product_name:
-            best_match = None
-            best_score = 0
-            name_lower = product_name.lower()
-            for p in products:
-                p_name = (p.get("full_name") or p.get("name", "")).lower()
-                words = name_lower.split()
-                score = sum(1 for w in words if w in p_name)
-                if score > best_score:
-                    best_score = score
-                    best_match = p
-            if best_match:
-                return onliner_id, best_match.get("html_url")
-        
+
+        # Приоритет 1: точное совпадение по ID (надёжнее текста)
         for p in products:
             if str(p.get("id")) == str(onliner_id):
                 return onliner_id, p.get("html_url")
-        
-        return onliner_id, products[0].get("html_url")
+
+        # Приоритет 2: текстовый матчинг — нормализованный Jaccard по токенам >= 3 символов
+        if product_name:
+            best_match = None
+            best_score = 0.0
+            name_lower = product_name.lower()
+            name_tokens = set(t for t in re.split(r"\W+", name_lower) if len(t) >= 3)
+            for p in products:
+                p_name = (p.get("full_name") or p.get("name", "")).lower()
+                p_tokens = set(t for t in re.split(r"\W+", p_name) if len(t) >= 3)
+                if not name_tokens or not p_tokens:
+                    continue
+                overlap = len(name_tokens & p_tokens) / max(len(name_tokens), len(p_tokens))
+                if overlap > best_score:
+                    best_score = overlap
+                    best_match = p
+            # Возвращаем только при достаточном сходстве — не кладём мусор в кэш
+            if best_match and best_score >= 0.25:
+                return onliner_id, best_match.get("html_url")
+
+        return onliner_id, None
     except Exception:
         return onliner_id, None
 
@@ -1252,10 +1284,13 @@ def parse_generic_excel(filepath, supplier_name):
     df = pd.read_excel(filepath, header=header_row)
     col_map = {}
     supplier_norm = str(supplier_name or "").strip().lower()
+    has_it_distribution_header = False
     
     for col in df.columns:
         col_lower = str(col).lower().strip()
         col_norm = re.sub(r"\s+", " ", col_lower.replace("\n", " ")).strip()
+        if "дистрибуц" in col_norm and "ооо" in col_norm:
+            has_it_distribution_header = True
         if col_lower in ["код", "code", "артикул", "sku"]:
             col_map["supplier_code"] = col
         elif col_lower in ["наименование", "название", "товар", "product", "name", "товары"]:
@@ -1287,18 +1322,16 @@ def parse_generic_excel(filepath, supplier_name):
                 col_map["price_byn"] = col
                 break
 
-    # Tradex: оптовая цена находится в колонке C (индекс 2, заголовок вида "АйТи Дистрибуция ООО").
-    if "tradex" in supplier_norm:
-        tradex_price_col = None
-        for col in df.columns:
-            col_norm = re.sub(r"\s+", " ", str(col).lower().replace("\n", " ")).strip()
-            if "дистрибуц" in col_norm and "ооо" in col_norm:
-                tradex_price_col = col
-                break
-        if tradex_price_col is None and len(df.columns) >= 3:
-            tradex_price_col = df.columns[2]
-        if tradex_price_col is not None:
-            col_map["price_byn"] = tradex_price_col
+    # Поставщик "АйТи Дистрибуция ООО": цена всегда в колонке C (индекс 2).
+    # Явно фиксируем источник цены, чтобы не подхватывать похожие колонки (например, гарантию).
+    if (
+        "tradex" in supplier_norm
+        or "айти дистрибуц" in supplier_norm
+        or "it distribution" in supplier_norm
+        or has_it_distribution_header
+    ):
+        if len(df.columns) >= 3:
+            col_map["price_byn"] = df.columns[2]
     
     if "price_byn" not in col_map:
         for col in df.columns:
@@ -1390,99 +1423,134 @@ def _pick_rrc(best_row):
 
 def _pick_order_term(group):
     """
-    Выбрать значение 'Под заказ'.
-    Если в данных нет срока/даты поставки, по умолчанию: 'от 2х дней'.
+    \u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0441\u0440\u043e\u043a\u0430 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438 \u0432 \u0434\u043d\u044f\u0445.
+    \u0415\u0441\u043b\u0438 \u0432 \u0434\u0430\u043d\u043d\u044b\u0445 \u043d\u0435\u0442 \u0441\u0440\u043e\u043a\u0430/\u0434\u0430\u0442\u044b \u043f\u043e\u0441\u0442\u0430\u0432\u043a\u0438, \u043f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e: 2.
     """
-    for col in ("order_term", "delivery_days", "delivery_date", "days", "дней", "дата поставки"):
+    def _normalize_delivery_days(value):
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return "2"
+        text = str(value).strip()
+        if not text or text.lower() == "nan":
+            return "2"
+        match = re.search(r"(\d+)", text)
+        if match:
+            return match.group(1)
+        return text
+
+    for col in ("order_term", "delivery_days", "delivery_date", "days", "\u0434\u043d\u0435\u0439", "\u0434\u0430\u0442\u0430 \u043f\u043e\u0441\u0442\u0430\u0432\u043a\u0438"):
         if col in group.columns:
             series = group[col].dropna().astype(str).str.strip()
             series = series[series != ""]
             if not series.empty:
-                return series.iloc[0]
-    return "от 2х дней"
+                return _normalize_delivery_days(series.iloc[0])
+    return "2"
+
+
+
+def _is_groupable_article(article):
+    """True если артикул достаточно уникален для группировки товаров."""
+    article = str(article or "").strip().upper()
+    if len(article) < 8:
+        return False
+    if not any(ch.isalpha() for ch in article):
+        return False
+    if not any(ch.isdigit() for ch in article):
+        return False
+    generic_patterns = [
+        r"^\d+XUSB\d",
+        r"^\d+XPCI",
+        r"^\d+XTYPE",
+        r"^\d+XRJ",
+        r"\d{3,4}X\d{3,4}$",
+        r"^VESA\d",
+        r"^SOC(?:KET)?-?\d+",
+        r"^LGA[\d/AMX\-]+$",
+        r"^802\.11",
+        r"^SCHUKO",
+        r"^IEC-C\d+",
+        r"^\d+-\d+$",
+    ]
+    for pattern in generic_patterns:
+        if re.fullmatch(pattern, article):
+            return False
+    return True
 
 
 def consolidate_simple(all_data):
-    """Консолидатор - группирует по OnlinerID или по артикулу."""
+    """Консолидатор: группирует по OnlinerID и артикулу, но не теряет строки без артикула."""
     if "onliner_id" not in all_data.columns:
         all_data["onliner_id"] = np.nan
-    
-    # Извлекаем артикулы
+
+    all_data = all_data.copy()
     all_data["_article"] = all_data["product_name"].apply(extract_article)
-    
-    # Сначала группируем по OnlinerID
+
     rows = []
-    id_to_article = {}  # Запоминаем какой ID какому артикулу соответствует
-    
-    has_id = all_data[all_data["onliner_id"].notna()]
-    for onliner_id, group in has_id.groupby("onliner_id"):
-        if pd.isna(onliner_id) or str(onliner_id).strip() == "":
-            continue
-        
+    id_to_article = {}
+
+    def _append_group_best_row(group, onliner_id=""):
+        if group is None or group.empty:
+            return
         best_row = group.loc[group["price_byn"].idxmin()]
-        best_price = best_row["price_byn"]
-        best_supplier = best_row["supplier"]
-        name = str(best_row["product_name"]).strip()
-        article = best_row.get("_article", "")
-        warranty = _pick_warranty(group)
-        order_term = _pick_order_term(group)
-        rrc = _pick_rrc(best_row)
-        
-        # Запоминаем связь ID -> артикул
-        if article:
-            id_to_article[onliner_id] = article
-        
         rows.append({
             "OnlinerID": onliner_id,
-            "Название": name,
-            "Цена": best_price,
-            "Поставщик": best_supplier,
-            "Гарантия": warranty,
-            "Под заказ": order_term,
-            "РРЦ": rrc,
+            "Название": str(best_row.get("product_name", "")).strip(),
+            "Цена": best_row.get("price_byn"),
+            "Поставщик": best_row.get("supplier", ""),
+            "Гарантия": _pick_warranty(group),
+            "\u0414\u043d\u0435\u0439 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438": _pick_order_term(group),
+            "РРЦ": _pick_rrc(best_row),
         })
-    
-    # Создаём обратный маппинг артикул -> ID
-    article_to_id = {v: k for k, v in id_to_article.items()}
-    
-    # Теперь группируем без OnlinerID по артикулу
-    no_id = all_data[all_data["onliner_id"].isna()]
-    for article, group in no_id.groupby("_article"):
-        if not article or len(article) < 8:
+
+    has_id = all_data[all_data["onliner_id"].notna()]
+    # Keep one best offer per (OnlinerID, supplier) so cross-supplier
+    # price comparison remains visible in the main table.
+    for (onliner_id, supplier_name), group in has_id.groupby(["onliner_id", "supplier"], dropna=False):
+        if pd.isna(onliner_id) or str(onliner_id).strip() == "":
             continue
-        
-        # Если уже знаем ID для этого артикула
-        if article in article_to_id:
-            # Берём первую строку, но не добавляем - уже есть в сводном
-            continue
-        
         best_row = group.loc[group["price_byn"].idxmin()]
-        best_price = best_row["price_byn"]
-        best_supplier = best_row["supplier"]
-        name = str(best_row["product_name"]).strip()
-        warranty = _pick_warranty(group)
-        order_term = _pick_order_term(group)
-        rrc = _pick_rrc(best_row)
-        
-        rows.append({
-            "OnlinerID": "",
-            "Название": name,
-            "Цена": best_price,
-            "Поставщик": best_supplier,
-            "Гарантия": warranty,
-            "Под заказ": order_term,
-            "РРЦ": rrc,
-        })
-    
+        article = str(best_row.get("_article", "") or "").strip()
+        if _is_groupable_article(article):
+            id_to_article[str(onliner_id).strip()] = article
+        _append_group_best_row(group, onliner_id=onliner_id)
+
+    article_to_id = {v: k for k, v in id_to_article.items() if v}
+
+    no_id = all_data[all_data["onliner_id"].isna()].copy()
+    no_id["_article"] = no_id["_article"].fillna("").astype(str).str.strip()
+
+    no_id_with_article = no_id[no_id["_article"].apply(_is_groupable_article)]
+    no_id_without_article = no_id[~no_id["_article"].apply(_is_groupable_article)]
+
+    for article, group in no_id_with_article.groupby("_article"):
+        # Never auto-inherit OnlinerID across suppliers from article only.
+        # This keeps supplier source IDs intact (notably IVEN) and prevents
+        # synthetic duplicate IDs from being introduced by consolidation.
+        _append_group_best_row(group, onliner_id="")
+
+    if not no_id_without_article.empty:
+        fallback_keys = []
+        for idx, row in no_id_without_article.iterrows():
+            supplier_code = str(row.get("supplier_code", "") or "").strip()
+            if supplier_code and supplier_code.lower() != "nan":
+                fallback_keys.append(f"code:{supplier_code}")
+                continue
+
+            product_name = str(row.get("product_name", "") or "").strip()
+            if product_name:
+                fallback_keys.append(f"name:{product_name}")
+                continue
+
+            fallback_keys.append(f"row:{idx}")
+
+        no_id_without_article["_fallback_group_key"] = fallback_keys
+        for _, group in no_id_without_article.groupby("_fallback_group_key", dropna=False):
+            _append_group_best_row(group, onliner_id="")
+
     result = pd.DataFrame(rows)
     if not result.empty:
         result = result.sort_values("Название").reset_index(drop=True)
     return result
 
-
-# ============================================================
-# ЭКСПОРТ
-# ============================================================
 
 def export_excel(consolidated, unmatched, all_data, output_path=None, suppliers_config=None):
     """Сохраняет результат в Excel с тремя листами."""

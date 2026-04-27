@@ -1,0 +1,1616 @@
+{
+  "корпус atx без бп segotep sg-pm": {
+    "name": "Корпус ATX без БП Segotep SG-PM",
+    "category": "Корпус",
+    "supplier": "N-Tech",
+    "case_brand": "SEGOTEP",
+    "case_model": "",
+    "case_code": "SGPM",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "SEGOTEP SGPM",
+    "candidates": [
+      {
+        "id": "4451405",
+        "name": "Корпус Segotep Gank 360 (черный)",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": [
+          "black"
+        ]
+      },
+      {
+        "id": "3951191",
+        "name": "Корпус Segotep KL- Aeolus (черный)",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": [
+          "black"
+        ]
+      },
+      {
+        "id": "3959537",
+        "name": "Корпус Segotep LUX 360 (черный)",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": [
+          "black"
+        ]
+      },
+      {
+        "id": "4939379",
+        "name": "Корпус Segotep Prime M (черный)",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": [
+          "black"
+        ]
+      },
+      {
+        "id": "4190351",
+        "name": "Корпус Segotep Gank 360 (белый)",
+        "url": "",
+        "score": 0.84,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": [
+          "white"
+        ]
+      }
+    ],
+    "added_at": 1776943487,
+    "reason": "case_brand_model_manual",
+    "reason_label": "Корпус: строгий матч по бренду, серии/коду, форм-фактору и признаку с БП/без БП. Подтверждение только вручную."
+  },
+  "корпус atx без бп vicsone 8821c (стенка с перфорацией для вентиляции, 1xusb3.1, 2xusb3.0, 2xusb2.0, 1хtype-c, 1x120 mm fan, 6х3.5\", 2*5,25\" hd audio+mic, vga max 250mm, cpu max 155mm,сталь 0,66 mm) black": {
+    "name": "Корпус ATX без БП Vicsone 8821C (Стенка с перфорацией для вентиляции, 1xUSB3.1,  2xUSB3.0, 2xUSB2.0, 1хType-C, 1x120 mm FAN, 6х3.5\", 2*5,25\" HD Audio+Mic, VGA MAX 250mm, CPU MAX 155mm,сталь 0,66 mm) Black",
+    "category": "Корпус",
+    "supplier": "N-Tech",
+    "case_brand": "VICSONE",
+    "case_model": "",
+    "case_code": "",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "VICSONE ",
+    "candidates": [
+      {
+        "id": "4641154",
+        "name": "Корпус Vicsone 6835",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      },
+      {
+        "id": "4641127",
+        "name": "Корпус Vicsone 8821",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      },
+      {
+        "id": "3559821",
+        "name": "Корпус Vicsone F3X",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      },
+      {
+        "id": "4978860",
+        "name": "Корпус Vicsone F4X",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      },
+      {
+        "id": "5086287",
+        "name": "Корпус Vicsone M4X",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      }
+    ],
+    "added_at": 1776943487,
+    "reason": "case_brand_model_manual",
+    "reason_label": "Корпус: строгий матч по бренду, серии/коду, форм-фактору и признаку с БП/без БП. Подтверждение только вручную."
+  },
+  "ddr4 16gb pc-21300 2666mhz patriot signature premium line (psp416g2666h1) (не участвует в акции)": {
+    "name": "DDR4 16Gb PC-21300 2666MHz Patriot Signature Premium Line (PSP416G2666H1) (НЕ участвует в акции)",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "PATRIOT",
+    "ram_sku": "PSP416G2666H1",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "PATRIOT PSP416G2666H1",
+    "candidates": [],
+    "added_at": 1776852555,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr4 64gb kitof4 pc-25600 3200mhz kingston fury beast (kf432c16bb1k4/64) cl16": {
+    "name": "DDR4 64Gb KiTof4 PC-25600 3200MHz Kingston FURY Beast (KF432C16BB1K4/64) CL16",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "KINGSTON",
+    "ram_sku": "KF432C16BB1K464",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "KINGSTON KF432C16BB1K464",
+    "candidates": [],
+    "added_at": 1776852555,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr5 16gb kitof2 pc-48000 5600mhz team elite (ted516g5600dc4601) cl46": {
+    "name": "DDR5 16Gb KiTof2 PC-48000 5600MHz Team Elite (TED516G5600DC4601) CL46",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "TEAM",
+    "ram_sku": "TED516G5600DC4601",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "TEAM TED516G5600DC4601",
+    "candidates": [],
+    "added_at": 1776852555,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr5 64gb pc-44800 5600mhz kingston fury beast (kf556c36bbe-64) cl36": {
+    "name": "DDR5 64Gb PC-44800 5600MHz Kingston FURY Beast (KF556C36BBE-64) CL36",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "KINGSTON",
+    "ram_sku": "KF556C36BBE64",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "KINGSTON KF556C36BBE64",
+    "candidates": [],
+    "added_at": 1776852555,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr5 8gb pc-41600 5200mhz team elite (ted58g5200c4201)": {
+    "name": "DDR5 8GB PC-41600 5200MHz Team Elite (TED58G5200C4201)",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "TEAM",
+    "ram_sku": "TED58G5200C4201",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "TEAM TED58G5200C4201",
+    "candidates": [],
+    "added_at": 1776852555,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr5 8gb pc-41600 5200mhz team elite (ted58g5200c42bk) cl42": {
+    "name": "DDR5 8GB PC-41600 5200MHz Team Elite (TED58G5200C42BK) CL42",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "TEAM",
+    "ram_sku": "TED58G5200C42BK",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "TEAM TED58G5200C42BK",
+    "candidates": [],
+    "added_at": 1776852555,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "процессор amd epyc 7002 series 16c/32t model 7282 (2.8/3.2ghz, 64mb, 120w, sp3)": {
+    "name": "Процессор AMD EPYC 7002 Series 16C/32T Model 7282 (2.8/3.2GHz, 64MB, 120W, SP3)",
+    "category": "Процессор",
+    "supplier": "N-Tech",
+    "cpu_brand": "AMD",
+    "cpu_model": "EPYC7282",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "AMD epyc7282",
+    "candidates": [
+      {
+        "id": "2046281",
+        "name": "Процессор AMD EPYC 7282",
+        "url": "",
+        "score": 0.94,
+        "source": "cpu_db_seed",
+        "package": ""
+      }
+    ],
+    "added_at": 1776865914,
+    "reason": "cpu_brand_model_manual",
+    "reason_label": "Процессор: совпадение только по производителю и модели. Подтверждение только вручную."
+  },
+  "ddr5 32gb pc-44800 5600mhz team t-create classic (ctccd532g5600hc46bkt) oem": {
+    "name": "DDR5 32Gb PC-44800 5600MHz Team T-CREATE Classic  (CTCCD532G5600HC46BKT) Oem",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "TEAM",
+    "ram_sku": "CTCCD532G5600HC46BKT",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "TEAM CTCCD532G5600HC46BKT",
+    "candidates": [],
+    "added_at": 1776852555,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ssd 2.5\" sata-iii samsung 250gb 870 evo (mz-77e250b/eu) 560/530 mbps tlc rtl": {
+    "name": "SSD 2.5\" SATA-III Samsung 250GB 870 EVO (MZ-77E250B/EU) 560/530 MBps TLC RTL",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "SAMSUNG",
+    "ssd_model": "",
+    "ssd_code": "MZ77E250BEU",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "SAMSUNG MZ77E250BEU",
+    "candidates": [],
+    "added_at": 1776724023,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "ssd m.2 2280 m pci express 4.0 x4 samsung 1tb 990 pro series (mz-v9p1t0b/am) 7450/6900 mbps tlc rtl": {
+    "name": "SSD M.2 2280 M PCI Express 4.0 x4 Samsung 1TB 990 Pro Series (MZ-V9P1T0B/AM) 7450/6900 MBps TLC RTL",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "SAMSUNG",
+    "ssd_model": "",
+    "ssd_code": "MZV9P1T0BAM",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "SAMSUNG MZV9P1T0BAM",
+    "candidates": [],
+    "added_at": 1776725170,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "внешний накопитель ssd usb3.2 adata 500gb elite se880 (aeli-se880-500gcbu)": {
+    "name": "Внешний накопитель SSD USB3.2 ADATA 500GB Elite SE880 (AELI-SE880-500GCBU)",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "ADATA",
+    "ssd_model": "",
+    "ssd_code": "AELISE880500GCBU",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "ADATA AELISE880500GCBU",
+    "candidates": [],
+    "added_at": 1776725170,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "кабель питания для ноутбуков 3-pin 3g*0.5mm2 telecom (tp022-3.0-bk) 3м": {
+    "name": "Кабель питания для ноутбуков 3-pin 3G*0.5mm2 Telecom (TP022-3.0-BK) 3м",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "",
+    "ssd_model": "",
+    "ssd_code": "TP02230BK",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "TP02230BK",
+    "candidates": [],
+    "added_at": 1776725170,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "кабель питания для ноутбуков 3-pin 3g*0.5mm2 vcom (ce022-cu0.5-1.8m) 1.8м": {
+    "name": "Кабель питания для ноутбуков 3-pin 3G*0.5mm2 VCOM (CE022-CU0.5-1.8M) 1.8м",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "",
+    "ssd_model": "",
+    "ssd_code": "CE022CU0518M",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "CE022CU0518M",
+    "candidates": [],
+    "added_at": 1776725170,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "корзина hotswap chenbro rm237 (384-23701-3116a0) 2x 2.5\" tray": {
+    "name": "Корзина HotSwap Chenbro RM237 (384-23701-3116A0) 2x 2.5\" Tray",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "",
+    "ssd_model": "",
+    "ssd_code": "384237013116A0",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "384237013116A0",
+    "candidates": [],
+    "added_at": 1776725170,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "радиатор для ssd m.2 2280 thermalright (trm2.2280)": {
+    "name": "Радиатор для SSD M.2 2280 Thermalright (TRM2.2280)",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "",
+    "ssd_model": "",
+    "ssd_code": "TRM22280",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "TRM22280",
+    "candidates": [],
+    "added_at": 1776725170,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "райзер montech vertical gpu mounting kit (vgm2b) black (pci-e 4.0, совместим с любыми корпусами, имеющими 7 слотов pci-e)": {
+    "name": "Райзер Montech Vertical GPU Mounting Kit (VGM2B) Black (PCI-E 4.0, совместим с любыми корпусами, имеющими 7 слотов PCI-E)",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "",
+    "ssd_model": "",
+    "ssd_code": "VGM2B",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "VGM2B",
+    "candidates": [],
+    "added_at": 1776686107,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "райзер montech vertical gpu mounting kit (vgm2w) white (pci-e 4.0, совместим с любыми корпусами, имеющими 7 слотов pci-e)": {
+    "name": "Райзер Montech Vertical GPU Mounting Kit (VGM2W) White (PCI-E 4.0, совместим с любыми корпусами, имеющими 7 слотов PCI-E)",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "",
+    "ssd_model": "",
+    "ssd_code": "VGM2W",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "VGM2W",
+    "candidates": [],
+    "added_at": 1776686107,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "картридж pantum tl-c2310h для pantum bm2300/ bm2300a/ bm2300aw/ bm2300w/ bp2300/ bp2300w (1.6т листов / 5%)": {
+    "name": "Картридж Pantum TL-C2310H для Pantum BM2300/ BM2300A/ BM2300AW/ BM2300W/ BP2300/ BP2300W (1.6т листов / 5%)",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "",
+    "ssd_model": "",
+    "ssd_code": "TLC2310H",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "TLC2310H",
+    "candidates": [],
+    "added_at": 1776725170,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "набор крепления thermalright sst-amd, am2/am3/am4/fm1/fm2 фиксирует процессор в гнезде": {
+    "name": "Набор крепления Thermalright SST-AMD, AM2/AM3/AM4/FM1/FM2 фиксирует процессор в гнезде",
+    "category": "SSD",
+    "supplier": "N-Tech",
+    "ssd_brand": "",
+    "ssd_model": "",
+    "ssd_code": "AM2AM3AM4FM1FM2",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "AM2AM3AM4FM1FM2",
+    "candidates": [],
+    "added_at": 1776725170,
+    "reason": "ssd_bracket_code_manual",
+    "reason_label": "SSD: приоритет точному коду в скобках, fallback по бренду+модели/объёму. Подтверждение только вручную."
+  },
+  "бп n-tech 500w elite 80+ (vxe 500b) (atx 2.31, 500w, 80 plus bronze, active pfc, dc-dc, 120mm fan (24+4+4pin, 2xmolex, 4xsata,6+2 vga), non-modular) oem + кабель питания": {
+    "name": "БП N-Tech 500W Elite 80+ (VXE 500B) (ATX 2.31, 500W, 80 PLUS BRONZE, Active PFC, DC-DC, 120mm Fan (24+4+4pin, 2xMolex, 4xSATA,6+2 VGA), non-modular) OEM + кабель питания",
+    "category": "Блок питания",
+    "supplier": "N-Tech",
+    "psu_brand": "NTECH",
+    "psu_model": "500W",
+    "psu_code": "",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "NTECH 500W",
+    "candidates": [],
+    "added_at": 1776857942,
+    "reason": "psu_brand_power_manual",
+    "reason_label": "Блок питания: строгий матч по бренду, мощности, 80 PLUS/модульности/коду. Подтверждение только вручную."
+  },
+  "бп n-tech 600w elite 80+ (vxe 600b) (atx 2.31, 600w, 80 plus bronze, active pfc, dc-dc, 120mm fan (24+4+4pin, 2xmolex, 4xsata,6+2 vga), non-modular) oem + кабель питания": {
+    "name": "БП N-Tech 600W Elite 80+ (VXE 600B) (ATX 2.31, 600W, 80 PLUS BRONZE, Active PFC, DC-DC, 120mm Fan (24+4+4pin, 2xMolex, 4xSATA,6+2 VGA), non-modular) OEM + кабель питания",
+    "category": "Блок питания",
+    "supplier": "N-Tech",
+    "psu_brand": "NTECH",
+    "psu_model": "600W",
+    "psu_code": "",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "NTECH 600W",
+    "candidates": [],
+    "added_at": 1776857942,
+    "reason": "psu_brand_power_manual",
+    "reason_label": "Блок питания: строгий матч по бренду, мощности, 80 PLUS/модульности/коду. Подтверждение только вручную."
+  },
+  "видеокарта geforce ocpc rtx3050 (ocvn3050g8xm) 8gb": {
+    "name": "Видеокарта GeForce OCPC RTX3050 (OCVN3050G8XM) 8GB",
+    "category": "Видеокарта",
+    "supplier": "N-Tech",
+    "gpu_vendor": "OCPC",
+    "gpu_model": "RTX3050",
+    "gpu_sku": "OCVN3050G8XM",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "OCPC RTX3050",
+    "candidates": [],
+    "added_at": 1776852748,
+    "reason": "gpu_brand_model_manual",
+    "reason_label": "Видеокарта: совпадение по вендору, GPU и серии. Подтверждение только вручную."
+  },
+  "видеокарта nvidia geforce ocpc rtx 3060 (ocvn3060g12ztwh) 12gb gddr6, hdmi+3xdp (только в составе пэвм)": {
+    "name": "Видеокарта NVIDIA GeForce OCPC RTX 3060 (OCVN3060G12ZTWH) 12GB GDDR6, HDMI+3xDP (ТОЛЬКО В СОСТАВЕ ПЭВМ)",
+    "category": "Видеокарта",
+    "supplier": "N-Tech",
+    "gpu_vendor": "OCPC",
+    "gpu_model": "RTX3060",
+    "gpu_sku": "OCVN3060G12ZTWH",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "OCPC RTX3060",
+    "candidates": [
+      {
+        "id": "5084274",
+        "name": "Видеокарта OCPC RTX 3060 OC 12GB GDDR6 OCVN3060G12XM",
+        "url": "",
+        "score": 0.69,
+        "source": "gpu_db_exact",
+        "series": "",
+        "sku": "ocvn3060g12xm",
+        "memory_gb": "12",
+        "white": false
+      }
+    ],
+    "added_at": 1776865959,
+    "reason": "gpu_brand_model_manual",
+    "reason_label": "Видеокарта: совпадение по вендору, GPU и серии. Подтверждение только вручную."
+  },
+  "кулер s-1200 alseye r19 cpu lga1700/1200/2011 4u pwm 1300-3800rpm 260w": {
+    "name": "Кулер S-1200 ALSEYE R19 CPU LGA1700/1200/2011 4U PWM 1300-3800rpm 260W",
+    "category": "Охлаждение",
+    "supplier": "N-Tech",
+    "cooler_brand": "ALSEYE",
+    "cooler_code": "",
+    "cooler_tdp": "",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "ALSEYE",
+    "candidates": [
+      {
+        "id": "2734629",
+        "name": "Кулер Alseye ASASP3-A0HC1U-JYP31, 120W",
+        "url": "",
+        "score": 0.91,
+        "source": "cooler_db_seed",
+        "code": "",
+        "tdp": ""
+      },
+      {
+        "id": "4360532",
+        "name": "Кулер S-1700 ALSEYE (AS-V15) LGA1700 (91x90x65,5мм, 52.2дБ, 2600-8000об/мин, 200W)",
+        "url": "",
+        "score": 0.91,
+        "source": "cooler_db_seed",
+        "code": "asv15",
+        "tdp": ""
+      },
+      {
+        "id": "4339995",
+        "name": "Кулер для процессора ALSEYE AM90-4",
+        "url": "",
+        "score": 0.91,
+        "source": "cooler_db_seed",
+        "code": "",
+        "tdp": ""
+      },
+      {
+        "id": "4758738",
+        "name": "Кулер для процессора ALSEYE AS-GH1700P-25AC",
+        "url": "",
+        "score": 0.91,
+        "source": "cooler_db_seed",
+        "code": "asgh1700p25ac",
+        "tdp": ""
+      },
+      {
+        "id": "3987981",
+        "name": "Кулер для процессора ALSEYE H120D (белый)",
+        "url": "",
+        "score": 0.91,
+        "source": "cooler_db_seed",
+        "code": "",
+        "tdp": ""
+      }
+    ],
+    "added_at": 1776937688,
+    "reason": "cooler_article_manual",
+    "reason_label": "Охлаждение (кулер / СЖО): бренд, артикул, TDP, цвет. Подтверждение только вручную."
+  },
+  "мфу pantum m6700d (лазерный, черно-белый, формат a4 (210x297 мм), скорость ч/б печати 30 стр/мин, разрешение 1200 dpi )": {
+    "name": "МФУ Pantum M6700D (лазерный, черно-белый, формат A4 (210x297 мм), скорость ч/б печати 30 стр/мин, разрешение 1200 dpi )",
+    "category": "Принтер и МФУ",
+    "supplier": "N-Tech",
+    "printer_brand": "PANTUM",
+    "printer_article": "",
+    "printer_model": "M6700D",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "PANTUM M6700D",
+    "candidates": [
+      {
+        "id": "1746755",
+        "name": "МФУ Pantum M6700D (белый)",
+        "url": "",
+        "score": 0.95,
+        "source": "printer_db_seed",
+        "code": "m6700d"
+      },
+      {
+        "id": "4731194",
+        "name": "МФУ Pantum M6700D (серый)",
+        "url": "",
+        "score": 0.95,
+        "source": "printer_db_seed",
+        "code": "m6700d"
+      },
+      {
+        "id": "1746866",
+        "name": "МФУ Pantum M6700DW",
+        "url": "",
+        "score": 0.95,
+        "source": "printer_db_seed",
+        "code": "m6700dw"
+      }
+    ],
+    "added_at": 1776852727,
+    "reason": "printer_article_manual",
+    "reason_label": "Принтер / МФУ: бренд, модель, артикул в скобках. Подтверждение только вручную."
+  },
+  "mb gigabyte b760 gaming x d4 gen5 soc-1700 (b760) 3xpci-ex16 3xm.2 2.5gbe lan 3xargb+rgb raid 0/1/5/10 4xddr4 3200mhz+ hdmi+dp atx rtl": {
+    "name": "MB Gigabyte B760 GAMING X D4 GEN5 Soc-1700 (B760) 3xPCI-Ex16 3xM.2 2.5GbE LAN 3xARGB+RGB RAID 0/1/5/10 4xDDR4 3200MHz+ HDMI+DP ATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760GAMINGXD4GEN5",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760gamingxd4gen5",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760 gaming x wifi6e gen5 (b760 g x wf6e gen5) soc-1700 (b760) 3xpci-ex16 3xm.2 2.5gbe lan wi-fi 6e bt 5.3 3xargb+rgb raid 0/1/5/10 4xddr5 5600mhz+ hdmi+dp atx rtl": {
+    "name": "MB Gigabyte B760 GAMING X WIFI6E GEN5 (B760 G X WF6E GEN5) Soc-1700 (B760) 3xPCI-Ex16 3xM.2 2.5GbE LAN Wi-Fi 6E BT 5.3 3xARGB+RGB RAID 0/1/5/10 4xDDR5 5600MHz+ HDMI+DP ATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760GAMINGXWIFI6EGEN5",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760gamingxwifi6egen5",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760m aorus elite wifi6e gen5 (b760m a e wf6e gen5) soc-1700 (b760) 2xpci-ex16 3xm.2 2.5gbe lan wi-fi 6e bt 5.3 3xargb+rgb raid 0/1/5/10 4xddr5 5600mhz+ hdmi+dp matx rtl": {
+    "name": "MB Gigabyte B760M AORUS ELITE WIFI6E GEN5 (B760M A E WF6E GEN5) Soc-1700 (B760) 2xPCI-Ex16 3xM.2 2.5GbE LAN Wi-Fi 6E BT 5.3 3xARGB+RGB RAID 0/1/5/10 4xDDR5 5600MHz+ HDMI+DP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760MAORUSELITEWIFI6EGEN5",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760maoruselitewifi6egen5",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760m d3hp ddr4 soc-1700 (b760) pci-ex16 2xpci-ex1 2xm.2 1gbe lan 4xddr4 5333mhz+ vga+hdmi+dp matx rtl": {
+    "name": "MB Gigabyte B760M D3HP DDR4 Soc-1700 (B760) PCI-Ex16 2xPCI-Ex1 2xM.2 1GbE LAN 4xDDR4 5333MHz+ VGA+HDMI+DP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760MD3HPDDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760md3hpddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760m ds3h ax ddr4 soc-1700 (b760) pci-ex16 pci-ex1 2xm.2 2.5gbe lan wi-fi 6e bt 5.2 4xddr4 5333mhz+ hdmi+2xdp matx rtl": {
+    "name": "MB Gigabyte B760M DS3H AX DDR4 Soc-1700 (B760) PCI-Ex16 PCI-Ex1 2xM.2 2.5GbE LAN Wi-Fi 6E BT 5.2 4xDDR4 5333MHz+ HDMI+2xDP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760MDS3HAXDDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760mds3haxddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760m ds3h wifi6e gen5 (b760m ds3h wf6e gen5) soc-1700 (b760) 3xpci-ex16 2xm.2 2.5gbe lan wi-fi 6e bt 5.3 4xddr5 5600mhz+ hdmi+2xdp matx rtl": {
+    "name": "MB Gigabyte B760M DS3H WIFI6E GEN5 (B760M DS3H WF6E GEN5) Soc-1700 (B760) 3xPCI-Ex16 2xM.2 2.5GbE LAN Wi-Fi 6E BT 5.3 4xDDR5 5600MHz+ HDMI+2xDP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760MDS3HWIFI6EGEN5",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760mds3hwifi6egen5",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760m gaming ddr4 soc-1700 (b760) pci-ex16 pci-ex1 2xm.2 2.5gbe lan raid 0/1/5/10 2xddr4 5333mhz+ vga+hdmi+2xdp matx rtl": {
+    "name": "MB Gigabyte B760M GAMING DDR4 Soc-1700 (B760) PCI-Ex16 PCI-Ex1 2xM.2 2.5GbE LAN RAID 0/1/5/10 2xDDR4 5333MHz+ VGA+HDMI+2xDP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760MGAMINGDDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760mgamingddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760m gaming x ddr4 gen5 (b760m g x ddr4 gen5) soc-1700 (b760) 2xpci-ex16 2xm.2 2.5gbe lan 3xargb+rgb raid 0/1/5/10 4xddr4 3200mhz+ hdmi+dp matx rtl": {
+    "name": "MB Gigabyte B760M GAMING X DDR4 GEN5 (B760M G X DDR4 GEN5) Soc-1700 (B760) 2xPCI-Ex16 2xM.2 2.5GbE LAN 3xARGB+RGB RAID 0/1/5/10 4xDDR4 3200MHz+ HDMI+DP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760MGAMINGXDDR4GEN5",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760mgamingxddr4gen5",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760m gaming x wifi6e gen5 (b760m g x wf6e gen5) soc-1700 (b760) 2xpci-ex16 2xm.2 2.5gbe lan wi-fi 6e bt 5.3 raid 0/1/5/10 4xddr5 5600mhz+ hdmi+dp matx rtl": {
+    "name": "MB Gigabyte B760M GAMING X WIFI6E GEN5 (B760M G X WF6E GEN5) Soc-1700 (B760) 2xPCI-Ex16 2xM.2 2.5GbE LAN Wi-Fi 6E BT 5.3 RAID 0/1/5/10 4xDDR5 5600MHz+ HDMI+DP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760MGAMINGXWIFI6EGEN5",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760mgamingxwifi6egen5",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b760m h v2 soc-1700 (b760) pci-ex16 pci-ex1 m.2 1gbe lan 2xargb raid 0/1/5/10 2xddr5 8000mhz+ hdmi+dp matx rtl": {
+    "name": "MB Gigabyte B760M H V2 Soc-1700 (B760) PCI-Ex16 PCI-Ex1 M.2 1GbE LAN 2xARGB RAID 0/1/5/10 2xDDR5 8000MHz+ HDMI+DP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B760MHV2",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b760mhv2",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b860 ds3h wifi6e soc-1851 (b860) 2xpci-ex16 2xm.2 2.5gbe lan wifi 6e bt 5.3 3xargb+rgb raid 0/1/5/10 4xddr5 9066mhz+ dp+hdmi atx rtl": {
+    "name": "MB Gigabyte B860 DS3H WIFI6E Soc-1851 (B860) 2xPCI-Ex16 2xM.2 2.5GbE LAN WiFi 6E BT 5.3 3xARGB+RGB RAID 0/1/5/10 4xDDR5 9066MHz+ DP+HDMI ATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B860DS3HWIFI6E",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b860ds3hwifi6e",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b860m ds3h wifi6e soc-1851 (b860) 4xpci-ex16 2xm.2 2.5gbe lan wifi 6e bt 5.3 3xargb+rgb raid 0/1/5/10 4xddr5 9066mhz+ 2xdp+hdmi matx rtl": {
+    "name": "MB Gigabyte B860M DS3H WIFI6E Soc-1851 (B860) 4xPCI-Ex16 2xM.2 2.5GbE LAN WiFi 6E BT 5.3 3xARGB+RGB RAID 0/1/5/10 4xDDR5 9066MHz+ 2xDP+HDMI mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B860MDS3HWIFI6E",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b860mds3hwifi6e",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b860m gaming x wifi6e soc-1851 (b860) 2xpci-ex16 2xm.2 2.5gbe lan wifi 6e bt 5.3 3xargb+rgb raid 0/1/5/10 4xddr5 9200mhz+ type-c+dp+hdmi matx rtl": {
+    "name": "MB Gigabyte B860M GAMING X WIFI6E Soc-1851 (B860) 2xPCI-Ex16 2xM.2 2.5GbE LAN WiFi 6E BT 5.3 3xARGB+RGB RAID 0/1/5/10 4xDDR5 9200MHz+ Type-C+DP+HDMI mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B860MGAMINGXWIFI6E",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b860mgamingxwifi6e",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte h610i ddr4 soc-1700 (h610) pci-ex16 m.2 2xddr4 4733mhz+ vga+hdmi+2xdp mini-itx": {
+    "name": "MB Gigabyte H610I DDR4 Soc-1700 (H610) PCI-Ex16 M.2 2xDDR4 4733MHz+ VGA+HDMI+2xDP Mini-ITX",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "H610IDDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE h610iddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte h610m h v3 ddr4 soc-1700 (h610) pci-ex16 pci-ex1 m.2 2xddr4 3200mhz vga+hdmi matx rtl": {
+    "name": "MB Gigabyte H610M H V3 DDR4 Soc-1700 (H610) PCI-Ex16 PCI-Ex1 M.2 2xDDR4 3200MHz VGA+HDMI mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "H610MHV3DDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE h610mhv3ddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte h610m s2h v3 ddr4 soc-1700 (h610) pci-ex16 pci-ex1 m.2 2xddr4 3200mhz vga+2*dp+hdmi matx rtl": {
+    "name": "MB Gigabyte H610M S2H V3 DDR4 Soc-1700 (H610) PCI-Ex16 PCI-Ex1 M.2 2xDDR4 3200MHz VGA+2*DP+HDMI mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "H610MS2HV3DDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE h610ms2hv3ddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte z890 aorus elite wifi7 ice (z890 a elite wf7 ice) soc-1851 (z890) 3xpci-ex16 4xm.2 2.5gbe lan wifi 7 bt 5.4 3xargb+rgb raid 0/1/5/10 4xddr5 9200mhz+ type-c+dp+hdmi(front) atx white rtl": {
+    "name": "MB Gigabyte Z890 AORUS ELITE WIFI7 ICE (Z890 A ELITE WF7 ICE) Soc-1851 (Z890) 3xPCI-Ex16 4xM.2 2.5GbE LAN WiFi 7 BT 5.4 3xARGB+RGB RAID 0/1/5/10 4xDDR5 9200MHz+ Type-C+DP+HDMI(Front) ATX White RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "Z890AORUSELITEWIFI7ICE",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE z890aoruselitewifi7ice",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte z890 eagle wifi7 soc-1851 (z890) 3xpci-ex16 4xm.2 2.5gbe wifi 7 bt 5.4 lan 3xargb+rgb raid 0/1/5/10 4xddr5 9200mhz+ type-c+dp atx rtl": {
+    "name": "MB Gigabyte Z890 EAGLE WIFI7 Soc-1851 (Z890) 3xPCI-Ex16 4xM.2 2.5GbE WiFi 7 BT 5.4 LAN 3xARGB+RGB RAID 0/1/5/10 4xDDR5 9200MHz+ Type-C+DP ATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "Z890EAGLEWIFI7",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE z890eaglewifi7",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte z890m aorus elite wifi7 ice (z890m a elite wf7 ice) soc-1851 (z890) 2xpci-ex16 3xm.2 2.5gbe lan wifi 7 bt 5.4 3xargb+rgb raid 0/1/5/10 4xddr5 9200mhz+ type-c+dp+hdmi(front) matx white rtl": {
+    "name": "MB Gigabyte Z890M AORUS ELITE WIFI7 ICE (Z890M A ELITE WF7 ICE) Soc-1851 (Z890) 2xPCI-Ex16 3xM.2 2.5GbE LAN WiFi 7 BT 5.4 3xARGB+RGB RAID 0/1/5/10 4xDDR5 9200MHz+ Type-C+DP+HDMI(Front) mATX White RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "Z890MAORUSELITEWIFI7ICE",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE z890maoruselitewifi7ice",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb msi pro b760m-e ddr4 soc-1700 (b760) pci-ex16 pci-ex1 m.2 1gbe lan raid 0/1/5/10 2xddr4 4800mhz+ vga+hdmi matx rtl": {
+    "name": "MB MSI PRO B760M-E DDR4 Soc-1700 (B760) PCI-Ex16 PCI-Ex1 M.2 1GbE LAN RAID 0/1/5/10 2xDDR4 4800MHz+ VGA+HDMI mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "MSI",
+    "board_model": "PROB760MEDDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "MSI prob760meddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb msi pro b760m-p ddr4 soc-1700 (b760) pci-ex16 2xpci-ex1 2xm.2 raid 0/1/5/10 4xddr4 4800mhz+ vga+hdmi+dp matx rtl": {
+    "name": "MB MSI PRO B760M-P DDR4 Soc-1700 (B760) PCI-Ex16 2xPCI-Ex1 2xM.2 RAID 0/1/5/10 4xDDR4 4800MHz+ VGA+HDMI+DP mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "MSI",
+    "board_model": "PROB760MPDDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "MSI prob760mpddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb msi pro h610m-e ddr4 soc-1700 (h610) pci-ex16 pci-ex1 m.2 2xddr4 3200mhz vga+hdmi matx rtl": {
+    "name": "MB MSI PRO H610M-E DDR4 Soc-1700 (H610) PCI-Ex16 PCI-Ex1 M.2 2xDDR4 3200MHz VGA+HDMI mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "MSI",
+    "board_model": "PROH610MEDDR4",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "MSI proh610meddr4",
+    "candidates": [],
+    "added_at": 1776859722,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "корпус atx aerocool cs-1101 500w (kcas-500w plus) (accx-pc02054.12) (стенка с перфорацией для вентиляции, 2xusb 2.0, 1xusb-a 3.2 5гбит/с, 1x80mm fan, hd audio+mic, 1x5.25\", 3x3.5\", 2x2.5\", vga max 290mm, cpu max 150mm) black (не в составе пэвм)": {
+    "name": "Корпус ATX Aerocool Cs-1101 500W (KCAS-500W PLUS) (ACCX-PC02054.12) (Стенка с перфорацией для вентиляции, 2xUSB 2.0, 1xUSB-A 3.2 5Гбит/с, 1x80mm Fan, HD Audio+Mic, 1x5.25\", 3x3.5\", 2x2.5\", VGA MAX 290mm, CPU MAX 150mm) Black (НЕ В СОСТАВЕ ПЭВМ)",
+    "category": "Корпус",
+    "supplier": "N-Tech",
+    "case_brand": "AEROCOOL",
+    "case_model": "",
+    "case_code": "CS1101",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "AEROCOOL CS1101",
+    "candidates": [
+      {
+        "id": "913554",
+        "name": "Корпус AeroCool CS-1101 500W",
+        "url": "",
+        "score": 0.999,
+        "source": "case_db_exact",
+        "code": "cs1101",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      }
+    ],
+    "added_at": 1776943487,
+    "reason": "case_brand_model_manual",
+    "reason_label": "Корпус: строгий матч по бренду, серии/коду, форм-фактору и признаку с БП/без БП. Подтверждение только вручную."
+  },
+  "бп deepcool 500w pk500d (r-pk500d-fa0b-wgeu) (atx 2.4, 500w, 80 plus bronze, active pfc, dc-dc, 120mm fan, non-modular) ret": {
+    "name": "БП Deepcool 500W PK500D (R-PK500D-FA0B-WGEU) (ATX 2.4, 500W, 80 PLUS BRONZE, Active PFC, DC-DC, 120mm Fan, non-modular) RET",
+    "category": "Блок питания",
+    "supplier": "N-Tech",
+    "psu_brand": "DEEPCOOL",
+    "psu_model": "500W",
+    "psu_code": "RPK500DFA0BWGEU",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "DEEPCOOL 500W",
+    "candidates": [
+      {
+        "id": "4760432",
+        "name": "Блок питания Deepcool GAMERSTORM PK500D 500W Black (R-PK500D-FA0B-WGEU)",
+        "url": "",
+        "score": 0.999,
+        "source": "psu_db_exact",
+        "watt": "500",
+        "eff": "",
+        "modular": "",
+        "code": "rpk500dfa0bwgeu",
+        "series": "gamerstorm"
+      }
+    ],
+    "added_at": 1776943478,
+    "reason": "psu_brand_power_manual",
+    "reason_label": "Блок питания: строгий матч по бренду, мощности, 80 PLUS/модульности/коду. Подтверждение только вручную."
+  },
+  "бп deepcool 800w pk800d (r-pk800d-fa0b-wgeu) (atx 2.4, 800w, 80 plus bronze, active pfc, dc-dc, 120mm fan, non-modular) ret": {
+    "name": "БП Deepcool 800W PK800D (R-PK800D-FA0B-WGEU) (ATX 2.4, 800W, 80 PLUS BRONZE, Active PFC, DC-DC, 120mm Fan, non-modular) RET",
+    "category": "Блок питания",
+    "supplier": "N-Tech",
+    "psu_brand": "DEEPCOOL",
+    "psu_model": "800W",
+    "psu_code": "RPK800DFA0BWGEU",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "DEEPCOOL 800W",
+    "candidates": [
+      {
+        "id": "4758535",
+        "name": "Блок питания Deepcool GAMERSTORM PK800D 800W (R-PK800D-FA0B-WGEU)",
+        "url": "",
+        "score": 0.999,
+        "source": "psu_db_exact",
+        "watt": "800",
+        "eff": "",
+        "modular": "",
+        "code": "rpk800dfa0bwgeu",
+        "series": "gamerstorm"
+      }
+    ],
+    "added_at": 1776943478,
+    "reason": "psu_brand_power_manual",
+    "reason_label": "Блок питания: строгий матч по бренду, мощности, 80 PLUS/модульности/коду. Подтверждение только вручную."
+  },
+  "бп deepcool 500w pk500d (r-pk500d-fa0b-eu) (atx 2.4, 500w, 80 plus bronze, active pfc, dc-dc, 120mm fan, non-modular) ret": {
+    "name": "БП Deepcool 500W PK500D (R-PK500D-FA0B-EU) (ATX 2.4, 500W, 80 PLUS BRONZE, Active PFC, DC-DC, 120mm Fan, non-modular) RET",
+    "category": "Блок питания",
+    "supplier": "N-Tech",
+    "psu_brand": "DEEPCOOL",
+    "psu_model": "500W",
+    "psu_code": "RPK500DFA0BEU",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "DEEPCOOL 500W",
+    "candidates": [
+      {
+        "id": "4760432",
+        "name": "БП Deepcool 500W PK500D (R-PK500D-FA0B-EU) (ATX 2.4, 500W, 80 PLUS BRONZE, Active PFC, DC-DC, 120mm Fan, non-modular) RET",
+        "url": "",
+        "score": 0.999,
+        "source": "db_exact",
+        "watt": "500",
+        "eff": "bronze",
+        "modular": "non",
+        "code": "rpk500dfa0beu",
+        "series": ""
+      }
+    ],
+    "added_at": 1776943478,
+    "reason": "psu_brand_power_manual",
+    "reason_label": "Блок питания: строгий матч по бренду, мощности, 80 PLUS/модульности/коду. Подтверждение только вручную."
+  },
+  "клавиатура a4tech fstyler fx60h gray (стандартная для пк, ножничная, пластик, интерфейс подключения - usb-a, подсветка, usb-хаб, цвет серый)": {
+    "name": "Клавиатура A4Tech Fstyler FX60H Gray (стандартная для ПК, ножничная, пластик, интерфейс подключения - USB-A, подсветка, USB-хаб, цвет серый)",
+    "category": "Клавиатура",
+    "supplier": "N-Tech",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "Клавиатура A4Tech Fstyler FX60H Gray (стандартная для ПК, ножничная, пластик, интерфейс подключения - USB-A, подсветка, USB-хаб, цвет серый)",
+    "candidates": [
+      {
+        "id": "3091244",
+        "name": "Клавиатура A4Tech Fstyler FBK11 (серый)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "2949452",
+        "name": "Клавиатура A4Tech Fstyler FBK25 (белый/серый)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "2949439",
+        "name": "Клавиатура A4Tech Fstyler FBK25 (черный/серый)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "3683533",
+        "name": "Клавиатура A4Tech Fstyler FBX50C (серебристый/белый)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "3068594",
+        "name": "Клавиатура A4Tech Fstyler FBX50C (серый/черный)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      }
+    ],
+    "added_at": 1776941558,
+    "reason": "peripheral_manual",
+    "reason_label": "Периферия N-Tech: кандидаты найдены, требуется ручное подтверждение."
+  },
+  "клавиатура defender hawk gk-418 (игровая для пк, механическая, outemu brown, ход линейный, пластик, интерфейс подключения - usb-a, цвет переключателей- коричневый) (45422)": {
+    "name": "Клавиатура Defender Hawk GK-418 (игровая для ПК, механическая, Outemu Brown, ход линейный, пластик, интерфейс подключения - USB-A, цвет переключателей- коричневый) (45422)",
+    "category": "Клавиатура",
+    "supplier": "N-Tech",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "Клавиатура Defender Hawk GK-418 (игровая для ПК, механическая, Outemu Brown, ход линейный, пластик, интерфейс подключения - USB-A, цвет переключателей- коричневый) (45422)",
+    "candidates": [
+      {
+        "id": "4356791",
+        "name": "Клавиатура Defender Hawk GK-418 (белый, Outemu Brown)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4006303",
+        "name": "Клавиатура Defender Hawk GK-418 (черный, Outemu Brown)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4356789",
+        "name": "Клавиатура Defender Hawk GK-418 (белый, Outemu Red)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4006302",
+        "name": "Клавиатура Defender Hawk GK-418 (черный, Outemu Red)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      }
+    ],
+    "added_at": 1776941558,
+    "reason": "peripheral_manual",
+    "reason_label": "Периферия N-Tech: кандидаты найдены, требуется ручное подтверждение."
+  },
+  "мышь a4tech bloody al90 (полноразмерная игровая мышь, usb, сенсор лазерный 8200 dpi, 8 кнопок, колесо с нажатием, цвет черный/цветной принт)": {
+    "name": "Мышь A4Tech Bloody AL90 (полноразмерная игровая мышь, USB, сенсор лазерный 8200 dpi, 8 кнопок, колесо с нажатием, цвет черный/цветной принт)",
+    "category": "Мышь",
+    "supplier": "N-Tech",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "Мышь A4Tech Bloody AL90 (полноразмерная игровая мышь, USB, сенсор лазерный 8200 dpi, 8 кнопок, колесо с нажатием, цвет черный/цветной принт)",
+    "candidates": [
+      {
+        "id": "1895465",
+        "name": "Игровая мышь A4Tech Bloody J95S Stone Black",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4724741",
+        "name": "Игровая мышь A4Tech Bloody R72 Pro (черный)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4949899",
+        "name": "Игровая мышь A4Tech Bloody R72 Pro Duo (черный)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4760900",
+        "name": "Игровая мышь A4Tech Bloody R72 Ultra (черный)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4854706",
+        "name": "Игровая мышь A4Tech Bloody R72 Ultra Duo (черный)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      }
+    ],
+    "added_at": 1776941558,
+    "reason": "peripheral_manual",
+    "reason_label": "Периферия N-Tech: кандидаты найдены, требуется ручное подтверждение."
+  },
+  "мышь беспроводная defender accura mm-365 (черный) (52365) (ноутбучная мышь для пк/для компьютеров apple, радио, сенсор оптический 1600 dpi, 6 кнопок, колесо с нажатием, цвет черный)": {
+    "name": "Мышь беспроводная Defender Accura MM-365 (черный) (52365) (ноутбучная мышь для ПК/для компьютеров Apple, радио, сенсор оптический 1600 dpi, 6 кнопок, колесо с нажатием, цвет черный)",
+    "category": "Мышь",
+    "supplier": "N-Tech",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "Мышь беспроводная Defender Accura MM-365 (черный) (52365) (ноутбучная мышь для ПК/для компьютеров Apple, радио, сенсор оптический 1600 dpi, 6 кнопок, колесо с нажатием, цвет черный)",
+    "candidates": [
+      {
+        "id": "1329813",
+        "name": "Мышь Defender Accura MM-365 (черный)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "1343494",
+        "name": "Мышь Defender Accura MM-365 (красный)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "1343489",
+        "name": "Мышь Defender Accura MM-365 (синий)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      }
+    ],
+    "added_at": 1776941558,
+    "reason": "peripheral_manual",
+    "reason_label": "Периферия N-Tech: кандидаты найдены, требуется ручное подтверждение."
+  },
+  "мышь беспроводная defender accura mm-365 (черный/синий) (52366) (ноутбучная мышь для пк/для компьютеров apple, радио, сенсор оптический 1600 dpi, 6 кнопок, колесо с нажатием, цвет черный/синий)": {
+    "name": "Мышь беспроводная Defender Accura MM-365 (черный/синий) (52366) (ноутбучная мышь для ПК/для компьютеров Apple, радио, сенсор оптический 1600 dpi, 6 кнопок, колесо с нажатием, цвет черный/синий)",
+    "category": "Мышь",
+    "supplier": "N-Tech",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "Мышь беспроводная Defender Accura MM-365 (черный/синий) (52366) (ноутбучная мышь для ПК/для компьютеров Apple, радио, сенсор оптический 1600 dpi, 6 кнопок, колесо с нажатием, цвет черный/синий)",
+    "candidates": [
+      {
+        "id": "1343489",
+        "name": "Мышь Defender Accura MM-365 (синий)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "1329813",
+        "name": "Мышь Defender Accura MM-365 (черный)",
+        "url": "",
+        "score": 0.985,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "1343494",
+        "name": "Мышь Defender Accura MM-365 (красный)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      }
+    ],
+    "added_at": 1776941558,
+    "reason": "peripheral_manual",
+    "reason_label": "Периферия N-Tech: кандидаты найдены, требуется ручное подтверждение."
+  },
+  "мышь проводная defender azora mb-241 (52243) (полноразмерная мышь для пк, проводная usb, сенсор оптический 1200 dpi, 3 кнопки, колесо с нажатием, цвет голубой)": {
+    "name": "Мышь проводная  Defender Azora MB-241 (52243) (полноразмерная мышь для ПК, проводная USB, сенсор оптический 1200 dpi, 3 кнопки, колесо с нажатием, цвет голубой)",
+    "category": "Мышь",
+    "supplier": "N-Tech",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "Мышь проводная  Defender Azora MB-241 (52243) (полноразмерная мышь для ПК, проводная USB, сенсор оптический 1200 dpi, 3 кнопки, колесо с нажатием, цвет голубой)",
+    "candidates": [
+      {
+        "id": "4356736",
+        "name": "Мышь Defender Azora MB-241 (белый)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4356737",
+        "name": "Мышь Defender Azora MB-241 (мятный)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4356733",
+        "name": "Мышь Defender Azora MB-241 (черный)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      }
+    ],
+    "added_at": 1776941558,
+    "reason": "peripheral_manual",
+    "reason_label": "Периферия N-Tech: кандидаты найдены, требуется ручное подтверждение."
+  },
+  "клавиатура defender dasher gk-472 (45472) (стандартная для пк, мембранная, пластик, интерфейс подключения - usb, цвет черный)": {
+    "name": "Клавиатура Defender Dasher GK-472 (45472) (стандартная для ПК, мембранная, пластик, интерфейс подключения - USB, цвет черный)",
+    "category": "Клавиатура",
+    "supplier": "N-Tech",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "Клавиатура Defender Dasher GK-472 (45472) (стандартная для ПК, мембранная, пластик, интерфейс подключения - USB, цвет черный)",
+    "candidates": [
+      {
+        "id": "4864632",
+        "name": "Клавиатура Defender Dasher GK-472 (белый/серый)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      },
+      {
+        "id": "4864699",
+        "name": "Клавиатура Defender Dasher GK-472 (серый/белый)",
+        "url": "",
+        "score": 0.97,
+        "source": "peripheral_db"
+      }
+    ],
+    "added_at": 1776941558,
+    "reason": "peripheral_manual",
+    "reason_label": "Периферия N-Tech: кандидаты найдены, требуется ручное подтверждение."
+  },
+  "корпус atx без бп vicsone f4x(стенка с перфорацией для вентиляции, 2xusb3.0, 1xusb2.0, hd audio+mic, 2x3.5\", 2x2.5\", vga max 330mm, cpu max 160mm) black (аналог f3x)": {
+    "name": "Корпус ATX Без БП Vicsone F4X(Стенка с перфорацией для вентиляции, 2xUSB3.0, 1xUSB2.0, HD Audio+Mic, 2x3.5\", 2x2.5\", VGA MAX 330mm, CPU MAX 160mm) Black (аналог F3X)",
+    "category": "Корпус",
+    "supplier": "N-Tech",
+    "case_brand": "VICSONE",
+    "case_model": "",
+    "case_code": "",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "VICSONE ",
+    "candidates": [
+      {
+        "id": "5086287",
+        "name": "Корпус ATX Без БП Vicsone F4X(Стенка с перфорацией для вентиляции, 2xUSB3.0, 1xUSB2.0, HD Audio+Mic, 2x3.5\", 2x2.5\", VGA MAX 330mm, CPU MAX 160mm) Black (аналог F3X)",
+        "url": "",
+        "score": 0.999,
+        "source": "db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "atx",
+        "colors": [
+          "black"
+        ]
+      },
+      {
+        "id": "4641154",
+        "name": "Корпус Vicsone 6835",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      },
+      {
+        "id": "4641127",
+        "name": "Корпус Vicsone 8821",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      },
+      {
+        "id": "3559821",
+        "name": "Корпус Vicsone F3X",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      },
+      {
+        "id": "4978860",
+        "name": "Корпус Vicsone F4X",
+        "url": "",
+        "score": 0.9,
+        "source": "case_db_exact",
+        "code": "",
+        "series": "",
+        "form_factor": "",
+        "colors": []
+      }
+    ],
+    "added_at": 1776943487,
+    "reason": "case_brand_model_manual",
+    "reason_label": "Корпус: строгий матч по бренду, серии/коду, форм-фактору и признаку с БП/без БП. Подтверждение только вручную."
+  },
+  "mb asrock b760m-hdv/m.2 soc-1700 (b760) pci-e 4.0x16 2xpci-e 3.0x1 2xm.2+m.2(wi-fi) 1gbe lan raid 0/1/5/10 2xddr5 7200mhz+ hdmi+d-sub+dp matx white rtl": {
+    "name": "MB ASRock B760M-HDV/M.2 Soc-1700 (B760) PCI-E 4.0x16 2xPCI-E 3.0x1 2xM.2+M.2(WI-FI) 1GbE LAN RAID 0/1/5/10 2xDDR5 7200MHz+ HDMI+D-Sub+DP mATX White RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "ASROCK",
+    "board_model": "B760MHDVM2",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "ASROCK b760mhdvm2",
+    "candidates": [
+      {
+        "id": "4226395",
+        "name": "Материнская плата ASRock B760M-HDV/M.2",
+        "url": "",
+        "score": 0.999,
+        "source": "mb_db",
+        "chipset": "",
+        "socket": "",
+        "ddr": "",
+        "wifi": false,
+        "features": [
+          "hdv"
+        ]
+      },
+      {
+        "id": "3868777",
+        "name": "Материнская плата ASRock B760M-HDV/M.2 D4",
+        "url": "",
+        "score": 0.999,
+        "source": "mb_db",
+        "chipset": "",
+        "socket": "",
+        "ddr": "",
+        "wifi": false,
+        "features": [
+          "d4",
+          "hdv"
+        ]
+      }
+    ],
+    "added_at": 1777276676,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb gigabyte b840m d2h soc-am5 (b840) 2xpci-ex16 2xm.2 2.5gbe lan 2xargb+rgb raid 0/1/10 2xddr5 7600mhz+ hdmi matx rtl": {
+    "name": "MB Gigabyte B840M D2H Soc-AM5 (B840) 2xPCI-Ex16 2xM.2 2.5GbE LAN 2xARGB+RGB RAID 0/1/10 2xDDR5 7600MHz+ HDMI mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "GIGABYTE",
+    "board_model": "B840MD2H",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "GIGABYTE b840md2h",
+    "candidates": [
+      {
+        "id": "2239285",
+        "name": "MB Gigabyte B840M D2H Soc-AM5 (B840) 2xPCI-Ex16 2xM.2 2.5GbE LAN 2xARGB+RGB RAID 0/1/10 2xDDR5 7600MHz+ HDMI mATX RTL",
+        "url": "",
+        "score": 0.999,
+        "source": "db_exact",
+        "chipset": "b840",
+        "socket": "am5",
+        "ddr": "",
+        "wifi": false,
+        "features": []
+      },
+      {
+        "id": "4816616",
+        "name": "Материнская плата Gigabyte B840M D2H",
+        "url": "",
+        "score": 0.999,
+        "source": "mb_db",
+        "chipset": "",
+        "socket": "",
+        "ddr": "",
+        "wifi": false,
+        "features": []
+      }
+    ],
+    "added_at": 1777276676,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "mb msi b550m pro-vdh soc-am4 (b550) pci-e 4.0x16 1xpci-e 3.0x16 2xpci-ex1 2xultra m.2 4xddr4 4400mhz+ dp+hdmi+vga matx rtl": {
+    "name": "MB MSI B550M PRO-VDH Soc-AM4 (B550) PCI-E 4.0x16 1xPCI-E 3.0x16 2xPCI-Ex1 2xUltra M.2 4xDDR4 4400MHz+ DP+HDMI+VGA mATX RTL",
+    "category": "Материнская плата",
+    "supplier": "N-Tech",
+    "board_brand": "MSI",
+    "board_model": "B550MPROVDH",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "MSI b550mprovdh",
+    "candidates": [
+      {
+        "id": "2165792",
+        "name": "MB MSI B550M PRO-VDH Soc-AM4 (B550) PCI-E 4.0x16 1xPCI-E 3.0x16 2xPCI-Ex1 2xUltra M.2 4xDDR4 4400MHz+ DP+HDMI+VGA mATX RTL",
+        "url": "",
+        "score": 0.999,
+        "source": "db_exact",
+        "chipset": "b550",
+        "socket": "am4",
+        "ddr": "",
+        "wifi": false,
+        "features": []
+      }
+    ],
+    "added_at": 1777276676,
+    "reason": "board_brand_model_manual",
+    "reason_label": "Материнская плата: совпадение по бренду и модели. Подтверждение только вручную."
+  },
+  "ddr4 16gb pc-25600 3200mhz patriot signature line (psd416g32002)": {
+    "name": "DDR4 16Gb PC-25600 3200MHz Patriot Signature Line (PSD416G32002)",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "PATRIOT",
+    "ram_sku": "PSD416G32002",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "PATRIOT PSD416G32002",
+    "candidates": [
+      {
+        "id": "1941607",
+        "name": "Оперативная память Patriot Signature Line 16GB DDR4 PC4-25600 PSD416G32002",
+        "url": "",
+        "score": 0.999,
+        "source": "ram_db_exact",
+        "sku": "psd416g32002",
+        "mhz": "",
+        "capacity_gb": "16"
+      }
+    ],
+    "added_at": 1777276695,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr4 8gb pc-25600 3200mhz a-data xpg gammix d35 (ax4u32008g16a-sbkd35)": {
+    "name": "DDR4 8Gb  PC-25600 3200MHz A-Data XPG Gammix D35 (AX4U32008G16A-SBKD35)",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "ADATA",
+    "ram_sku": "AX4U32008G16ASBKD35",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "ADATA AX4U32008G16ASBKD35",
+    "candidates": [
+      {
+        "id": "4083651",
+        "name": "Оперативная память ADATA XPG GAMMIX D35 8ГБ DDR4 3200 МГц AX4U32008G16A-SBKD35",
+        "url": "",
+        "score": 0.999,
+        "source": "ram_db_exact",
+        "sku": "ax4u32008g16asbkd35",
+        "mhz": "",
+        "capacity_gb": "8"
+      }
+    ],
+    "added_at": 1777276695,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr4 8gb pc-25600 3200mhz a-data (ad4u32008g22-sgn)": {
+    "name": "DDR4 8Gb PC-25600 3200MHz A-Data (AD4U32008G22-SGN)",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "ADATA",
+    "ram_sku": "AD4U32008G22SGN",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "ADATA AD4U32008G22SGN",
+    "candidates": [
+      {
+        "id": "4751136",
+        "name": "DDR4 8Gb PC-25600 3200MHz A-Data (AD4U32008G22-SGN) (НЕ участвует в акции)",
+        "url": "",
+        "score": 0.999,
+        "source": "ram_db_exact",
+        "sku": "ad4u32008g22sgn",
+        "mhz": "3200",
+        "capacity_gb": "8"
+      },
+      {
+        "id": "3399551",
+        "name": "Оперативная память ADATA Premier 8ГБ DDR4 3200 МГц AD4U32008G22-SGN",
+        "url": "",
+        "score": 0.999,
+        "source": "ram_db_exact",
+        "sku": "ad4u32008g22sgn",
+        "mhz": "",
+        "capacity_gb": "8"
+      }
+    ],
+    "added_at": 1777276695,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr4 8gb pc-25600 3200mhz netac basic (ntbsd4p32sp-08j) cl22 1.35v rtl": {
+    "name": "DDR4 8Gb PC-25600 3200MHz Netac Basic (NTBSD4P32SP-08J) CL22 1.35V RTL",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "NETAC",
+    "ram_sku": "NTBSD4P32SP08J",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "NETAC NTBSD4P32SP08J",
+    "candidates": [
+      {
+        "id": "4281278",
+        "name": "Оперативная память Netac Basic 8ГБ DDR4 3200 МГц NTBSD4P32SP-08J",
+        "url": "",
+        "score": 0.999,
+        "source": "ram_db_exact",
+        "sku": "ntbsd4p32sp08j",
+        "mhz": "",
+        "capacity_gb": "8"
+      }
+    ],
+    "added_at": 1777276695,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  },
+  "ddr4 8gb pc-25600 3200mhz patriot signature line (psd48g320081)": {
+    "name": "DDR4 8Gb PC-25600 3200MHz Patriot Signature Line (PSD48G320081)",
+    "category": "Оперативная память",
+    "supplier": "N-Tech",
+    "ram_brand": "PATRIOT",
+    "ram_sku": "PSD48G320081",
+    "cleared_id": "",
+    "cleared_score": 1.0,
+    "onliner_name": "PATRIOT PSD48G320081",
+    "candidates": [
+      {
+        "id": "2050188",
+        "name": "Оперативная память Patriot Signature Line 8GB DDR4 PC4-25600 PSD48G320081",
+        "url": "",
+        "score": 0.999,
+        "source": "ram_db_exact",
+        "sku": "psd48g320081",
+        "mhz": "",
+        "capacity_gb": "8"
+      }
+    ],
+    "added_at": 1777276695,
+    "reason": "ram_brand_model_manual",
+    "reason_label": "Оперативная память: совпадение по бренду и коду модуля. Подтверждение только вручную."
+  }
+}
