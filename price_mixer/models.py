@@ -1,8 +1,8 @@
 """Core domain models (dataclasses)."""
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
@@ -11,7 +11,7 @@ class SupplierFile:
     filepath: str
     display_name: str
     supplier_name: str
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 @dataclass
@@ -21,30 +21,30 @@ class ParsedRow:
     name: str
     price: float
     warranty: str = ""
-    onliner_id: Optional[str] = None
-    onliner_name: Optional[str] = None
-    article: Optional[str] = None
-    quantity: Optional[int] = None
-    status: Optional[str] = None
-    supplier_code: Optional[str] = None
-    delivery_days: Optional[int] = None
-    raw: Dict[str, Any] = field(default_factory=dict)
+    onliner_id: str | None = None
+    onliner_name: str | None = None
+    article: str | None = None
+    quantity: int | None = None
+    status: str | None = None
+    supplier_code: str | None = None
+    delivery_days: int | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class ConsolidatedRow:
     """Row in the final consolidated price list."""
-    onliner_id: Optional[str]
+    onliner_id: str | None
     name: str
     price: float
     supplier: str
     warranty: str
-    delivery_days: Optional[int] = None
-    category: Optional[str] = None
-    url: Optional[str] = None
-    rrc: Optional[float] = None
-    no_discount_price: Optional[float] = None
-    sources: List[ParsedRow] = field(default_factory=list)
+    delivery_days: int | None = None
+    category: str | None = None
+    url: str | None = None
+    rrc: float | None = None
+    no_discount_price: float | None = None
+    sources: list[ParsedRow] = field(default_factory=list)
 
 
 @dataclass
@@ -73,4 +73,4 @@ class ManualIdBinding:
     name_key: str
     onliner_id: str
     url: str = ""
-    confirmed_at: Optional[datetime] = None
+    confirmed_at: datetime | None = None

@@ -6,18 +6,19 @@ Price Mixer — сводит прайсы поставщиков в единый
 Результат: consolidated_price.xlsx
 """
 
-import os
-import re
 import glob
 import json
+import os
+import re
+import threading
 import time
 import urllib.request
-import threading
-from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import pandas as pd
-import numpy as np
 from pathlib import Path
+from urllib.parse import quote
+
+import numpy as np
+import pandas as pd
 
 # ============================================================
 # КОНФИГУРАЦИЯ ПОСТАВЩИКОВ
@@ -115,7 +116,7 @@ CACHE_FILE = SCRIPT_DIR / "onliner_cache.json"
 def load_url_cache():
     """Загрузить кэш onliner_id -> url из файла."""
     if CACHE_FILE.exists():
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+        with open(CACHE_FILE, encoding="utf-8") as f:
             return json.load(f)
     return {}
 
@@ -151,7 +152,7 @@ ID_CACHE_IO_LOCK = threading.Lock()
 def load_id_cache():
     if ONLINER_ID_CACHE.exists():
         try:
-            with open(ONLINER_ID_CACHE, "r", encoding="utf-8") as f:
+            with open(ONLINER_ID_CACHE, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             try:
@@ -770,11 +771,11 @@ def find_missing_onliner_ids(
     """Найти OnlinerID для товаров без него (многопоточно)."""
     if id_cache is None:
         id_cache = load_id_cache()
-    
+
     to_find = {}
     already_found = 0
     id_fanout = build_id_fanout_map(id_cache)
-    
+
     for item in items:
         name = item.get("name", "")
         if not name:
@@ -790,12 +791,12 @@ def find_missing_onliner_ids(
                 continue
         if cache_key not in to_find:
             to_find[cache_key] = name
-    
+
     if not to_find:
         if progress_callback:
             progress_callback(0, 0, already_found)
         return id_cache, already_found
-    
+
     found = 0
     found_from_sheet = 0
     found_from_api = 0
@@ -890,7 +891,7 @@ def find_missing_onliner_ids(
                 "not_found": 0,
             },
         )
-    
+
     if unresolved and not use_api_search:
         not_found = len(unresolved)
         for cache_key, _ in unresolved:
@@ -911,7 +912,7 @@ def find_missing_onliner_ids(
                     "not_found": not_found,
                 },
             )
-    
+
     save_id_cache(id_cache)
     print(
         f"ID matching summary: sheet={found_from_sheet}, api={found_from_api}, "
@@ -966,7 +967,7 @@ def _resolve_via_tavily(onliner_id, product_name):
             if "catalog.onliner.by" in href and "/search/" not in href:
                 return onliner_id, href
         return onliner_id, None
-    except Exception as e:
+    except Exception:
         return onliner_id, None
 
 
@@ -1036,7 +1037,7 @@ def resolve_onliner_urls(onliner_ids, cache=None, max_workers=3, progress_callba
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(_resolve_one_id, str(oid), id_to_name.get(str(oid))): oid 
+            executor.submit(_resolve_one_id, str(oid), id_to_name.get(str(oid))): oid
             for oid in to_resolve
         }
         for future in as_completed(futures):
@@ -1256,7 +1257,7 @@ def consolidate(all_data, url_cache=None):
         }
 
         for sup in supplier_names:
-            row_data[f"Цена {sup}"] = prices.get(sup, None)
+            row_data[f"Цена {sup}"] = prices.get(sup)
 
         row_data["Гарантия (мес.)"] = warranty
         row_data["Ссылка onliner.by"] = link
@@ -1272,7 +1273,7 @@ def consolidate(all_data, url_cache=None):
 def parse_generic_excel(filepath, supplier_name):
     """Универсальный парсер Excel - пытается найти колонки автоматически."""
     df_raw = pd.read_excel(filepath, header=None)
-    
+
     header_row = 0
     for i in range(min(20, len(df_raw))):
         row = df_raw.iloc[i].astype(str).str.lower()
@@ -1280,12 +1281,12 @@ def parse_generic_excel(filepath, supplier_name):
         if 'код' in row_vals or 'наименование' in row_vals or 'цена' in row_vals:
             header_row = i
             break
-    
+
     df = pd.read_excel(filepath, header=header_row)
     col_map = {}
     supplier_norm = str(supplier_name or "").strip().lower()
     has_it_distribution_header = False
-    
+
     for col in df.columns:
         col_lower = str(col).lower().strip()
         col_norm = re.sub(r"\s+", " ", col_lower.replace("\n", " ")).strip()
@@ -1314,7 +1315,7 @@ def parse_generic_excel(filepath, supplier_name):
             col_map["onliner_name"] = col
         elif col_lower in ["кол-во", "количество", "qty", "quantity"]:
             col_map["quantity"] = col
-    
+
     if "price_byn" not in col_map:
         for col in df.columns:
             col_str = str(col).lower()
@@ -1332,14 +1333,14 @@ def parse_generic_excel(filepath, supplier_name):
     ):
         if len(df.columns) >= 3:
             col_map["price_byn"] = df.columns[2]
-    
+
     if "price_byn" not in col_map:
         for col in df.columns:
             if df[col].dtype in ['float64', 'int64']:
                 if df[col].max() > 1 and df[col].max() < 100000:
                     col_map["price_byn"] = col
                     break
-    
+
     if "product_name" not in col_map:
         for col in df.columns:
             if df[col].dtype == 'object':
@@ -1348,7 +1349,7 @@ def parse_generic_excel(filepath, supplier_name):
                 if avg_len > 30:
                     col_map["product_name"] = col
                     break
-    
+
     if "product_name" not in col_map:
         numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
         text_cols = [c for c in df.columns if c not in numeric_cols]
@@ -1357,22 +1358,22 @@ def parse_generic_excel(filepath, supplier_name):
             if any(len(s) > 30 for s in sample):
                 col_map["product_name"] = col
                 break
-    
+
     if "price_byn" not in col_map or "product_name" not in col_map:
         print(f"Не найдены колонки: {list(df.columns)}")
         return pd.DataFrame()
-    
+
     result = pd.DataFrame()
     for key, col in col_map.items():
         result[key] = df[col]
-    
+
     result["supplier"] = supplier_name
     result["price_byn"] = pd.to_numeric(result["price_byn"], errors="coerce")
     result = result[result["price_byn"].notna() & (result["price_byn"] > 0)]
-    
+
     result = result[result["product_name"].notna()]
     result = result[~result["product_name"].astype(str).str.match(r'^[A-Za-zА-Яа-я\s]+$')]
-    
+
     if "onliner_id" in result.columns:
         result["onliner_id"] = result["onliner_id"].astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
         result.loc[result["onliner_id"].isin(["", "nan", "None", "NaN"]), "onliner_id"] = np.nan
@@ -1380,10 +1381,10 @@ def parse_generic_excel(filepath, supplier_name):
     if "rrc" in result.columns:
         result["rrc"] = pd.to_numeric(result["rrc"], errors="coerce")
         result.loc[result["rrc"].isna(), "rrc"] = np.nan
-    
+
     print(f"  Найдено колонок: {col_map}")
     print(f"  С OnlinerID: {result['onliner_id'].notna().sum() if 'onliner_id' in result.columns else 0}")
-    
+
     return result
 
 

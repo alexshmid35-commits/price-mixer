@@ -1,7 +1,7 @@
 """Onliner Catalog search client (public API, no auth required)."""
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
@@ -13,7 +13,7 @@ class OnlinerCatalogClient:
     TIMEOUT = 8
     RETRY_STATUSES = {403, 408, 409, 425, 429, 500, 502, 503, 504, 520, 521, 522, 524}
 
-    def search(self, query: str, retries: int = 3, backoff: float = 0.6) -> List[Dict[str, Any]]:
+    def search(self, query: str, retries: int = 3, backoff: float = 0.6) -> list[dict[str, Any]]:
         """Return list of product dicts from catalog API."""
         params = {"query": query}
         for attempt in range(retries):
@@ -33,7 +33,7 @@ class OnlinerCatalogClient:
         return []
 
     @staticmethod
-    def score_match(product: Dict[str, Any], product_name: str, article_candidates: List[str]) -> float:
+    def score_match(product: dict[str, Any], product_name: str, article_candidates: list[str]) -> float:
         """Simple scoring heuristic for catalog results."""
         name = str(product.get("name") or product.get("full_name") or "").lower()
         pname = product_name.lower()

@@ -1,30 +1,29 @@
 """Thread-safe JSON cache with optional TTL."""
 
 import json
-import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class JsonCache:
     """Disk-backed JSON cache with in-memory buffering and TTL support."""
 
-    def __init__(self, path: Path, ttl_seconds: Optional[int] = None):
+    def __init__(self, path: Path, ttl_seconds: int | None = None):
         self.path = Path(path)
         self.ttl = ttl_seconds
         self._lock = threading.RLock()
-        self._data: Optional[Dict[str, Any]] = None
+        self._data: dict[str, Any] | None = None
         self._loaded_at = 0.0
 
-    def _load(self) -> Dict[str, Any]:
+    def _load(self) -> dict[str, Any]:
         with self._lock:
             if self._data is not None:
                 return self._data
             if self.path.exists():
                 try:
-                    with open(self.path, "r", encoding="utf-8") as f:
+                    with open(self.path, encoding="utf-8") as f:
                         self._data = json.load(f)
                 except (json.JSONDecodeError, OSError):
                     self._data = {}

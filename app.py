@@ -6,61 +6,58 @@ Price Mixer Web — веб-интерфейс для сведения прайс
 Открыть: http://localhost:5001
 """
 
-import json
 import base64
+import json
 import math
 import os
+import queue
 import re
 import shutil
+import sqlite3
 import subprocess
+import threading
 import time
+import urllib.parse
+import urllib.request
 import uuid
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
-from urllib.parse import quote
-from werkzeug.utils import secure_filename
 from difflib import SequenceMatcher
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import quote
 
 import numpy as np
 import pandas as pd
 import requests
 from flask import (
+    Flask,
     Response,
-    Flask, render_template, render_template_string, request, redirect,
-    url_for, send_file, session, jsonify,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
 )
 
-import queue
-import sqlite3
-import threading
-import urllib.request
-import urllib.parse
-
+from config import cfg
 from mixer import (
-    load_url_cache,
-    save_url_cache,
-    resolve_onliner_urls,
-    parse_generic_excel,
-    consolidate_simple,
-    find_missing_onliner_ids,
-    load_id_cache,
-    save_id_cache,
     build_id_fanout_map,
-    is_trusted_cached_id,
-    prune_negative_id_cache,
-    warm_url_cache_from_id_cache,
+    consolidate_simple,
     extract_article,
     extract_article_candidates,
-    lookup_id_from_catalog_sheet,
+    is_trusted_cached_id,
+    load_id_cache,
+    load_url_cache,
     lookup_catalog_match_details,
-    verify_catalog_id_with_prefix,
-    _load_catalog_sheet_index,
+    lookup_id_from_catalog_sheet,
+    parse_generic_excel,
+    resolve_onliner_urls,
+    save_id_cache,
 )
-
 from price_mixer.api.routes import bp as api_bp
-from config import cfg
 
 # Глобальный прогресс резолвинга
 resolve_status = {"running": False, "resolved": 0, "total": 0, "cached": 0}
@@ -576,7 +573,7 @@ def _read_onliner_api_settings():
     data = {}
     if ONLINER_API_SETTINGS_FILE.exists():
         try:
-            with open(ONLINER_API_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            with open(ONLINER_API_SETTINGS_FILE, encoding="utf-8") as f:
                 payload = json.load(f)
             if isinstance(payload, dict):
                 data = payload
@@ -815,7 +812,7 @@ def load_category_markups():
     if not CATEGORY_MARKUPS_FILE.exists():
         return {}
     try:
-        with open(CATEGORY_MARKUPS_FILE, "r", encoding="utf-8") as f:
+        with open(CATEGORY_MARKUPS_FILE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
             return data
@@ -915,7 +912,7 @@ def load_auto_refresh_settings():
     if not AUTO_REFRESH_SETTINGS_FILE.exists():
         return _normalize_auto_refresh_settings()
     try:
-        with open(AUTO_REFRESH_SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(AUTO_REFRESH_SETTINGS_FILE, encoding="utf-8") as f:
             data = json.load(f)
         return _normalize_auto_refresh_settings(data)
     except Exception:
@@ -1188,7 +1185,7 @@ def load_app_settings():
     if not APP_SETTINGS_FILE.exists():
         return _normalize_app_settings()
     try:
-        with open(APP_SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(APP_SETTINGS_FILE, encoding="utf-8") as f:
             data = json.load(f)
     except Exception:
         data = {}
@@ -1931,7 +1928,7 @@ def load_api_fetch_history():
     if not API_FETCH_HISTORY_FILE.exists():
         return []
     try:
-        with open(API_FETCH_HISTORY_FILE, "r", encoding="utf-8") as f:
+        with open(API_FETCH_HISTORY_FILE, encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, list) else []
     except Exception:
@@ -2111,7 +2108,7 @@ def load_session_supplier_diff(session_dir):
     if not path.exists():
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except Exception:
@@ -2558,7 +2555,7 @@ def load_onliner_market_cache():
     if not ONLINER_MARKET_CACHE_FILE.exists():
         return {}
     try:
-        with open(ONLINER_MARKET_CACHE_FILE, "r", encoding="utf-8") as f:
+        with open(ONLINER_MARKET_CACHE_FILE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
             return data
@@ -2576,7 +2573,7 @@ def load_onliner_product_cache():
     if not ONLINER_PRODUCT_CACHE_FILE.exists():
         return {}
     try:
-        with open(ONLINER_PRODUCT_CACHE_FILE, "r", encoding="utf-8") as f:
+        with open(ONLINER_PRODUCT_CACHE_FILE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
             return data
@@ -3142,7 +3139,7 @@ def _catalog_import_worker(filepath: str, file_ext: str, cleanup_file: bool = Tr
             rows_iter = ([str(c.value or "") for c in row] for row in ws.iter_rows())
         else:
             import csv
-            f_obj = open(filepath, "r", encoding="utf-8-sig", newline="")
+            f_obj = open(filepath, encoding="utf-8-sig", newline="")
             rows_iter = ([str(c) for c in row] for row in csv.reader(f_obj))
 
         # Skip header row (first row)
@@ -3274,7 +3271,7 @@ def load_review_queue():
     if not REVIEW_QUEUE_FILE.exists():
         return {}
     try:
-        with open(REVIEW_QUEUE_FILE, "r", encoding="utf-8") as f:
+        with open(REVIEW_QUEUE_FILE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
             return data
@@ -3292,7 +3289,7 @@ def load_id_change_journal():
     if not ID_CHANGE_JOURNAL_FILE.exists():
         return []
     try:
-        with open(ID_CHANGE_JOURNAL_FILE, "r", encoding="utf-8") as f:
+        with open(ID_CHANGE_JOURNAL_FILE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, list):
             return data[-5000:]
@@ -3490,7 +3487,7 @@ def _extract_offer_rows(payload):
                 "price": round(float(price), 2),
                 "url": str(node.get("product_url") or node.get("html_url") or node.get("url") or seller_url or "").strip(),
                 "warranty": str(node.get("warranty") or "").strip(),
-                "stock": str(((node.get("stock_status") or {}).get("text") or "")).strip(),
+                "stock": str((node.get("stock_status") or {}).get("text") or "").strip(),
                 "updated_at": str(node.get("date_update") or "").strip(),
             })
 
@@ -3507,7 +3504,7 @@ def _extract_offer_rows(payload):
                         "price": round(float(price), 2),
                         "url": str(node.get("product_url") or node.get("html_url") or node.get("url") or seller_url or "").strip(),
                         "warranty": str(node.get("warranty") or "").strip(),
-                        "stock": str(((node.get("stock_status") or {}).get("text") or "")).strip(),
+                        "stock": str((node.get("stock_status") or {}).get("text") or "").strip(),
                         "updated_at": str(node.get("date_update") or "").strip(),
                     })
                 for v in node.values():
@@ -3547,7 +3544,7 @@ def _fetch_onliner_market_stats_catalog_api(onliner_id):
     min_price = _safe_float((((prices_obj.get("price_min") or {}).get("converted") or {}).get("BYN") or {}).get("amount"))
     if min_price is None:
         min_price = _safe_float((prices_obj.get("price_min") or {}).get("amount"))
-    offers_count = int(((prices_obj.get("offers") or {}).get("count") or 0))
+    offers_count = int((prices_obj.get("offers") or {}).get("count") or 0)
     avg_price = None
     max_price = None
     min_competitors = 0
@@ -6016,11 +6013,7 @@ def _case_brand_model_key(text):
     without_psu = bool(re.search(r"без\s*б/?п|без\s*блока\s*пит", low, flags=re.IGNORECASE))
     with_psu = False
     if not without_psu:
-        if re.search(r"\b\d{3,4}\s*w\b", low, flags=re.IGNORECASE):
-            with_psu = True
-        elif re.search(r"(?:^|[^a-zа-я0-9])с\s*б/?п(?=$|[^a-zа-я0-9])", low, flags=re.IGNORECASE):
-            with_psu = True
-        elif re.search(r"(?:^|[^a-zа-я0-9])б/?п\s+[a-zа-я0-9]", low, flags=re.IGNORECASE):
+        if re.search(r"\b\d{3,4}\s*w\b", low, flags=re.IGNORECASE) or re.search(r"(?:^|[^a-zа-я0-9])с\s*б/?п(?=$|[^a-zа-я0-9])", low, flags=re.IGNORECASE) or re.search(r"(?:^|[^a-zа-я0-9])б/?п\s+[a-zа-я0-9]", low, flags=re.IGNORECASE):
             with_psu = True
     watt = ""
     m_watt = re.search(r"\b(\d{3,4})\s*w\b", low, flags=re.IGNORECASE)
@@ -6463,9 +6456,7 @@ def _find_hdd_review_candidates(product_name, top_n=5):
                     seed_best[oid] = (raw_name, url, cat_ok)
                     continue
                 pn, pu, pok = prev
-                if cat_ok and not pok:
-                    seed_best[oid] = (raw_name, url, cat_ok)
-                elif cat_ok == pok and len(str(raw_name or "")) > len(str(pn or "")):
+                if cat_ok and not pok or cat_ok == pok and len(str(raw_name or "")) > len(str(pn or "")):
                     seed_best[oid] = (raw_name, url, cat_ok)
             for oid, (raw_name, url, cat_ok) in seed_best.items():
                 if not cat_ok:
@@ -6714,9 +6705,7 @@ def _find_printer_review_candidates(product_name, top_n=5):
 
         match_ok = False
         if local_article:
-            if cand_article and _case_code_match(local_article, cand_article):
-                match_ok = True
-            elif local_article in _printer_mfp_norm_article(cname):
+            if cand_article and _case_code_match(local_article, cand_article) or local_article in _printer_mfp_norm_article(cname):
                 match_ok = True
         if not match_ok and local_mc and len(local_mc) >= 5 and cand_mc:
             if local_mc in cand_mc or cand_mc in local_mc or local_mc == cand_mc:
@@ -8096,7 +8085,7 @@ def _openai_autosort_predict_category(product_name, categories, local_hint=""):
         choices = payload.get("choices") or []
         if not choices:
             return "", 0.0, "no_choices"
-        content = str((((choices[0] or {}).get("message") or {}).get("content") or "")).strip()
+        content = str(((choices[0] or {}).get("message") or {}).get("content") or "").strip()
         if not content:
             return "", 0.0, "empty_content"
         parsed = json.loads(content)
@@ -8549,7 +8538,7 @@ def load_visibility_map(session_dir):
     if not CATEGORY_VISIBILITY_FILE.exists():
         return {}
     try:
-        with open(CATEGORY_VISIBILITY_FILE, "r", encoding="utf-8") as f:
+        with open(CATEGORY_VISIBILITY_FILE, encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict):
                 return data
@@ -8877,14 +8866,14 @@ def upload():
         if not file.filename:
             continue
         fname_enc = file.filename
-        from urllib.parse import quote, unquote
+        from urllib.parse import unquote
         for enc_fname, sup_name in supplier_mapping.items():
             if unquote(enc_fname) == fname_enc or enc_fname == fname_enc:
                 supplier_name = sup_name
                 break
         else:
             supplier_name = "Unknown"
-        
+
         if not supplier_name:
             supplier_name = "Unknown"
 
@@ -9908,7 +9897,8 @@ def api_onliner_db_import_gsheet():
         return jsonify({"status": "error", "message": "sheet_id required"}), 400
 
     def _download_and_import():
-        import tempfile, urllib.error
+        import tempfile
+        import urllib.error
         # Try primary export URL; fall back to gviz/tq if it fails
         urls = [
             (f"https://docs.google.com/spreadsheets/d/{sheet_id}"
@@ -10034,7 +10024,7 @@ def api_onliner_db_import_csv():
         return jsonify({"status": "error",
                         "message": "Поддерживаются только CSV и XLSX"}), 400
 
-    import tempfile, os
+    import tempfile
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
     file.save(tmp.name)
     tmp.close()
@@ -10147,9 +10137,7 @@ def api_clear_invalid_onliner_ids():
         row_key = build_item_category_key(row)
         row_oid = normalize_onliner_id(row.get("OnlinerID", ""))
         should_clear = False
-        if row_key and row_key in keys_to_clear:
-            should_clear = True
-        elif row_oid and row_oid in ids_to_clear:
+        if row_key and row_key in keys_to_clear or row_oid and row_oid in ids_to_clear:
             should_clear = True
         if not should_clear:
             continue
@@ -15394,7 +15382,7 @@ def api_onliner_offers(onliner_id):
     if not product:
         return jsonify({"status": "error", "message": product_error or "Товар не найден"})
     prices_obj = product.get("prices") or {}
-    offers_count = int(((prices_obj.get("offers") or {}).get("count") or 0))
+    offers_count = int((prices_obj.get("offers") or {}).get("count") or 0)
     positions_url = str(prices_obj.get("url", "")).strip()
     if not positions_url:
         return jsonify({
@@ -15599,7 +15587,7 @@ def api_category_autosort_preview():
 
     # AI fallback only for unresolved/low-confidence rows.
     if ai_candidates:
-        valid_categories = sorted([str(c).strip() for c in category_item_counts.keys() if str(c).strip()], key=_category_sort_key)
+        valid_categories = sorted([str(c).strip() for c in category_item_counts if str(c).strip()], key=_category_sort_key)
         ai_batch = ai_candidates[:OPENAI_AUTOSORT_MAX_ITEMS]
 
         prepared = []
@@ -15691,7 +15679,7 @@ def api_category_autosort_preview():
         proposals.pop(key, None)
 
     proposal_keys = set(proposals.keys())
-    affected_rows = {k: 0 for k in proposal_keys}
+    affected_rows = dict.fromkeys(proposal_keys, 0)
     if proposal_keys:
         for _, row in df.iterrows():
             row_keys = set(build_item_category_keys(row))
@@ -15792,14 +15780,14 @@ def api_resolve_start():
         return jsonify({"status": "error", "message": "No data"})
 
     df = read_consolidated_df(session_dir)
-    
+
     id_to_name = {}
     for _, row in df.iterrows():
         oid = row.get("OnlinerID")
         name = row.get("Название", "")
         if oid and str(oid).strip() and str(oid) != "nan":
             id_to_name[str(oid)] = name
-    
+
     all_ids = list(id_to_name.keys())
     cache = load_url_cache()
     uncached = [oid for oid in all_ids if oid not in cache]
@@ -15821,14 +15809,14 @@ def api_resolve_start():
             resolve_onliner_urls(uncached, cache=cache, max_workers=5, progress_callback=progress, id_to_name=id_to_name)
             resolve_status["resolved"] = resolve_status["total"]
             resolve_status["cached"] = len(cache)
-            
+
             df = read_consolidated_df(session_dir)
             for i, row in df.iterrows():
                 oid = row.get("OnlinerID")
                 if oid and str(oid) in cache:
                     df.at[i, "Ссылка"] = cache.get(str(oid), "")
             write_consolidated_df(session_dir, df)
-            
+
             cons_json_path = Path(session_dir) / "consolidated.json"
             write_consolidated_json(df, cons_json_path)
         finally:
@@ -15874,8 +15862,8 @@ def _resolve_service_account_json_path(raw):
         candidates.append(p0)
     else:
         base_app = Path(__file__).resolve().parent
-        candidates.append((base_app / raw))
-        candidates.append((Path.cwd() / raw))
+        candidates.append(base_app / raw)
+        candidates.append(Path.cwd() / raw)
     seen = set()
     for p in candidates:
         try:
@@ -16080,8 +16068,8 @@ def download():
 def api_export_google_sheets():
     try:
         import gspread
+        from gspread.exceptions import APIError, SpreadsheetNotFound, WorksheetNotFound
         from gspread.utils import rowcol_to_a1
-        from gspread.exceptions import WorksheetNotFound, SpreadsheetNotFound, APIError
     except ImportError:
         return jsonify({"status": "error", "message": "Не установлен пакет gspread."}), 500
 
@@ -16216,7 +16204,7 @@ def api_id_quality_report():
     if not summary_path.exists():
         return jsonify({"status": "not_found"})
     try:
-        with open(summary_path, "r", encoding="utf-8") as f:
+        with open(summary_path, encoding="utf-8") as f:
             summary = json.load(f)
     except Exception:
         return jsonify({"status": "error"})

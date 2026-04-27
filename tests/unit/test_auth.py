@@ -1,6 +1,7 @@
 """Unit tests for HTTP Basic Auth."""
 
 import pytest
+
 from app import app
 
 

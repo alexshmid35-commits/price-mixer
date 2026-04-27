@@ -1,7 +1,6 @@
 """Unit tests for price_mixer.models."""
 
-import pytest
-from price_mixer.models import SupplierFile, ParsedRow, ConsolidatedRow, CategoryMarkup
+from price_mixer.models import CategoryMarkup, ConsolidatedRow, ParsedRow, SupplierFile
 
 
 def test_supplier_file_creation():

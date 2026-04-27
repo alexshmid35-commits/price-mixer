@@ -1,10 +1,8 @@
 """Onliner B2B API client (OAuth2 + price/catalog endpoints)."""
 
-import json
 import threading
 import time
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
@@ -14,7 +12,7 @@ from price_mixer.config import Config
 class OnlinerB2BClient:
     """Clean B2B client with its own token cache and session state."""
 
-    def __init__(self, settings: Optional[Dict[str, Any]] = None):
+    def __init__(self, settings: dict[str, Any] | None = None):
         cfg = Config()
         s = settings or {}
         self.base_url = s.get("base_url", cfg.onliner_b2b_base_url)
@@ -25,7 +23,7 @@ class OnlinerB2BClient:
         self.verify_ssl = s.get("verify_ssl", True)
         self.timeout = s.get("timeout_sec", 20)
 
-        self._token: Optional[str] = None
+        self._token: str | None = None
         self._token_expires_at = 0.0
         self._lock = threading.RLock()
 
@@ -37,7 +35,7 @@ class OnlinerB2BClient:
         with self._lock:
             return self._token is not None and time.time() < self._token_expires_at - 60
 
-    def get_token(self, force_refresh: bool = False) -> Optional[str]:
+    def get_token(self, force_refresh: bool = False) -> str | None:
         if not force_refresh and self._is_token_valid():
             with self._lock:
                 return self._token
@@ -78,8 +76,8 @@ class OnlinerB2BClient:
         self,
         method: str,
         path: str,
-        params: Optional[Dict[str, Any]] = None,
-        json_body: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
         force_token_refresh: bool = False,
         use_price_api: bool = False,
     ) -> requests.Response:
@@ -112,21 +110,21 @@ class OnlinerB2BClient:
     # High-level helpers
     # ------------------------------------------------------------------
 
-    def get_sections(self) -> List[Dict[str, Any]]:
+    def get_sections(self) -> list[dict[str, Any]]:
         r = self.request("GET", "/sections")
         return r.json().get("sections", [])
 
-    def get_manufacturers(self, section_id: int) -> List[Dict[str, Any]]:
+    def get_manufacturers(self, section_id: int) -> list[dict[str, Any]]:
         r = self.request("GET", f"/sections/{section_id}/manufacturers")
         return r.json().get("manufacturers", [])
 
-    def get_products(self, section_id: int, manufacturer_id: int, title: str = "") -> List[Dict[str, Any]]:
-        params: Dict[str, Any] = {"page": 1, "per_page": 100}
+    def get_products(self, section_id: int, manufacturer_id: int, title: str = "") -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"page": 1, "per_page": 100}
         if title:
             params["title"] = title
         r = self.request("GET", f"/sections/{section_id}/manufacturers/{manufacturer_id}/products", params=params)
         return r.json().get("products", [])
 
-    def get_articles(self, section_id: int, manufacturer_id: int, product_id: int) -> List[Dict[str, Any]]:
+    def get_articles(self, section_id: int, manufacturer_id: int, product_id: int) -> list[dict[str, Any]]:
         r = self.request("GET", f"/sections/{section_id}/manufacturers/{manufacturer_id}/products/{product_id}/articles")
         return r.json().get("articles", [])

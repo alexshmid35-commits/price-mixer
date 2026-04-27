@@ -6,9 +6,10 @@ and overlays them on top of app_settings.json values.
 Environment variables always take precedence.
 """
 
-import os
 import json
+import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load .env file if present
@@ -94,7 +95,7 @@ class Config:
 
         """Load app_settings.json as a dict."""
         if APP_SETTINGS_PATH.exists():
-            with open(APP_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            with open(APP_SETTINGS_PATH, encoding="utf-8") as f:
                 return json.load(f)
         return {}
 
@@ -102,7 +103,7 @@ class Config:
     def load_onliner_api_settings(cls) -> dict:
         """Load onliner_api_settings.json as a dict."""
         if ONLINER_API_SETTINGS_PATH.exists():
-            with open(ONLINER_API_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            with open(ONLINER_API_SETTINGS_PATH, encoding="utf-8") as f:
                 return json.load(f)
         return {}
 

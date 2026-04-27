@@ -1,7 +1,6 @@
 """Text normalization and article extraction helpers."""
 
 import re
-from typing import List
 
 
 def _normalize_compact(value):
@@ -36,7 +35,7 @@ def extract_article(name: str) -> str:
     return ""
 
 
-def extract_article_candidates(name: str) -> List[str]:
+def extract_article_candidates(name: str) -> list[str]:
     if not name:
         return []
     text = str(name)

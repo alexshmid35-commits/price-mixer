@@ -1,10 +1,6 @@
 """Unit tests for price_mixer.cache."""
 
-import json
 import time
-from pathlib import Path
-
-import pytest
 
 from price_mixer.cache import JsonCache
 

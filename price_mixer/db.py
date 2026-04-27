@@ -1,12 +1,12 @@
 import json
+
 """SQLite database abstraction layer."""
 
 import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Tuple
-
+from typing import Any
 
 DB_PATH = Path(__file__).parent.parent / "onliner_products.db"
 _DB_LOCK = threading.RLock()
@@ -15,7 +15,7 @@ _DB_LOCK = threading.RLock()
 class Database:
     """Thread-safe wrapper around the SQLite database."""
 
-    def __init__(self, path: Optional[Path] = None):
+    def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else DB_PATH
 
     def _connect(self) -> sqlite3.Connection:
@@ -23,23 +23,23 @@ class Database:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> sqlite3.Cursor:
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Cursor:
         with _DB_LOCK:
             with self._connect() as conn:
                 return conn.execute(sql, params)
 
-    def executemany(self, sql: str, params: List[Tuple[Any, ...]]) -> sqlite3.Cursor:
+    def executemany(self, sql: str, params: list[tuple[Any, ...]]) -> sqlite3.Cursor:
         with _DB_LOCK:
             with self._connect() as conn:
                 return conn.executemany(sql, params)
 
-    def fetchone(self, sql: str, params: Tuple[Any, ...] = ()) -> Optional[Dict[str, Any]]:
+    def fetchone(self, sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
         with _DB_LOCK:
             with self._connect() as conn:
                 row = conn.execute(sql, params).fetchone()
                 return dict(row) if row else None
 
-    def fetchall(self, sql: str, params: Tuple[Any, ...] = ()) -> List[Dict[str, Any]]:
+    def fetchall(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         with _DB_LOCK:
             with self._connect() as conn:
                 rows = conn.execute(sql, params).fetchall()
@@ -49,18 +49,18 @@ class Database:
     # Existing tables helpers (onliner_catalog, name_index)
     # ------------------------------------------------------------------
 
-    def get_catalog_by_id(self, onliner_id: str) -> Optional[Dict[str, Any]]:
+    def get_catalog_by_id(self, onliner_id: str) -> dict[str, Any] | None:
         return self.fetchone(
             "SELECT * FROM onliner_catalog WHERE onliner_id = ?", (onliner_id,)
         )
 
-    def search_catalog_by_name(self, name_substring: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def search_catalog_by_name(self, name_substring: str, limit: int = 20) -> list[dict[str, Any]]:
         return self.fetchall(
             "SELECT * FROM onliner_catalog WHERE name LIKE ? LIMIT ?",
             (f"%{name_substring}%", limit),
         )
 
-    def get_name_index(self, name_key: str) -> Optional[Dict[str, Any]]:
+    def get_name_index(self, name_key: str) -> dict[str, Any] | None:
         return self.fetchone(
             "SELECT * FROM name_index WHERE name_key = ?", (name_key,)
         )
@@ -69,7 +69,7 @@ class Database:
     # Schema definitions for future migrations (Step 8)
     # ------------------------------------------------------------------
 
-    MIGRATIONS: List[str] = [
+    MIGRATIONS: list[str] = [
         """
         CREATE TABLE IF NOT EXISTS manual_bindings (
             name_key    TEXT PRIMARY KEY,
@@ -119,7 +119,7 @@ class Database:
     # Manual ID bindings
     # ------------------------------------------------------------------
 
-    def get_manual_bindings(self) -> Dict[str, Dict[str, str]]:
+    def get_manual_bindings(self) -> dict[str, dict[str, str]]:
         rows = self.fetchall("SELECT name_key, onliner_id, url FROM manual_bindings")
         return {r["name_key"]: {"id": r["onliner_id"], "url": r["url"]} for r in rows}
 
@@ -136,7 +136,7 @@ class Database:
     # ID change journal
     # ------------------------------------------------------------------
 
-    def get_id_journal(self, limit: int = 10000) -> List[Dict[str, Any]]:
+    def get_id_journal(self, limit: int = 10000) -> list[dict[str, Any]]:
         rows = self.fetchall(
             "SELECT ts, action, source, changes_json FROM id_change_journal ORDER BY ts DESC LIMIT ?",
             (limit,),
@@ -150,7 +150,7 @@ class Database:
             result.append({"ts": r["ts"], "action": r["action"], "source": r["source"], "changes": changes})
         return result
 
-    def append_id_journal(self, ts: int, action: str, source: str, changes: List[Dict[str, Any]]) -> None:
+    def append_id_journal(self, ts: int, action: str, source: str, changes: list[dict[str, Any]]) -> None:
         with _DB_LOCK:
             with self._connect() as conn:
                 conn.execute(
@@ -163,7 +163,7 @@ class Database:
     # Category overrides
     # ------------------------------------------------------------------
 
-    def get_category_overrides(self) -> Dict[str, Any]:
+    def get_category_overrides(self) -> dict[str, Any]:
         rows = self.fetchall("SELECT category, overrides_json FROM category_overrides_db")
         result = {}
         for r in rows:
@@ -192,9 +192,9 @@ class Database:
     # Supplier snapshots
     # ------------------------------------------------------------------
 
-    def get_supplier_snapshots(self) -> Dict[str, Dict[str, Any]]:
+    def get_supplier_snapshots(self) -> dict[str, dict[str, Any]]:
         rows = self.fetchall("SELECT supplier, session_id, snapshot_json FROM supplier_snapshots_db")
-        result: Dict[str, Dict[str, Any]] = {}
+        result: dict[str, dict[str, Any]] = {}
         for r in rows:
             try:
                 snapshot = json.loads(r["snapshot_json"])
