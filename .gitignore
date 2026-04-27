@@ -33,3 +33,5 @@ category_visibility.json
 
 # macOS
 .DS_Store
+*.db
+ai2025-*.json
