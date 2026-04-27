@@ -1,3 +1,4 @@
+import json
 """SQLite database abstraction layer."""
 
 import sqlite3
@@ -112,6 +113,114 @@ class Database:
                     conn.execute(sql)
                 conn.commit()
 
+
+
+    # ------------------------------------------------------------------
+    # Manual ID bindings
+    # ------------------------------------------------------------------
+
+    def get_manual_bindings(self) -> Dict[str, Dict[str, str]]:
+        rows = self.fetchall("SELECT name_key, onliner_id, url FROM manual_bindings")
+        return {r["name_key"]: {"id": r["onliner_id"], "url": r["url"]} for r in rows}
+
+    def set_manual_binding(self, name_key: str, onliner_id: str, url: str = "", confirmed_by: str = "") -> None:
+        with _DB_LOCK:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO manual_bindings (name_key, onliner_id, url, confirmed_by, confirmed_at) VALUES (?, ?, ?, ?, ?)",
+                    (name_key, onliner_id, url, confirmed_by, int(time.time())),
+                )
+                conn.commit()
+
+    # ------------------------------------------------------------------
+    # ID change journal
+    # ------------------------------------------------------------------
+
+    def get_id_journal(self, limit: int = 10000) -> List[Dict[str, Any]]:
+        rows = self.fetchall(
+            "SELECT ts, action, source, changes_json FROM id_change_journal ORDER BY ts DESC LIMIT ?",
+            (limit,),
+        )
+        result = []
+        for r in rows:
+            try:
+                changes = json.loads(r["changes_json"])
+            except Exception:
+                changes = []
+            result.append({"ts": r["ts"], "action": r["action"], "source": r["source"], "changes": changes})
+        return result
+
+    def append_id_journal(self, ts: int, action: str, source: str, changes: List[Dict[str, Any]]) -> None:
+        with _DB_LOCK:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO id_change_journal (ts, action, source, changes_json) VALUES (?, ?, ?, ?)",
+                    (ts, action, source, json.dumps(changes, ensure_ascii=False)),
+                )
+                conn.commit()
+
+    # ------------------------------------------------------------------
+    # Category overrides
+    # ------------------------------------------------------------------
+
+    def get_category_overrides(self) -> Dict[str, Any]:
+        rows = self.fetchall("SELECT category, overrides_json FROM category_overrides_db")
+        result = {}
+        for r in rows:
+            try:
+                result[r["category"]] = json.loads(r["overrides_json"])
+            except Exception:
+                pass
+        return result
+
+    def set_category_overrides(self, category: str, overrides: Any) -> None:
+        with _DB_LOCK:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO category_overrides_db (category, overrides_json, updated_at) VALUES (?, ?, ?)",
+                    (category, json.dumps(overrides, ensure_ascii=False), int(time.time())),
+                )
+                conn.commit()
+
+    def clear_category_overrides(self) -> None:
+        with _DB_LOCK:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM category_overrides_db")
+                conn.commit()
+
+    # ------------------------------------------------------------------
+    # Supplier snapshots
+    # ------------------------------------------------------------------
+
+    def get_supplier_snapshots(self) -> Dict[str, Dict[str, Any]]:
+        rows = self.fetchall("SELECT supplier, session_id, snapshot_json FROM supplier_snapshots_db")
+        result: Dict[str, Dict[str, Any]] = {}
+        for r in rows:
+            try:
+                snapshot = json.loads(r["snapshot_json"])
+            except Exception:
+                snapshot = {}
+            supplier = r["supplier"]
+            session_id = r["session_id"]
+            if supplier not in result:
+                result[supplier] = {}
+            result[supplier][session_id] = snapshot
+        return {"suppliers": result}
+
+    def set_supplier_snapshot(self, supplier: str, session_id: str, snapshot: Any) -> None:
+        with _DB_LOCK:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO supplier_snapshots_db (supplier, session_id, snapshot_json, created_at) VALUES (?, ?, ?, ?)",
+                    (supplier, session_id, json.dumps(snapshot, ensure_ascii=False), int(time.time())),
+                )
+                conn.commit()
+
+    def clear_supplier_snapshots(self) -> None:
+        with _DB_LOCK:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM supplier_snapshots_db")
+                conn.commit()
 
 def get_db() -> Database:
     return Database()

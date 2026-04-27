@@ -776,16 +776,11 @@ def onliner_api_get(url, timeout=8, headers=None):
 
 
 def load_category_overrides():
-    if not CATEGORY_OVERRIDE_FILE.exists():
-        return {}
+    from price_mixer.db import get_db
     try:
-        with open(CATEGORY_OVERRIDE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = get_db().get_category_overrides()
         if isinstance(data, dict):
-            # Legacy cleanup: keys by article caused cross-category contamination.
             cleaned = {k: v for k, v in data.items() if not str(k).startswith("art:")}
-            # Defensive cleanup: drop obviously conflicting saved mappings.
-            # Example: keys containing "корпус"/"кулер"/"сжо" mapped to "Блок питания".
             suspicious = []
             for k, v in cleaned.items():
                 kk = str(k or "").lower()
@@ -807,8 +802,13 @@ def load_category_overrides():
 
 
 def save_category_overrides(overrides):
-    with open(CATEGORY_OVERRIDE_FILE, "w", encoding="utf-8") as f:
-        json.dump(overrides, f, ensure_ascii=False, indent=2)
+    from price_mixer.db import get_db
+    try:
+        get_db().clear_category_overrides()
+        for category, items in overrides.items():
+            get_db().set_category_overrides(category, items)
+    except Exception:
+        pass
 
 
 def load_category_markups():
@@ -1908,23 +1908,23 @@ def onliner_b2b_search_candidates(local_name, category_name="", limit=30):
 
 
 def load_supplier_snapshots():
-    if not SUPPLIER_SNAPSHOTS_FILE.exists():
-        return {"suppliers": {}}
+    from price_mixer.db import get_db
     try:
-        with open(SUPPLIER_SNAPSHOTS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        return get_db().get_supplier_snapshots()
     except Exception:
-        return {"suppliers": {}}
-    suppliers = data.get("suppliers") if isinstance(data, dict) else {}
-    return {"suppliers": suppliers if isinstance(suppliers, dict) else {}}
+        pass
+    return {}
 
 
 def save_supplier_snapshots(data):
-    payload = data if isinstance(data, dict) else {"suppliers": {}}
-    if "suppliers" not in payload or not isinstance(payload.get("suppliers"), dict):
-        payload = {"suppliers": {}}
-    with open(SUPPLIER_SNAPSHOTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    from price_mixer.db import get_db
+    try:
+        suppliers = data.get("suppliers", {})
+        for supplier, sessions in suppliers.items():
+            for session_id, snapshot in sessions.items():
+                get_db().set_supplier_snapshot(supplier, session_id, snapshot)
+    except Exception:
+        pass
 
 
 def load_api_fetch_history():
@@ -3253,21 +3253,21 @@ def _catalog_import_worker(filepath: str, file_ext: str, cleanup_file: bool = Tr
 
 
 def load_manual_id_bindings():
-    if not MANUAL_ID_BINDINGS_FILE.exists():
-        return {}
+    from price_mixer.db import get_db
     try:
-        with open(MANUAL_ID_BINDINGS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            return data
+        return get_db().get_manual_bindings()
     except Exception:
         pass
     return {}
 
 
 def save_manual_id_bindings(bindings):
-    with open(MANUAL_ID_BINDINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(bindings, f, ensure_ascii=False, indent=2)
+    from price_mixer.db import get_db
+    try:
+        for name_key, info in bindings.items():
+            get_db().set_manual_binding(name_key, info.get("id", ""), info.get("url", ""))
+    except Exception:
+        pass
 
 
 def load_review_queue():
@@ -3308,11 +3308,16 @@ def save_id_change_journal(rows):
 
 
 def append_id_change_journal(entry):
-    if not isinstance(entry, dict):
-        return
-    rows = load_id_change_journal()
-    rows.append(entry)
-    save_id_change_journal(rows)
+    from price_mixer.db import get_db
+    try:
+        get_db().append_id_journal(
+            entry.get("ts", int(time.time())),
+            entry.get("action", ""),
+            entry.get("source", ""),
+            entry.get("changes", []),
+        )
+    except Exception:
+        pass
 
 
 def is_manually_confirmed_id(name, onliner_id):
