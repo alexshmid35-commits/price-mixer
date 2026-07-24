@@ -546,6 +546,7 @@ class SessionProductStore:
         filter_mode="all",
         no_id_category="",
         hidden_categories=None,
+        excluded_name_contains=None,
     ):
         if not self.canonical:
             return None
@@ -557,6 +558,10 @@ class SessionProductStore:
             placeholders = ",".join("?" for _ in hidden_keys)
             base_where.append(f"category_key NOT IN ({placeholders})")
             base_params.extend(hidden_keys)
+        excluded_names = sorted({_key(value) for value in excluded_name_contains or [] if _key(value)})
+        for pattern in excluded_names:
+            base_where.append("instr(name_key,?)=0")
+            base_params.append(pattern)
         where = list(base_where)
         params = list(base_params)
         mode = str(filter_mode or "all").strip().casefold()

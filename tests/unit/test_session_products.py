@@ -185,3 +185,19 @@ def test_query_page_hides_categories_without_deleting_them(tmp_path):
     assert payload["meta"]["without_id_count"] == 0
     assert payload["meta"]["without_id_category_counts"] == []
     assert len(store.read_rows(session)) == 5
+
+
+def test_query_page_applies_export_name_exclusions_without_deleting_rows(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="r1")
+
+    payload = store.query_page(
+        session,
+        excluded_name_contains={"mouse"},
+        order_specs=[(1, "asc")],
+    )
+
+    assert payload["recordsTotal"] == 3
+    assert all("Mouse" not in row[1] for row in payload["data"])
+    assert len(store.read_rows(session)) == 5

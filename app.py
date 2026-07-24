@@ -3409,6 +3409,7 @@ def api_consolidated_page():
         "filter_mode": filter_mode,
         "no_id_category": request.args.get("no_id_category", ""),
         "hidden_categories": hidden_categories,
+        "excluded_name_contains": exclusion_patterns,
     }
     payload = SESSION_PAGE_RUNTIME.build_page(
         session_dir,
@@ -3424,7 +3425,7 @@ def api_consolidated_page():
             Path(session_dir) / "consolidated.json",
             False,
         ),
-        use_sql=not exclusion_patterns,
+        use_sql=True,
     )
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

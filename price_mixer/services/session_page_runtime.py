@@ -26,8 +26,9 @@ class SessionPageRuntime:
         payload = None
         compatibility_arguments = dict(page_arguments or {})
         compatibility_arguments.pop("hidden_categories", None)
+        compatibility_arguments.pop("excluded_name_contains", None)
         filter_mode = str((page_arguments or {}).get("filter_mode", "all") or "all").strip().casefold()
-        if self.store.canonical and use_sql and filter_mode in {"all", "no_id", "duplicate"}:
+        if self.store.canonical and filter_mode in {"all", "no_id", "duplicate"}:
             try:
                 storage_rows = rows if canonical_rows is None else canonical_rows
                 sync_result = self.store.reconcile_rows(
@@ -40,10 +41,11 @@ class SessionPageRuntime:
                     parity = self.store.parity(session_dir, storage_rows)
                     if parity.get("status") != "ok":
                         raise RuntimeError("session_products parity check failed")
-                payload = self.store.query_page(
-                    session_dir,
-                    **page_arguments,
-                )
+                if use_sql:
+                    payload = self.store.query_page(
+                        session_dir,
+                        **page_arguments,
+                    )
                 if payload is not None:
                     payload.setdefault("meta", {})["revision"] = sync_result.get(
                         "revision",
