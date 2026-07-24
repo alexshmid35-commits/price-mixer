@@ -3,7 +3,6 @@
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -18,9 +17,7 @@ def test_app_has_no_direct_http_route_decorators():
 
 def test_result_and_stats_projection_stay_in_session_read_model():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    read_model = (
-        ROOT / "price_mixer" / "services" / "session_read_model.py"
-    ).read_text(encoding="utf-8")
+    read_model = (ROOT / "price_mixer" / "services" / "session_read_model.py").read_text(encoding="utf-8")
     result_handler = app_py.split("def result_page", 1)[1].split(
         "@app.before_request",
         1,
@@ -41,9 +38,7 @@ def test_result_and_stats_projection_stay_in_session_read_model():
 
 def test_xlsx_and_google_exports_share_export_runtime():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    runtime = (
-        ROOT / "price_mixer" / "services" / "export_runtime.py"
-    ).read_text(encoding="utf-8")
+    runtime = (ROOT / "price_mixer" / "services" / "export_runtime.py").read_text(encoding="utf-8")
 
     assert "class ExportRuntime" in runtime
     assert "def _get_export_runtime" in app_py
@@ -51,15 +46,26 @@ def test_xlsx_and_google_exports_share_export_runtime():
     assert "GOOGLE_EXPORT_DF_CACHE" not in app_py
 
 
+def test_download_rendering_stays_in_export_delivery_runtime():
+    app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+    delivery = (ROOT / "price_mixer" / "services" / "export_delivery.py").read_text(encoding="utf-8")
+    handler = app_py.split("def download()", 1)[1].split(
+        "def _lookup_onliner_db_products",
+        1,
+    )[0]
+
+    assert "class ExportDeliveryRuntime" in delivery
+    assert ".to_excel(" in delivery
+    assert "_get_export_delivery_runtime().xlsx(" in handler
+    assert ".to_excel(" not in handler
+    assert "consolidated_price_visible.xlsx" not in handler
+
+
 def test_review_matching_is_split_into_category_plugins():
-    facade = (
-        ROOT / "price_mixer" / "services" / "review_candidates.py"
-    ).read_text(encoding="utf-8")
+    facade = (ROOT / "price_mixer" / "services" / "review_candidates.py").read_text(encoding="utf-8")
     matching_dir = ROOT / "price_mixer" / "services" / "review_matching"
     categories = {
-        path.stem
-        for path in matching_dir.glob("*.py")
-        if path.stem not in {"__init__", "engine", "features"}
+        path.stem for path in matching_dir.glob("*.py") if path.stem not in {"__init__", "engine", "features"}
     }
 
     assert len(facade.splitlines()) <= 50
@@ -84,9 +90,9 @@ def test_result_template_stays_template_not_script_monolith():
 
     assert len(html.splitlines()) <= 1700
     assert not re.search(r"^function\s+\w+\(", html, flags=re.MULTILINE)
-    assert '<script src="/static/js/result-actions.js"></script>' in html
-    assert '<script src="/static/js/result-main-table.js"></script>' in html
-    assert '<script src="/static/js/result-validation.js"></script>' in html
+    assert "static_asset('js/result-actions.js')" in html
+    assert "static_asset('js/result-main-table.js')" in html
+    assert "static_asset('js/result-validation.js')" in html
 
 
 def test_result_validation_is_not_mixed_back_into_preview_module():
@@ -181,19 +187,12 @@ def test_category_extra_endpoints_stay_in_runtime_module():
 
 def test_category_visibility_stays_in_management_runtime():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    runtime = (
-        ROOT
-        / "price_mixer"
-        / "services"
-        / "category_management_runtime.py"
-    ).read_text(encoding="utf-8")
+    runtime = (ROOT / "price_mixer" / "services" / "category_management_runtime.py").read_text(encoding="utf-8")
 
     assert "CategoryManagementRuntime" in app_py
     assert "class CategoryManagementRuntime" in runtime
     assert "def visibility" in runtime
-    app_visibility = app_py.split("def api_category_visibility", 1)[1].split(
-        "@_serialized_price_mutation", 1
-    )[0]
+    app_visibility = app_py.split("def api_category_visibility", 1)[1].split("@_serialized_price_mutation", 1)[0]
     assert "_get_category_management_runtime().visibility" in app_visibility
     assert "_category_update_visibility(" not in app_visibility
     assert "with CATEGORY_VISIBILITY_LOCK" not in app_visibility
@@ -201,21 +200,12 @@ def test_category_visibility_stays_in_management_runtime():
 
 def test_category_markup_endpoints_stay_in_management_runtime():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    runtime = (
-        ROOT
-        / "price_mixer"
-        / "services"
-        / "category_management_runtime.py"
-    ).read_text(encoding="utf-8")
+    runtime = (ROOT / "price_mixer" / "services" / "category_management_runtime.py").read_text(encoding="utf-8")
 
     assert "def apply_markup" in runtime
     assert "def markup_preview" in runtime
-    app_markup = app_py.split("def api_apply_markup", 1)[1].split(
-        "def api_markup_preview", 1
-    )[0]
-    app_preview = app_py.split("def api_markup_preview", 1)[1].split(
-        "def api_category_override_items", 1
-    )[0]
+    app_markup = app_py.split("def api_apply_markup", 1)[1].split("def api_markup_preview", 1)[0]
+    app_preview = app_py.split("def api_markup_preview", 1)[1].split("def api_category_override_items", 1)[0]
     assert "_get_category_management_runtime().apply_markup" in app_markup
     assert "_category_apply_markup_to_df(" not in app_markup
     assert "write_consolidated_json(" not in app_markup
@@ -226,21 +216,12 @@ def test_category_markup_endpoints_stay_in_management_runtime():
 
 def test_category_override_endpoints_stay_in_management_runtime():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    runtime = (
-        ROOT
-        / "price_mixer"
-        / "services"
-        / "category_management_runtime.py"
-    ).read_text(encoding="utf-8")
+    runtime = (ROOT / "price_mixer" / "services" / "category_management_runtime.py").read_text(encoding="utf-8")
 
     assert "def category_override_items" in runtime
     assert "def category_override_set" in runtime
-    app_items = app_py.split("def api_category_override_items", 1)[1].split(
-        "@_serialized_price_mutation", 1
-    )[0]
-    app_set = app_py.split("def api_category_override_set", 1)[1].split(
-        "def api_category_preview_items", 1
-    )[0]
+    app_items = app_py.split("def api_category_override_items", 1)[1].split("@_serialized_price_mutation", 1)[0]
+    app_set = app_py.split("def api_category_override_set", 1)[1].split("def api_category_preview_items", 1)[0]
     assert "_get_category_management_runtime().category_override_items" in app_items
     assert "_category_override_items_payload(" not in app_items
     assert "_get_category_management_runtime().category_override_set" in app_set
@@ -251,12 +232,7 @@ def test_category_override_endpoints_stay_in_management_runtime():
 
 def test_category_preview_items_stays_in_management_runtime():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    runtime = (
-        ROOT
-        / "price_mixer"
-        / "services"
-        / "category_management_runtime.py"
-    ).read_text(encoding="utf-8")
+    runtime = (ROOT / "price_mixer" / "services" / "category_management_runtime.py").read_text(encoding="utf-8")
 
     assert "def category_preview_items" in runtime
     app_preview = app_py.split("def api_category_preview_items", 1)[1].split(
@@ -295,9 +271,7 @@ def test_local_db_validation_worker_stays_out_of_app_monolith():
 
 def test_api_validation_worker_stays_out_of_app_monolith():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    worker = (ROOT / "price_mixer" / "services" / "id_validation_api_worker.py").read_text(
-        encoding="utf-8"
-    )
+    worker = (ROOT / "price_mixer" / "services" / "id_validation_api_worker.py").read_text(encoding="utf-8")
 
     assert "run_api_validation_worker" in app_py
     assert "def run_api_validation_worker" in worker
@@ -311,9 +285,7 @@ def test_api_validation_worker_stays_out_of_app_monolith():
 
 def test_verify_all_worker_stays_out_of_app_monolith():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    worker = (
-        ROOT / "price_mixer" / "services" / "id_validation_verify_worker.py"
-    ).read_text(encoding="utf-8")
+    worker = (ROOT / "price_mixer" / "services" / "id_validation_verify_worker.py").read_text(encoding="utf-8")
 
     assert "run_verify_all_worker" in app_py
     assert "def run_verify_all_worker" in worker
@@ -326,15 +298,11 @@ def test_verify_all_worker_stays_out_of_app_monolith():
 
 def test_ntech_review_scan_stays_in_runtime_module():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    runtime = (
-        ROOT / "price_mixer" / "services" / "ntech_review_runtime.py"
-    ).read_text(encoding="utf-8")
+    runtime = (ROOT / "price_mixer" / "services" / "ntech_review_runtime.py").read_text(encoding="utf-8")
 
     assert "NTechReviewRuntime" in app_py
     assert "class NTechReviewRuntime" in runtime
-    app_runtime = app_py.split("def _get_ntech_review_runtime", 1)[1].split(
-        "_NTECH_REVIEW_HANDLERS = None", 1
-    )[0]
+    app_runtime = app_py.split("def _get_ntech_review_runtime", 1)[1].split("_NTECH_REVIEW_HANDLERS = None", 1)[0]
     assert "run_review_queue_scan(" not in app_runtime
     assert "build_review_queue_finish_payload(" not in app_runtime
     assert "_get_ntech_review_runtime().start" in app_runtime
@@ -342,12 +310,8 @@ def test_ntech_review_scan_stays_in_runtime_module():
 
 def test_manual_review_queue_operations_stay_out_of_app_monolith():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    service = (
-        ROOT / "price_mixer" / "services" / "review_queue.py"
-    ).read_text(encoding="utf-8")
-    runtime = (
-        ROOT / "price_mixer" / "services" / "review_queue_runtime.py"
-    ).read_text(encoding="utf-8")
+    service = (ROOT / "price_mixer" / "services" / "review_queue.py").read_text(encoding="utf-8")
+    runtime = (ROOT / "price_mixer" / "services" / "review_queue_runtime.py").read_text(encoding="utf-8")
 
     assert "ReviewQueueRuntime" in app_py
     assert "class ReviewQueueRuntime" in runtime
@@ -360,12 +324,8 @@ def test_manual_review_queue_operations_stay_out_of_app_monolith():
 
 def test_ntech_review_presets_and_extra_handlers_stay_out_of_app_monolith():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
-    presets = (
-        ROOT / "price_mixer" / "services" / "ntech_review_presets.py"
-    ).read_text(encoding="utf-8")
-    extra = (
-        ROOT / "price_mixer" / "services" / "ntech_review_extra.py"
-    ).read_text(encoding="utf-8")
+    presets = (ROOT / "price_mixer" / "services" / "ntech_review_presets.py").read_text(encoding="utf-8")
+    extra = (ROOT / "price_mixer" / "services" / "ntech_review_extra.py").read_text(encoding="utf-8")
 
     assert "NTECH_CATEGORY_REVIEW_CONFIG" in presets
     assert "def build_core_review_start_kwargs" in presets

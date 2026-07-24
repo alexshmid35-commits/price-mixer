@@ -20,6 +20,7 @@ import time
 import urllib.request
 from difflib import SequenceMatcher
 from functools import wraps
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
@@ -159,6 +160,7 @@ from price_mixer.services.session_read_model import (
     stats_context as _session_stats_context,
 )
 from price_mixer.services.session_snapshots import CompatibilitySnapshotWriter
+from price_mixer.services.static_assets import StaticAssetRegistry
 from price_mixer.services.export_pipeline import (
     build_preexport_quality_payload as _export_build_preexport_quality_payload,
     dataframe_to_export_dataframe as _export_dataframe_to_xlsx,
@@ -166,6 +168,7 @@ from price_mixer.services.export_pipeline import (
     prepare_consolidated_for_export as _export_prepare_consolidated,
     resolve_service_account_json_path as _export_resolve_service_account_json_path,
 )
+from price_mixer.services.export_delivery import ExportDeliveryRuntime
 from price_mixer.services.export_runtime import ExportRuntime
 from price_mixer.services.export_stats import (
     export_rows_from_json_rows as _export_stats_rows_from_json_rows,
@@ -539,6 +542,19 @@ APP_LOGGER = get_logger("price_mixer.app")
 register_request_logging(app, APP_LOGGER)
 app.register_blueprint(api_bp)
 RUNTIME_PATHS = ensure_runtime_directories(get_runtime_paths())
+STATIC_ASSETS = StaticAssetRegistry(Path(app.static_folder or "static"))
+
+
+@app.template_global()
+def asset_url(filename):
+    relative = str(filename or "").lstrip("/")
+    return url_for(
+        "static",
+        filename=relative,
+        v=STATIC_ASSETS.version(relative),
+    )
+
+
 SESSION_PRODUCT_STORE = SessionProductStore(
     RUNTIME_PATHS.data_file("session_products.db"),
     mode=os.getenv("PRICE_MIXER_SESSION_STORE_MODE", "off"),
@@ -566,6 +582,7 @@ LAST_ACTIVE_SESSION_DIR = None
 QUALITY_STATS_CACHE = {}
 SESSION_READ_MODEL = SessionReadModel(store=SESSION_PRODUCT_STORE)
 EXPORT_RUNTIME = None
+EXPORT_DELIVERY_RUNTIME = None
 LAST_UPLOAD_CLEANUP_TS = 0
 
 
@@ -588,6 +605,12 @@ OPENAI_AUTOSORT_MODEL = os.getenv("OPENAI_AUTOSORT_MODEL", "gpt-4o-mini").strip(
 OPENAI_AUTOSORT_TIMEOUT_SEC = 9
 OPENAI_AUTOSORT_MAX_ITEMS = 320
 OPENAI_AUTOSORT_MAX_WORKERS = 10
+EXPERIMENTAL_NOID_MAX_WORKERS = _coerce_int(
+    os.getenv("PRICE_MIXER_NOID_WORKERS", "4"),
+    4,
+    min_value=1,
+    max_value=12,
+)
 AI_CATEGORY_CACHE = {}
 AI_CATEGORY_CACHE_LOCK = threading.Lock()
 
@@ -721,7 +744,13 @@ def require_basic_auth():
 def add_no_cache_headers(response):
     try:
         if request.path.startswith("/static/"):
-            response.headers["Cache-Control"] = "public, max-age=300"
+            relative = request.path.removeprefix("/static/")
+            if STATIC_ASSETS.is_current(relative, request.args.get("v")):
+                response.headers["Cache-Control"] = (
+                    "public, max-age=31536000, immutable"
+                )
+            else:
+                response.headers["Cache-Control"] = "public, max-age=300"
             response.headers.pop("Pragma", None)
             response.headers.pop("Expires", None)
         else:
@@ -3753,7 +3782,7 @@ def _get_experimental_noid_runtime():
                     is_ntech_pevm_name=_is_tgpc_pc_name,
                     is_iven_pevm_name=_is_iven_pc_name,
                 ),
-                max_workers=8,
+                max_workers=EXPERIMENTAL_NOID_MAX_WORKERS,
             )
     return EXPERIMENTAL_NOID_RUNTIME
 
@@ -5305,6 +5334,20 @@ def _get_export_runtime():
     return EXPORT_RUNTIME
 
 
+def _get_export_delivery_runtime():
+    global EXPORT_DELIVERY_RUNTIME
+    export_runtime = _get_export_runtime()
+    if (
+        EXPORT_DELIVERY_RUNTIME is None
+        or EXPORT_DELIVERY_RUNTIME.export_runtime is not export_runtime
+    ):
+        EXPORT_DELIVERY_RUNTIME = ExportDeliveryRuntime(
+            export_runtime=export_runtime,
+            dataframe_to_export_dataframe=_export_dataframe_to_xlsx,
+        )
+    return EXPORT_DELIVERY_RUNTIME
+
+
 def _format_export_category_counts(counts):
     return _export_stats_format_category_counts(counts, category_sort_key=_category_sort_key)
 
@@ -5351,21 +5394,30 @@ def _hidden_row_count_for_session(session_dir):
 
 
 def download():
-    settings = load_app_settings()
-    export_cfg = settings.get("export", {})
-    base_name = str(export_cfg.get("price_name", "consolidated_price")).strip() or "consolidated_price"
-    download_name = f"{base_name}.xlsx"
     session_dir = get_active_session_dir()
     if session_dir:
-        filtered, download_name = _prepare_consolidated_for_export(session_dir)
-        if filtered is not None:
-            visible_path = Path(session_dir) / "consolidated_price_visible.xlsx"
-            export_df = _export_dataframe_to_xlsx(filtered)
-            export_df.to_excel(visible_path, index=False, float_format="%.2f")
-            return send_file(str(visible_path), as_attachment=True, download_name=download_name)
+        payload, download_name = _get_export_delivery_runtime().xlsx(
+            session_dir,
+            _export_settings_with_onliner_structure(),
+            revision_token=_session_revision_token(session_dir),
+        )
+        if payload is not None:
+            return send_file(
+                BytesIO(payload),
+                as_attachment=True,
+                download_name=download_name,
+                mimetype=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+            )
         output_path = Path(session_dir) / "consolidated_price.xlsx"
         if output_path.exists():
-            return send_file(str(output_path), as_attachment=True, download_name=download_name)
+            return send_file(
+                str(output_path),
+                as_attachment=True,
+                download_name=download_name,
+            )
     return redirect(url_for("main_api.index", error="Файл не найден. Загрузите прайсы заново."))
 
 

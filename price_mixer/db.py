@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from price_mixer.runtime_paths import get_runtime_paths
+from price_mixer.services.sqlite_runtime import connect_sqlite
 
 
 DB_PATH = get_runtime_paths().data_file("onliner_products.db")
@@ -23,9 +24,12 @@ class Database:
         self.path = Path(path) if path else DB_PATH
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.path), check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return connect_sqlite(
+            self.path,
+            check_same_thread=False,
+            row_factory=sqlite3.Row,
+            wal=True,
+        )
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Cursor:
         with _DB_LOCK:

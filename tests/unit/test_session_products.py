@@ -223,3 +223,23 @@ def test_dashboard_projection_is_persistent_and_revision_scoped(tmp_path):
         session,
         ("sql", 2, ("visibility", 2)),
     ) is None
+
+
+def test_without_id_category_query_uses_composite_index(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="r1")
+
+    with store.connection() as connection:
+        plan = connection.execute(
+            "EXPLAIN QUERY PLAN "
+            "SELECT category_key,MIN(category),COUNT(*) "
+            "FROM session_products "
+            "WHERE session_id=? AND onliner_id='' "
+            "GROUP BY category_key ORDER BY category_key",
+            (store.session_id(session),),
+        ).fetchall()
+
+    details = " ".join(str(row["detail"]) for row in plan)
+    assert "idx_session_products_noid_category" in details
+    assert "USE TEMP B-TREE" not in details

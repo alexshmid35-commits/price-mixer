@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from price_mixer.runtime_paths import get_runtime_paths
+from price_mixer.services.sqlite_runtime import connect_sqlite
 
 DEFAULT_JOB_DB = get_runtime_paths().data_file("jobs.db")
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
@@ -344,8 +345,11 @@ class DurableJobQueue:
 
     @contextmanager
     def _connection(self, *, immediate=False):
-        connection = sqlite3.connect(self.path, timeout=30)
-        connection.row_factory = sqlite3.Row
+        connection = connect_sqlite(
+            self.path,
+            row_factory=sqlite3.Row,
+            wal=True,
+        )
         try:
             if immediate:
                 connection.execute("BEGIN IMMEDIATE")

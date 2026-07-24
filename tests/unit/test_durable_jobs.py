@@ -129,6 +129,20 @@ def test_worker_heartbeat_reports_liveness_without_exposing_worker_id(tmp_path):
     assert "host-user-private" not in str(healthy)
 
 
+def test_worker_delegates_scheduled_database_maintenance(tmp_path):
+    calls = []
+    worker = DurableWorker(
+        DurableJobQueue(tmp_path / "jobs.db"),
+        uploads_dir=tmp_path / "uploads",
+        database_maintainer=lambda data_dir: calls.append(data_dir) or [{"status": "ok"}],
+    )
+
+    result = worker.maintain_databases()
+
+    assert result == [{"status": "ok"}]
+    assert len(calls) == 1
+
+
 def test_external_xlsx_backend_is_processed_outside_flask(tmp_path):
     uploads = tmp_path / "uploads"
     session = uploads / "session"

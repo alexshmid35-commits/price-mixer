@@ -1,8 +1,8 @@
-<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Price Mixer — Результат</title><script>
+{% macro static_asset(path) -%}{{ asset_url(path) if asset_url is defined else '/static/' ~ path }}{%- endmacro %}<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Price Mixer — Результат</title><script>
 if (window.location.protocol === 'file:' && /\/templates\/result\.html$/i.test(window.location.pathname)) {
     window.location.replace('http://127.0.0.1:5001/');
 }
-</script><link rel="stylesheet" href="/static/vendor/jquery.dataTables-1.13.7.min.css"><link rel="stylesheet" href="/static/css/result.css"><style># ============================================================
+</script><link rel="stylesheet" href="{{ static_asset('vendor/jquery.dataTables-1.13.7.min.css') }}"><link rel="stylesheet" href="{{ static_asset('css/result.css') }}"><style># ============================================================
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: Arial, 'Segoe UI', sans-serif; background: #f8fafd; color: #202124; }
@@ -1369,29 +1369,29 @@ a:hover { text-decoration: underline; }
   </div>
 </div>
 
-<script src="/static/vendor/jquery-3.7.1.min.js"></script>
-<script src="/static/vendor/jquery.dataTables-1.13.7.min.js"></script>
-<script src="/static/js/result-utils.js"></script>
-<script src="/static/js/result-page.js"></script>
-<script src="/static/js/result-stats.js"></script>
-<script src="/static/js/result-badges.js"></script>
-<script src="/static/js/result-candidates.js"></script>
-<script src="/static/js/result-noid.js"></script>
-<script src="/static/js/result-main-table.js"></script>
-<script src="/static/js/result-id-checks.js"></script>
-<script src="/static/js/result-pricing.js"></script>
-<script src="/static/js/result-preview.js"></script>
-<script src="/static/js/result-validation.js"></script>
-<script src="/static/js/result-quality.js"></script>
-<script src="/static/js/result-review-queue.js"></script>
-<script src="/static/js/result-verify-ids.js"></script>
-<script src="/static/js/result-onliner-db.js"></script>
-<script src="/static/js/result-snapshot.js"></script>
-<script src="/static/js/result-actions.js"></script>
-<script src="/static/js/result-pevm.js"></script>
-<script src="/static/js/result-experimental-noid.js"></script>
+<script src="{{ static_asset('vendor/jquery-3.7.1.min.js') }}"></script>
+<script src="{{ static_asset('vendor/jquery.dataTables-1.13.7.min.js') }}"></script>
+<script src="{{ static_asset('js/result-utils.js') }}"></script>
+<script src="{{ static_asset('js/result-page.js') }}"></script>
+<script src="{{ static_asset('js/result-stats.js') }}"></script>
+<script src="{{ static_asset('js/result-badges.js') }}"></script>
+<script src="{{ static_asset('js/result-candidates.js') }}"></script>
+<script src="{{ static_asset('js/result-noid.js') }}"></script>
+<script src="{{ static_asset('js/result-main-table.js') }}"></script>
+<script src="{{ static_asset('js/result-id-checks.js') }}"></script>
+<script src="{{ static_asset('js/result-pricing.js') }}"></script>
+<script src="{{ static_asset('js/result-preview.js') }}"></script>
+<script src="{{ static_asset('js/result-validation.js') }}"></script>
+<script src="{{ static_asset('js/result-quality.js') }}"></script>
+<script src="{{ static_asset('js/result-review-queue.js') }}"></script>
+<script src="{{ static_asset('js/result-verify-ids.js') }}"></script>
+<script src="{{ static_asset('js/result-onliner-db.js') }}"></script>
+<script src="{{ static_asset('js/result-snapshot.js') }}"></script>
+<script src="{{ static_asset('js/result-actions.js') }}"></script>
+<script src="{{ static_asset('js/result-pevm.js') }}"></script>
+<script src="{{ static_asset('js/result-experimental-noid.js') }}"></script>
 <script>
-var dtLang = {url:'/static/vendor/datatables-ru-1.13.7.json'};
+var dtLang = {url:'{{ static_asset("vendor/datatables-ru-1.13.7.json") }}'};
 var tblMain = null;
 var mainTableRows = [];
 var mainTableServerSide = true;

@@ -82,3 +82,32 @@ def test_export_runtime_coalesces_concurrent_preparation():
 
     assert len(calls) == 1
     assert [frame.at[0, "Название"] for frame, _name in results] == ["A"] * 6
+
+
+def test_export_runtime_caches_immutable_artifact():
+    calls = []
+    render_calls = []
+    runtime = _runtime(calls)
+
+    def render(dataframe):
+        render_calls.append(True)
+        return str(dataframe.at[0, "Название"]).encode()
+
+    first = runtime.build_artifact(
+        "session",
+        {"name": "A"},
+        revision_token=("r", 1),
+        artifact_key="xlsx",
+        builder=render,
+    )
+    second = runtime.build_artifact(
+        "session",
+        {"name": "A"},
+        revision_token=("r", 1),
+        artifact_key="xlsx",
+        builder=render,
+    )
+
+    assert first == second == (b"A", "price.xlsx")
+    assert len(calls) == 1
+    assert len(render_calls) == 1

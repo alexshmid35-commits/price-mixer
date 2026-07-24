@@ -24,6 +24,7 @@ from price_mixer.services.product_normalization import (
     normalize_catalog_category_name,
     normalize_onliner_id,
 )
+from price_mixer.services.sqlite_runtime import connect_sqlite
 
 LOGGER = get_logger("price_mixer.database.catalog")
 
@@ -72,11 +73,12 @@ def quarantine_onliner_db(db_file=None):
 
 def db_connect(db_file=None):
     db_file = db_file or ONLINER_DB_FILE
-    conn = sqlite3.connect(str(db_file), check_same_thread=False, timeout=15)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect_sqlite(
+        db_file,
+        check_same_thread=False,
+        row_factory=sqlite3.Row,
+        wal=True,
+    )
 
 
 @contextmanager

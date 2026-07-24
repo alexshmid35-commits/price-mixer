@@ -22,6 +22,7 @@ from price_mixer.services.api_sources import (
     get_source_runtime,
 )
 from price_mixer.services.durable_jobs import DurableJobQueue
+from price_mixer.services.sqlite_runtime import maintain_runtime_databases
 from price_mixer.services.supplier_snapshots import append_api_fetch_history
 from price_mixer.settings import load_app_settings
 from price_mixer.workers.xlsx_writer import write_snapshot
@@ -39,6 +40,7 @@ class DurableWorker:
         retry_delay=5,
         settings_loader=load_app_settings,
         history_appender=append_api_fetch_history,
+        database_maintainer=maintain_runtime_databases,
     ):
         self.queue = queue_backend or DurableJobQueue()
         self.uploads_dir = Path(uploads_dir or get_runtime_paths().uploads_dir).resolve()
@@ -46,6 +48,10 @@ class DurableWorker:
         self.retry_delay = max(0, float(retry_delay))
         self.settings_loader = settings_loader
         self.history_appender = history_appender
+        self.database_maintainer = database_maintainer
+
+    def maintain_databases(self):
+        return self.database_maintainer(get_runtime_paths().data_dir)
 
     def run_once(self):
         self.queue.heartbeat(self.worker_id)
@@ -180,6 +186,15 @@ def main(argv=None):
         now = time.monotonic()
         if now - last_prune >= 3600:
             worker.queue.prune_completed()
+            try:
+                results = worker.maintain_databases()
+                LOGGER.info(
+                    "SQLite maintenance completed databases=%s busy=%s",
+                    len(results),
+                    sum(int(item.get("busy", 0) or 0) for item in results),
+                )
+            except Exception:
+                LOGGER.exception("SQLite maintenance failed")
             last_prune = now
         if not worker.run_once():
             stopped.wait(max(0.05, float(args.poll_interval)))

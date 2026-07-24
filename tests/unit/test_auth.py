@@ -4,7 +4,7 @@ import base64
 
 import pytest
 
-from app import app
+from app import STATIC_ASSETS, app
 
 
 @pytest.fixture
@@ -49,7 +49,21 @@ def test_index_requires_auth(client):
 def test_index_with_valid_auth(client):
     """Index should be accessible with valid credentials."""
     token = base64.b64encode(b"admin:test-password").decode()
-    resp = client.get("/", headers={
-        "Authorization": "Basic " + token
-    })
+    resp = client.get("/", headers={"Authorization": "Basic " + token})
     assert resp.status_code in (200, 302)  # 302 redirect if no active session
+
+
+def test_versioned_static_asset_gets_immutable_cache(client):
+    token = base64.b64encode(b"admin:test-password").decode()
+    headers = {"Authorization": "Basic " + token}
+    version = STATIC_ASSETS.version("css/result.css")
+
+    versioned = client.get(
+        f"/static/css/result.css?v={version}",
+        headers=headers,
+    )
+    unversioned = client.get("/static/css/result.css", headers=headers)
+
+    assert versioned.status_code == 200
+    assert versioned.headers["Cache-Control"] == ("public, max-age=31536000, immutable")
+    assert unversioned.headers["Cache-Control"] == "public, max-age=300"

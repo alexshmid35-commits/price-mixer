@@ -12,8 +12,9 @@ from contextlib import closing
 from pathlib import Path
 
 from price_mixer.product_schema import ProductWireIndex
+from price_mixer.services.sqlite_runtime import connect_sqlite
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 PAGE_COLUMNS = {
     0: "onliner_id",
     1: "name_key",
@@ -49,15 +50,13 @@ class SessionProductStore:
 
     def connection(self):
         self._ensure_schema()
-        connection = sqlite3.connect(
-            str(self.path),
-            timeout=30,
+        return connect_sqlite(
+            self.path,
             check_same_thread=False,
+            row_factory=sqlite3.Row,
+            wal=True,
+            foreign_keys=True,
         )
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout=30000")
-        connection.execute("PRAGMA foreign_keys=ON")
-        return connection
 
     def _ensure_schema(self):
         if self._initialized or not self.enabled:
@@ -66,10 +65,14 @@ class SessionProductStore:
             if self._initialized:
                 return
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            with closing(sqlite3.connect(str(self.path), timeout=30)) as connection:
-                connection.execute("PRAGMA journal_mode=WAL")
-                connection.execute("PRAGMA synchronous=NORMAL")
-                connection.execute("PRAGMA busy_timeout=30000")
+            with closing(
+                connect_sqlite(
+                    self.path,
+                    row_factory=sqlite3.Row,
+                    wal=True,
+                    foreign_keys=True,
+                )
+            ) as connection:
                 connection.executescript(
                     """
                     CREATE TABLE IF NOT EXISTS session_product_meta (
@@ -121,6 +124,12 @@ class SessionProductStore:
                         ON session_products(session_id, price);
                     CREATE INDEX IF NOT EXISTS idx_session_products_name
                         ON session_products(session_id, name_key);
+                    CREATE INDEX IF NOT EXISTS idx_session_products_noid_category
+                        ON session_products(
+                            session_id,
+                            onliner_id,
+                            category_key
+                        );
                     CREATE VIRTUAL TABLE IF NOT EXISTS session_products_fts
                         USING fts5(
                             session_id UNINDEXED,
@@ -699,9 +708,10 @@ class SessionProductStore:
         if hidden_keys:
             with self.connection() as connection:
                 category_rows = connection.execute(
-                    "SELECT category,COUNT(*) AS item_count FROM session_products "
+                    "SELECT category_key,MIN(category) AS category,"
+                    "COUNT(*) AS item_count FROM session_products "
                     f"WHERE {base_where_sql} AND onliner_id='' "
-                    "GROUP BY category ORDER BY category_key",
+                    "GROUP BY category_key ORDER BY category_key",
                     base_params,
                 ).fetchall()
                 duplicate_rows = connection.execute(
