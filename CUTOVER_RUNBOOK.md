@@ -1,7 +1,7 @@
-# Local parallel cutover
+# Local cutover and rollback
 
-The migration copy runs independently from the working mixer. The legacy
-instance remains on port 5001 and the candidate instance uses port 5012.
+The migration copy was accepted and switched to the primary local ports on
+2026-07-24. The legacy source/runtime remain unchanged and stopped.
 
 ## Start candidate
 
@@ -35,10 +35,10 @@ exists only in the instance where it was made.
 scripts/stop_parallel_local.sh /absolute/path/to/runtime
 ```
 
-Stopping the candidate does not touch the legacy process, source directory, or
-runtime. Rollback is therefore immediate: continue using port 5001. Keep the
-verified baseline backup until final acceptance and a fresh post-cutover
-backup are complete.
+Stopping the candidate does not touch the legacy source directory or runtime.
+Before rollback after any new user changes, create a verified backup of the
+current candidate runtime so new ID decisions cannot be lost. Then start the
+original legacy launcher only as an emergency fallback.
 
 ## Primary local launcher
 

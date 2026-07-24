@@ -4,10 +4,11 @@ Date: 2026-07-24
 
 ## Safety boundary
 
-- The working local mixer remains unchanged on `127.0.0.1:5001`.
-- Development uses the separate `codex/migration-complete` branch.
+- The accepted candidate now owns `127.0.0.1:5001`; its parser owns 5055.
+- Development and release history remain on `codex/migration-complete`.
 - Durable state was copied from a verified backup, never moved.
 - Secrets are not included in the Git repository or verified runtime backup.
+- The legacy source, runtime and original launcher remain unchanged for rollback.
 
 ## Runtime verification
 
@@ -86,16 +87,16 @@ category; automatic confirmation remains disabled.
 - JavaScript syntax: all application and E2E JavaScript files passed.
 - Playwright E2E: 3/3 passed with isolated web and external durable worker.
 
-## Parallel acceptance
+## Cutover acceptance
 
-- Legacy mixer remains available at `http://127.0.0.1:5001`.
-- Candidate mixer is available at `http://127.0.0.1:5012`.
-- Candidate web and durable worker pass authenticated production smoke 4/4.
+- Candidate mixer is the primary instance at `http://127.0.0.1:5001`.
+- Parser is healthy at `http://127.0.0.1:5055`.
+- Primary web and durable worker pass authenticated production smoke 4/4.
 - A real session matches the legacy counters for without-ID, duplicate-ID,
   export, and hidden rows.
 - Real XLSX download succeeds and opens as an OOXML workbook.
-- The stop/start cycle was exercised: candidate processes and port stop
-  cleanly while the legacy mixer remains available, then restart successfully.
+- The unified stop/start cycle was exercised for web, worker and parser; all
+  ports stop cleanly and restart successfully.
 - Secrets are ignored by Git and stored with owner-only file permissions.
 
 The existing local password remains valid on both instances. It is shorter
