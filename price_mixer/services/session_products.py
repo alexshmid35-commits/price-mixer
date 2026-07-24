@@ -11,6 +11,8 @@ import time
 from contextlib import closing
 from pathlib import Path
 
+from price_mixer.product_schema import ProductWireIndex
+
 SCHEMA_VERSION = 6
 PAGE_COLUMNS = {
     0: "onliner_id",
@@ -763,20 +765,20 @@ def rows_digest(normalized_rows):
 def _normalize_row(row, position):
     padded = list(row if isinstance(row, list | tuple) else []) + [""] * 10
     try:
-        row_index = int(padded[8])
+        row_index = int(padded[ProductWireIndex.ROW_INDEX])
     except (TypeError, ValueError):
         row_index = int(position)
     values = {
-        "onliner_id": _text(padded[0]),
-        "name": _text(padded[1]),
-        "price": _number(padded[2]),
-        "supplier": _text(padded[3]),
-        "warranty": _text(padded[4]),
-        "delivery_days": _text(padded[5]),
-        "rrc": _number(padded[6]),
-        "no_discount": _number(padded[7]),
+        "onliner_id": _text(padded[ProductWireIndex.ONLINER_ID]),
+        "name": _text(padded[ProductWireIndex.NAME]),
+        "price": _number(padded[ProductWireIndex.PRICE]),
+        "supplier": _text(padded[ProductWireIndex.SUPPLIER]),
+        "warranty": _text(padded[ProductWireIndex.WARRANTY]),
+        "delivery_days": _text(padded[ProductWireIndex.DELIVERY_DAYS]),
+        "rrc": _number(padded[ProductWireIndex.RRC]),
+        "no_discount": _number(padded[ProductWireIndex.NO_DISCOUNT]),
         "row_index": row_index,
-        "category": _text(padded[9]),
+        "category": _text(padded[ProductWireIndex.CATEGORY]),
         "source_position": int(position),
     }
     values["row_json"] = json.dumps(

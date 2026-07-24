@@ -73,6 +73,7 @@ from price_mixer.api.settings_routes import create_settings_bp
 from price_mixer.api.source_routes import create_source_bp
 from price_mixer.logging_config import configure_price_mixer_logging, get_logger
 from price_mixer.process_lock import try_acquire_pid_lock
+from price_mixer.product_schema import ProductField, ProductWireIndex
 from price_mixer.request_logging import register_request_logging
 from price_mixer.runtime_paths import ensure_runtime_directories, get_runtime_paths
 from price_mixer.services.api_sources import (
@@ -148,8 +149,9 @@ from price_mixer.services.consolidated_io import (
 from price_mixer.services.consolidated_paging import (
     ConsolidatedPagingCache,
 )
-from price_mixer.services.session_products import SessionProductStore
+from price_mixer.services.session_data_runtime import SessionDataRuntime
 from price_mixer.services.session_page_runtime import SessionPageRuntime
+from price_mixer.services.session_products import SessionProductStore
 from price_mixer.services.session_snapshots import CompatibilitySnapshotWriter
 from price_mixer.services.export_pipeline import (
     build_preexport_quality_payload as _export_build_preexport_quality_payload,
@@ -543,6 +545,15 @@ COMPATIBILITY_SNAPSHOT_WRITER = CompatibilitySnapshotWriter(
 )
 PRICE_DATA_MUTATION_LOCK = threading.RLock()
 BACKGROUND_XLSX_WORKER = create_background_xlsx_worker()
+SESSION_DATA_RUNTIME = SessionDataRuntime(
+    store=SESSION_PRODUCT_STORE,
+    snapshot_writer=COMPATIBILITY_SNAPSHOT_WRITER,
+    xlsx_worker=BACKGROUND_XLSX_WORKER,
+    rows_from_dataframe=_consolidated_json_rows,
+    dataframe_from_rows=_consolidated_dataframe_from_rows,
+    compatibility_json_writer=_consolidated_write_json,
+    logger=APP_LOGGER,
+)
 DURABLE_JOB_QUEUE = getattr(BACKGROUND_XLSX_WORKER, "queue", None)
 BACKGROUND_STARTED = False
 BACKGROUND_LOCK_HANDLE = None
@@ -2623,18 +2634,11 @@ def _delivery_days_from_row(row):
 
 
 def write_consolidated_json(df, json_path):
-    json_path = Path(json_path)
-    rows = _consolidated_json_rows(df)
-    if SESSION_PRODUCT_STORE.canonical:
-        sync = SESSION_PRODUCT_STORE.reconcile_rows(
-            json_path.parent,
-            rows,
-            source_revision=f"mutation:{time.time_ns()}",
-        )
-        COMPATIBILITY_SNAPSHOT_WRITER.schedule(json_path.parent, rows)
-        _clear_corrected_json_rows_cache()
-        return sync
-    return _consolidated_write_json(df, json_path)
+    return SESSION_DATA_RUNTIME.write_json(
+        df,
+        json_path,
+        on_change=_clear_corrected_json_rows_cache,
+    )
 
 
 def read_consolidated_json_rows(json_path):
@@ -2658,17 +2662,11 @@ def read_market_refresh_df(session_dir):
 
 def read_consolidated_json_fast_df(session_dir):
     """Read current SQL rows first, then compatibility JSON/XLSX."""
-    if SESSION_PRODUCT_STORE.canonical:
-        rows = SESSION_PRODUCT_STORE.read_rows(session_dir)
-        if rows is not None:
-            return _consolidated_dataframe_from_rows(rows)
-    try:
-        df = _consolidated_json_df(session_dir, apply_visibility=False)
-        if df is not None:
-            return df
-    except Exception:
-        pass
-    return read_consolidated_df(session_dir)
+    return SESSION_DATA_RUNTIME.read_fast_dataframe(
+        session_dir,
+        json_reader=lambda path: _consolidated_json_df(path, apply_visibility=False),
+        xlsx_reader=read_consolidated_df,
+    )
 
 
 def read_consolidated_export_df(session_dir):
@@ -2678,13 +2676,7 @@ def read_consolidated_export_df(session_dir):
 
 
 def _has_consolidated_session_file(session_dir):
-    if not session_dir:
-        return False
-    session_path = Path(session_dir)
-    sql_meta = SESSION_PRODUCT_STORE.metadata(session_path) if SESSION_PRODUCT_STORE.canonical else None
-    if sql_meta and bool(sql_meta.get("complete")):
-        return True
-    return (session_path / "consolidated.json").exists() or (session_path / "consolidated_price.xlsx").exists()
+    return SESSION_DATA_RUNTIME.has_session(session_dir)
 
 
 def write_consolidated_df(session_dir, df):
@@ -2692,29 +2684,16 @@ def write_consolidated_df(session_dir, df):
 
 
 def write_consolidated_df_background(session_dir, df, *, label="consolidated"):
-    if SESSION_PRODUCT_STORE.canonical:
-        return {
-            "state": "deferred",
-            "running": False,
-            "label": str(label),
-            "message": "XLSX будет сформирован из актуальной SQL-сессии при экспорте.",
-        }
-    try:
-        return BACKGROUND_XLSX_WORKER.enqueue(session_dir, df, label=label)
-    except Exception as exc:
-        APP_LOGGER.exception("background XLSX queue failed label=%s", label)
-        return {"state": "error", "running": False, "message": str(exc)}
+    return SESSION_DATA_RUNTIME.write_dataframe_background(
+        session_dir,
+        df,
+        label=label,
+    )
 
 
 def _background_xlsx_status_payload():
     session_dir = get_active_session_dir()
-    if SESSION_PRODUCT_STORE.canonical:
-        return {
-            "state": "deferred",
-            "running": False,
-            "message": "Рабочие данные актуальны в SQL; XLSX создаётся при экспорте.",
-        }
-    return BACKGROUND_XLSX_WORKER.status(session_dir)
+    return SESSION_DATA_RUNTIME.xlsx_status(session_dir)
 
 
 def _worker_status_payload():
@@ -2859,13 +2838,6 @@ def upload():
 
 def _correct_consolidated_json_rows(session_dir, *, apply_visibility=True):
     cons_json_path = Path(session_dir) / "consolidated.json"
-    sql_rows = (
-        SESSION_PRODUCT_STORE.read_rows(session_dir)
-        if SESSION_PRODUCT_STORE.canonical
-        else None
-    )
-    if sql_rows is None and not cons_json_path.exists():
-        return None
     cache_key = _corrected_json_rows_cache_key(session_dir, cons_json_path, apply_visibility)
     cached_rows = _get_corrected_json_rows_cache(cache_key)
     if cached_rows is not None:
@@ -2884,42 +2856,57 @@ def _correct_consolidated_json_rows(session_dir, *, apply_visibility=True):
             }
             corrected_data = [
                 row for row in corrected_data
-                if _canonical_ui_category_name(row[9]) not in hidden_categories
+                if _canonical_ui_category_name(row[ProductWireIndex.CATEGORY]) not in hidden_categories
             ]
         _set_corrected_json_rows_cache(cache_key, corrected_data)
         return corrected_data
-    cons_data = sql_rows if sql_rows is not None else read_consolidated_json_rows(cons_json_path)
+    cons_data = SESSION_DATA_RUNTIME.read_rows(
+        session_dir,
+        cons_json_path,
+        compatibility_rows_reader=read_consolidated_json_rows,
+    )
     if not cons_data or not all(len(row) >= 10 for row in cons_data):
         return None
 
-    catalog_categories = db_get_categories_by_ids([row[0] for row in cons_data])
-    exact_name_categories = db_get_categories_by_exact_names([row[1] for row in cons_data])
+    catalog_categories = db_get_categories_by_ids([row[ProductWireIndex.ONLINER_ID] for row in cons_data])
+    exact_name_categories = db_get_categories_by_exact_names([row[ProductWireIndex.NAME] for row in cons_data])
     overrides = load_category_overrides()
     explicit_overrides = load_manual_category_overrides()
     known_raw_infer_categories = _supplier_visibility_known_categories()
     corrected_data = []
     for row in cons_data:
-        current_category = normalize_internal_category_name(row[9])
+        current_category = normalize_internal_category_name(row[ProductWireIndex.CATEGORY])
         row_category_name = current_category
-        row_item = {"Название": row[1], "Поставщик": row[3], "Категория": current_category}
+        row_item = {
+            ProductField.NAME: row[ProductWireIndex.NAME],
+            ProductField.SUPPLIER: row[ProductWireIndex.SUPPLIER],
+            ProductField.CATEGORY: current_category,
+        }
         explicit_category = _repair_saved_category_for_product(
             _category_override_for_row(row_item, explicit_overrides),
-            row[1],
+            row[ProductWireIndex.NAME],
         )
         manual_category = _repair_saved_category_for_product(
             _category_override_for_row(row_item, overrides),
-            row[1],
+            row[ProductWireIndex.NAME],
         )
         if _looks_like_raw_supplier_category(explicit_category):
             explicit_category = ""
         if _looks_like_raw_supplier_category(manual_category):
             manual_category = ""
-        onliner_id = normalize_onliner_id(row[0])
-        catalog_category = _native_catalog_category_for_product(catalog_categories.get(onliner_id, ""), row[1])
-        exact_name_category = _native_catalog_category_for_product(exact_name_categories.get(_normalize_name_key(row[1]), ""), row[1])
+        onliner_id = normalize_onliner_id(row[ProductWireIndex.ONLINER_ID])
+        product_name = row[ProductWireIndex.NAME]
+        catalog_category = _native_catalog_category_for_product(catalog_categories.get(onliner_id, ""), product_name)
+        exact_name_category = _native_catalog_category_for_product(
+            exact_name_categories.get(_normalize_name_key(product_name), ""),
+            product_name,
+        )
         raw_inferred_category = ""
         if _looks_like_raw_supplier_category(current_category):
-            raw_inferred_category = _raw_supplier_inferred_category_for_product(row[1], known_raw_infer_categories)
+            raw_inferred_category = _raw_supplier_inferred_category_for_product(
+                product_name,
+                known_raw_infer_categories,
+            )
         if onliner_id and catalog_category:
             row_category_name = catalog_category
         elif onliner_id and exact_name_category:
@@ -2929,14 +2916,24 @@ def _correct_consolidated_json_rows(session_dir, *, apply_visibility=True):
         elif explicit_category:
             row_category_name = explicit_category
         elif onliner_id:
-            row_category_name = _strong_inferred_category_for_product(row[1]) or _sorting_review_category(current_category)
+            row_category_name = _strong_inferred_category_for_product(product_name) or _sorting_review_category(
+                current_category
+            )
         elif raw_inferred_category:
             row_category_name = raw_inferred_category
         elif manual_category:
             row_category_name = manual_category
-        elif _json_row_needs_category_repair(row[1], row[9], current_category):
+        elif _json_row_needs_category_repair(
+            product_name,
+            row[ProductWireIndex.CATEGORY],
+            current_category,
+        ):
             category = _category_row_category(
-                {"Название": row[1], "Поставщик": row[3], "Категория": current_category},
+                {
+                    ProductField.NAME: product_name,
+                    ProductField.SUPPLIER: row[ProductWireIndex.SUPPLIER],
+                    ProductField.CATEGORY: current_category,
+                },
                 overrides={},
                 build_item_category_keys=build_item_category_keys,
                 infer_category=infer_category,
@@ -2945,9 +2942,9 @@ def _correct_consolidated_json_rows(session_dir, *, apply_visibility=True):
         row_category_name = _canonical_ui_category_name(row_category_name)
         if _looks_like_raw_supplier_category(row_category_name):
             row_category_name = _sorting_review_category(row_category_name)
-        if row_category_name != row[9]:
+        if row_category_name != row[ProductWireIndex.CATEGORY]:
             row = list(row)
-            row[9] = row_category_name
+            row[ProductWireIndex.CATEGORY] = row_category_name
         corrected_data.append(row)
 
     _set_corrected_json_rows_cache(cache_key, corrected_data)
@@ -3229,18 +3226,18 @@ def _consolidated_json_df(session_dir, *, apply_visibility=True):
     indexes = []
     for pos, row in enumerate(rows):
         records.append({
-            "OnlinerID": row[0],
-            "Название": row[1],
-            "Цена": row[2],
-            "Поставщик": row[3],
-            "Гарантия": row[4],
-            "Дней доставки": row[5],
-            "РРЦ": row[6],
-            "Цена без скидки": row[7],
-            "Категория": row[9],
+            ProductField.ONLINER_ID: row[ProductWireIndex.ONLINER_ID],
+            ProductField.NAME: row[ProductWireIndex.NAME],
+            ProductField.PRICE: row[ProductWireIndex.PRICE],
+            ProductField.SUPPLIER: row[ProductWireIndex.SUPPLIER],
+            ProductField.WARRANTY: row[ProductWireIndex.WARRANTY],
+            ProductField.DELIVERY_DAYS: row[ProductWireIndex.DELIVERY_DAYS],
+            ProductField.RRC: row[ProductWireIndex.RRC],
+            ProductField.NO_DISCOUNT: row[ProductWireIndex.NO_DISCOUNT],
+            ProductField.CATEGORY: row[ProductWireIndex.CATEGORY],
         })
         try:
-            indexes.append(int(row[8]))
+            indexes.append(int(row[ProductWireIndex.ROW_INDEX]))
         except Exception:
             indexes.append(pos)
     return pd.DataFrame(records, index=indexes)

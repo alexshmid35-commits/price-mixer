@@ -4,14 +4,14 @@ import json
 import math
 import os
 import re
-import threading
 import tempfile
+import threading
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from price_mixer.product_schema import ProductField
+from price_mixer.product_schema import ProductField, ProductWireIndex
 
 
 _CONSOLIDATED_IO_LOCK = threading.RLock()
@@ -122,20 +122,20 @@ def dataframe_from_consolidated_json_rows(rows):
             continue
         padded = list(row) + [""] * max(0, 10 - len(row))
         try:
-            row_index = int(padded[8])
+            row_index = int(padded[ProductWireIndex.ROW_INDEX])
         except Exception:
             row_index = pos
         index.append(row_index)
         records.append({
-            ProductField.ONLINER_ID: safe_json_value(padded[0]),
-            ProductField.NAME: safe_json_value(padded[1]),
-            ProductField.PRICE: safe_json_value(padded[2]),
-            ProductField.SUPPLIER: safe_json_value(padded[3]),
-            ProductField.WARRANTY: safe_json_value(padded[4]),
-            ProductField.DELIVERY_DAYS: safe_json_value(padded[5]),
-            ProductField.RRC: safe_json_value(padded[6]),
-            ProductField.NO_DISCOUNT: safe_json_value(padded[7]),
-            ProductField.CATEGORY: safe_json_value(padded[9]),
+            ProductField.ONLINER_ID: safe_json_value(padded[ProductWireIndex.ONLINER_ID]),
+            ProductField.NAME: safe_json_value(padded[ProductWireIndex.NAME]),
+            ProductField.PRICE: safe_json_value(padded[ProductWireIndex.PRICE]),
+            ProductField.SUPPLIER: safe_json_value(padded[ProductWireIndex.SUPPLIER]),
+            ProductField.WARRANTY: safe_json_value(padded[ProductWireIndex.WARRANTY]),
+            ProductField.DELIVERY_DAYS: safe_json_value(padded[ProductWireIndex.DELIVERY_DAYS]),
+            ProductField.RRC: safe_json_value(padded[ProductWireIndex.RRC]),
+            ProductField.NO_DISCOUNT: safe_json_value(padded[ProductWireIndex.NO_DISCOUNT]),
+            ProductField.CATEGORY: safe_json_value(padded[ProductWireIndex.CATEGORY]),
         })
     return pd.DataFrame(records, index=index)
 
