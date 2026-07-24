@@ -70,3 +70,20 @@ Synthetic benchmark results are written by `scripts/benchmark_local.py`.
 - Python: 774 tests passed.
 - JavaScript syntax: `result-pevm.js` and `result-main-table.js` passed.
 - Playwright E2E: 3/3 passed with isolated web and external durable worker.
+
+## Parallel acceptance
+
+- Legacy mixer remains available at `http://127.0.0.1:5001`.
+- Candidate mixer is available at `http://127.0.0.1:5012`.
+- Candidate web and durable worker pass authenticated production smoke 4/4.
+- A real session matches the legacy counters for without-ID, duplicate-ID,
+  export, and hidden rows.
+- Real XLSX download succeeds and opens as an OOXML workbook.
+- The stop/start cycle was exercised: candidate processes and port stop
+  cleanly while the legacy mixer remains available, then restart successfully.
+- Secrets are ignored by Git and stored with owner-only file permissions.
+
+The existing local password remains valid on both instances. It is shorter
+than the 12-character production policy, so a future public/server cutover
+must rotate it before production preflight; the local candidate was not
+silently given a different password.
