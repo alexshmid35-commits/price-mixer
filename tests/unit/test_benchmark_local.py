@@ -18,22 +18,29 @@ def test_benchmark_size_reports_bounded_page_and_payload_reduction():
     assert result["uncached_rows"] == 100
     assert result["page_payload_bytes"] < result["full_payload_bytes"]
     assert result["warm_page_p95_ms"] >= 0
+    assert result["cpu_ms"] >= 0
+    assert result["peak_python_bytes"] > 0
+    assert result["max_rss_delta_kb"] >= 0
 
 
 def test_compare_reports_flags_only_timing_regression_above_threshold():
     baseline = {
-        "results": [{
-            "rows": 500,
-            "warm_page_p95_ms": 10,
-            "page_payload_bytes": 100,
-        }],
+        "results": [
+            {
+                "rows": 500,
+                "warm_page_p95_ms": 10,
+                "page_payload_bytes": 100,
+            }
+        ],
     }
     current = {
-        "results": [{
-            "rows": 500,
-            "warm_page_p95_ms": 13,
-            "page_payload_bytes": 1000,
-        }],
+        "results": [
+            {
+                "rows": 500,
+                "warm_page_p95_ms": 13,
+                "page_payload_bytes": 1000,
+            }
+        ],
     }
 
     regressions = benchmark.compare_reports(
@@ -42,10 +49,12 @@ def test_compare_reports_flags_only_timing_regression_above_threshold():
         threshold_percent=20,
     )
 
-    assert regressions == [{
-        "rows": 500,
-        "metric": "warm_page_p95_ms",
-        "baseline": 10.0,
-        "current": 13.0,
-        "increase_percent": 30.0,
-    }]
+    assert regressions == [
+        {
+            "rows": 500,
+            "metric": "warm_page_p95_ms",
+            "baseline": 10.0,
+            "current": 13.0,
+            "increase_percent": 30.0,
+        }
+    ]

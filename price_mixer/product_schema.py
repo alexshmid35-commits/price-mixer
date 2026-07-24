@@ -15,6 +15,7 @@ class ProductField:
     RRC = "РРЦ"
     NO_DISCOUNT = "Цена без скидки"
     CATEGORY = "Категория"
+    LINK = "Ссылка"
 
 
 class ProductWireIndex(IntEnum):

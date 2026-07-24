@@ -172,6 +172,25 @@ def test_manual_id_actions_stay_in_service_module():
     assert "rollback_last_manual_id_change(" not in app_py
 
 
+def test_manual_id_specialized_search_stays_in_runtime_module():
+    app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+    runtime = (
+        ROOT
+        / "price_mixer"
+        / "services"
+        / "manual_id_search_runtime.py"
+    ).read_text(encoding="utf-8")
+    handler = app_py.split(
+        "def _manual_id_specialized_candidates",
+        1,
+    )[1].split("def _get_manual_id_search_runtime", 1)[0]
+
+    assert "class ManualIdSearchRuntime" in runtime
+    assert "_get_manual_id_search_runtime().candidates" in handler
+    assert "mode_by_category" not in handler
+    assert "handler.build_row_result" not in handler
+
+
 def test_category_extra_endpoints_stay_in_runtime_module():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
     runtime = (ROOT / "price_mixer" / "services" / "category_extra_runtime.py").read_text(encoding="utf-8")
@@ -244,6 +263,41 @@ def test_category_preview_items_stays_in_management_runtime():
     assert "load_onliner_market_cache" not in app_preview
 
 
+def test_category_wire_row_repair_stays_in_runtime_module():
+    app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+    runtime = (
+        ROOT
+        / "price_mixer"
+        / "services"
+        / "category_repair_runtime.py"
+    ).read_text(encoding="utf-8")
+    app_repair = app_py.split(
+        "def _correct_consolidated_json_rows",
+        1,
+    )[1].split("def _get_category_repair_runtime", 1)[0]
+
+    assert "class CategoryRepairRuntime" in runtime
+    assert "_get_category_repair_runtime().correct_rows" in app_repair
+    assert "for row in cons_data" not in app_repair
+    assert "def json_row_needs_category_repair" in runtime
+
+
+def test_sorting_reparse_lifecycle_stays_in_runtime_module():
+    app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+    runtime = (
+        ROOT
+        / "price_mixer"
+        / "services"
+        / "sorting_reparse_runtime.py"
+    ).read_text(encoding="utf-8")
+
+    assert "class SortingReparseRuntime" in runtime
+    assert "subprocess.Popen(" in runtime
+    assert "subprocess.Popen(" not in app_py
+    assert "sorting_reparse_monitor_running" not in app_py
+    assert "_get_sorting_reparse_runtime().run()" in app_py
+
+
 def test_id_validation_start_status_stays_in_runtime_module():
     app_py = (ROOT / "app.py").read_text(encoding="utf-8")
     runtime = (ROOT / "price_mixer" / "services" / "id_validation_runtime.py").read_text(encoding="utf-8")
@@ -302,10 +356,17 @@ def test_ntech_review_scan_stays_in_runtime_module():
 
     assert "NTechReviewRuntime" in app_py
     assert "class NTechReviewRuntime" in runtime
-    app_runtime = app_py.split("def _get_ntech_review_runtime", 1)[1].split("_NTECH_REVIEW_HANDLERS = None", 1)[0]
+    app_runtime = app_py.split(
+        "def _get_ntech_review_runtime",
+        1,
+    )[1].split("def _ntech_review_queue_start_response", 1)[0]
+    app_start = app_py.split(
+        "def _ntech_review_queue_start_response",
+        1,
+    )[1].split("def _get_ntech_review_handlers", 1)[0]
     assert "run_review_queue_scan(" not in app_runtime
     assert "build_review_queue_finish_payload(" not in app_runtime
-    assert "_get_ntech_review_runtime().start" in app_runtime
+    assert "_get_ntech_review_runtime().start" in app_start
 
 
 def test_manual_review_queue_operations_stay_out_of_app_monolith():

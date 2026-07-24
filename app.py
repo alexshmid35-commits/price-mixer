@@ -13,8 +13,6 @@ import os
 import queue
 import re
 import shutil
-import subprocess
-import sys
 import threading
 import time
 import urllib.request
@@ -136,6 +134,10 @@ from price_mixer.services.category_pipeline import (
     save_visibility_map as _category_save_visibility,
     update_category_visibility as _category_update_visibility,
 )
+from price_mixer.services.category_repair_runtime import (
+    CategoryRepairRuntime,
+    json_row_needs_category_repair as _category_json_row_needs_repair,
+)
 from price_mixer.services.consolidated_io import (
     consolidated_json_rows as _consolidated_json_rows,
     dataframe_from_consolidated_json_rows as _consolidated_dataframe_from_rows,
@@ -160,7 +162,9 @@ from price_mixer.services.session_read_model import (
     stats_context as _session_stats_context,
 )
 from price_mixer.services.session_snapshots import CompatibilitySnapshotWriter
+from price_mixer.services.service_container import ServiceContainer
 from price_mixer.services.static_assets import StaticAssetRegistry
+from price_mixer.services.upload_runtime import UploadInputError, UploadRuntime
 from price_mixer.services.export_pipeline import (
     build_preexport_quality_payload as _export_build_preexport_quality_payload,
     dataframe_to_export_dataframe as _export_dataframe_to_xlsx,
@@ -227,6 +231,7 @@ from price_mixer.services.market_refresh import (
     start_market_refresh as _market_refresh_start,
 )
 from price_mixer.services.manual_id_runtime import ManualIdRuntime
+from price_mixer.services.manual_id_search_runtime import ManualIdSearchRuntime
 from price_mixer.services.manual_id_store import (
     append_id_change_journal as _manual_store_append_journal,
     is_manually_confirmed_id as _manual_store_is_confirmed_id,
@@ -392,6 +397,7 @@ from price_mixer.services.sorting_reparse_client import (
     parser_error_message as _sorting_reparse_error_message,
     response_json_payload as _sorting_reparse_json_payload,
 )
+from price_mixer.services.sorting_reparse_runtime import SortingReparseRuntime
 from price_mixer.services.source_runtime import SourceRuntime
 from price_mixer.services.review_matching import (
     board_brand_model_key as _review_board_brand_model_key,
@@ -543,6 +549,7 @@ register_request_logging(app, APP_LOGGER)
 app.register_blueprint(api_bp)
 RUNTIME_PATHS = ensure_runtime_directories(get_runtime_paths())
 STATIC_ASSETS = StaticAssetRegistry(Path(app.static_folder or "static"))
+APP_SERVICES = ServiceContainer()
 
 
 @app.template_global()
@@ -1566,13 +1573,10 @@ def _fetch_onliner_market_stats_b2b(onliner_id, product_name="", category_name="
     )
 
 
-_ONLINER_MARKET_RUNTIME = None
-
-
 def _get_onliner_market_runtime():
-    global _ONLINER_MARKET_RUNTIME
-    if _ONLINER_MARKET_RUNTIME is None:
-        _ONLINER_MARKET_RUNTIME = OnlinerMarketRuntime(
+    return APP_SERVICES.get_or_create(
+        "onliner_market",
+        lambda: OnlinerMarketRuntime(
             api_get=onliner_api_get,
             get_product_by_id=db_get_product_by_id,
             infer_category=infer_category,
@@ -1585,8 +1589,8 @@ def _get_onliner_market_runtime():
             load_auto_refresh_settings=load_auto_refresh_settings,
             save_auto_refresh_settings=save_auto_refresh_settings,
             get_last_session_dir=lambda: LAST_ACTIVE_SESSION_DIR,
-        )
-    return _ONLINER_MARKET_RUNTIME
+        ),
+    )
 
 
 def onliner_b2b_search_candidates(local_name, category_name="", limit=30):
@@ -2814,37 +2818,36 @@ def _infer_supplier_from_filename(filename, app_settings=None):
     )
 
 
+def _get_upload_runtime():
+    return APP_SERVICES.get_or_create(
+        "upload",
+        lambda: UploadRuntime(
+            create_session_dir=_create_session_dir,
+            load_app_settings=load_app_settings,
+            build_file_entries=_upload_files_build_entries,
+            infer_supplier_from_filename=_infer_supplier_from_filename,
+            process_supplier_files=_process_supplier_files,
+            remove_session_dir=lambda path: shutil.rmtree(
+                path,
+                ignore_errors=True,
+            ),
+            logger=APP_LOGGER,
+        ),
+    )
+
+
 def upload():
     wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
-    files = request.files.getlist("files")
-    APP_LOGGER.info(
-        "upload received file_count=%s",
-        len([item for item in files if item and item.filename]),
-    )
-    if not files or all(not f.filename for f in files):
-        if wants_json:
-            return jsonify({"status": "error", "message": "Не загружено ни одного файла"}), 400
-        return redirect(url_for("main_api.index", error="Не загружено ни одного файла"))
-
-    session_id, session_dir = _create_session_dir()
-    app_settings = load_app_settings()
     try:
-        file_entries = _upload_files_build_entries(
-            files,
+        result = _get_upload_runtime().process(
+            request.files.getlist("files"),
             request.form,
-            session_dir,
-            app_settings,
-            _infer_supplier_from_filename,
         )
-    except ValueError as exc:
-        shutil.rmtree(session_dir, ignore_errors=True)
+    except UploadInputError as exc:
         message = str(exc)[:180]
         if wants_json:
             return jsonify({"status": "error", "message": message}), 400
         return redirect(url_for("main_api.index", error=message))
-
-    try:
-        result = _process_supplier_files(file_entries, session_id=session_id, session_dir=session_dir)
     except Exception as _upload_err:
         APP_LOGGER.exception("upload processing failed")
         message = "Не удалось обработать файлы: " + str(_upload_err)[:120]
@@ -2852,317 +2855,142 @@ def upload():
             return jsonify({"status": "error", "message": message}), 500
         return redirect(url_for("main_api.index", error=message))
 
-    _finalize_processed_session(result["session_id"], result["session_dir"], result["output_path"])
-    redirect_url = url_for("main_api.result_page", sid=result["session_id"])
+    _finalize_processed_session(
+        result.session_id,
+        result.session_dir,
+        result.output_path,
+    )
+    redirect_url = url_for("main_api.result_page", sid=result.session_id)
     if wants_json:
         return jsonify({"status": "ok", "redirect_url": redirect_url})
     return redirect(redirect_url)
 
 
 def _correct_consolidated_json_rows(session_dir, *, apply_visibility=True):
-    cons_json_path = Path(session_dir) / "consolidated.json"
-    cache_key = _corrected_json_rows_cache_key(session_dir, cons_json_path, apply_visibility)
-    cached_rows = _get_corrected_json_rows_cache(cache_key)
-    if cached_rows is not None:
-        return cached_rows
-    if apply_visibility:
-        corrected_data = _correct_consolidated_json_rows(session_dir, apply_visibility=False)
-        if corrected_data is None:
-            return None
-        visibility_map = load_visibility_map(session_dir)
-        if visibility_map:
-            hidden_categories = {
-                _canonical_ui_category_name(category)
-                for categories in visibility_map.values()
-                for category in categories
-                if str(category or "").strip()
-            }
-            corrected_data = [
-                row for row in corrected_data
-                if _canonical_ui_category_name(row[ProductWireIndex.CATEGORY]) not in hidden_categories
-            ]
-        _set_corrected_json_rows_cache(cache_key, corrected_data)
-        return corrected_data
-    cons_data = SESSION_DATA_RUNTIME.read_rows(
+    return _get_category_repair_runtime().correct_rows(
         session_dir,
-        cons_json_path,
-        compatibility_rows_reader=read_consolidated_json_rows,
+        apply_visibility=apply_visibility,
     )
-    if not cons_data or not all(len(row) >= 10 for row in cons_data):
-        return None
 
-    catalog_categories = db_get_categories_by_ids([row[ProductWireIndex.ONLINER_ID] for row in cons_data])
-    exact_name_categories = db_get_categories_by_exact_names([row[ProductWireIndex.NAME] for row in cons_data])
-    overrides = load_category_overrides()
-    explicit_overrides = load_manual_category_overrides()
-    known_raw_infer_categories = _supplier_visibility_known_categories()
-    corrected_data = []
-    for row in cons_data:
-        current_category = normalize_internal_category_name(row[ProductWireIndex.CATEGORY])
-        row_category_name = current_category
-        row_item = {
-            ProductField.NAME: row[ProductWireIndex.NAME],
-            ProductField.SUPPLIER: row[ProductWireIndex.SUPPLIER],
-            ProductField.CATEGORY: current_category,
-        }
-        explicit_category = _repair_saved_category_for_product(
-            _category_override_for_row(row_item, explicit_overrides),
-            row[ProductWireIndex.NAME],
-        )
-        manual_category = _repair_saved_category_for_product(
-            _category_override_for_row(row_item, overrides),
-            row[ProductWireIndex.NAME],
-        )
-        if _looks_like_raw_supplier_category(explicit_category):
-            explicit_category = ""
-        if _looks_like_raw_supplier_category(manual_category):
-            manual_category = ""
-        onliner_id = normalize_onliner_id(row[ProductWireIndex.ONLINER_ID])
-        product_name = row[ProductWireIndex.NAME]
-        catalog_category = _native_catalog_category_for_product(catalog_categories.get(onliner_id, ""), product_name)
-        exact_name_category = _native_catalog_category_for_product(
-            exact_name_categories.get(_normalize_name_key(product_name), ""),
-            product_name,
-        )
-        raw_inferred_category = ""
-        if _looks_like_raw_supplier_category(current_category):
-            raw_inferred_category = _raw_supplier_inferred_category_for_product(
-                product_name,
-                known_raw_infer_categories,
-            )
-        if onliner_id and catalog_category:
-            row_category_name = catalog_category
-        elif onliner_id and exact_name_category:
-            row_category_name = exact_name_category
-        elif not onliner_id and exact_name_category:
-            row_category_name = exact_name_category
-        elif explicit_category:
-            row_category_name = explicit_category
-        elif onliner_id:
-            row_category_name = _strong_inferred_category_for_product(product_name) or _sorting_review_category(
-                current_category
-            )
-        elif raw_inferred_category:
-            row_category_name = raw_inferred_category
-        elif manual_category:
-            row_category_name = manual_category
-        elif _json_row_needs_category_repair(
-            product_name,
-            row[ProductWireIndex.CATEGORY],
-            current_category,
-        ):
-            category = _category_row_category(
-                {
-                    ProductField.NAME: product_name,
-                    ProductField.SUPPLIER: row[ProductWireIndex.SUPPLIER],
-                    ProductField.CATEGORY: current_category,
-                },
-                overrides={},
-                build_item_category_keys=build_item_category_keys,
-                infer_category=infer_category,
-            )
-            row_category_name = normalize_internal_category_name(category)
-        row_category_name = _canonical_ui_category_name(row_category_name)
-        if _looks_like_raw_supplier_category(row_category_name):
-            row_category_name = _sorting_review_category(row_category_name)
-        if row_category_name != row[ProductWireIndex.CATEGORY]:
-            row = list(row)
-            row[ProductWireIndex.CATEGORY] = row_category_name
-        corrected_data.append(row)
 
-    _set_corrected_json_rows_cache(cache_key, corrected_data)
-    return corrected_data
+def _get_category_repair_runtime():
+    return APP_SERVICES.get_or_create(
+        "category_repair",
+        lambda: CategoryRepairRuntime(
+            read_rows=SESSION_DATA_RUNTIME.read_rows,
+            compatibility_rows_reader=read_consolidated_json_rows,
+            cache_key=_corrected_json_rows_cache_key,
+            get_cached_rows=_get_corrected_json_rows_cache,
+            set_cached_rows=_set_corrected_json_rows_cache,
+            load_visibility_map=load_visibility_map,
+            canonical_ui_category_name=_canonical_ui_category_name,
+            get_categories_by_ids=db_get_categories_by_ids,
+            get_categories_by_exact_names=db_get_categories_by_exact_names,
+            load_category_overrides=load_category_overrides,
+            load_manual_category_overrides=load_manual_category_overrides,
+            supplier_visibility_known_categories=(
+                _supplier_visibility_known_categories
+            ),
+            normalize_internal_category_name=normalize_internal_category_name,
+            repair_saved_category_for_product=(
+                _repair_saved_category_for_product
+            ),
+            category_override_for_row=_category_override_for_row,
+            looks_like_raw_supplier_category=(
+                _looks_like_raw_supplier_category
+            ),
+            normalize_onliner_id=normalize_onliner_id,
+            native_catalog_category_for_product=(
+                _native_catalog_category_for_product
+            ),
+            normalize_name_key=_normalize_name_key,
+            raw_supplier_inferred_category_for_product=(
+                _raw_supplier_inferred_category_for_product
+            ),
+            strong_inferred_category_for_product=(
+                _strong_inferred_category_for_product
+            ),
+            sorting_review_category=_sorting_review_category,
+            json_row_needs_repair=_json_row_needs_category_repair,
+            row_category=_category_row_category,
+            build_item_category_keys=build_item_category_keys,
+            infer_category=infer_category,
+        ),
+    )
 
 
 SORTING_REPARSE_URL = os.getenv(
     "SORTING_REPARSE_URL",
     "http://127.0.0.1:5055/api/price-mixer",
 ).rstrip("/")
-SORTING_REPARSE_MONITOR_LOCK = threading.Lock()
-SORTING_REPARSE_START_LOCK = threading.Lock()
-sorting_reparse_monitor_running = False
-
-
 def _sorting_reparse_service_healthy(timeout=1.0):
-    try:
-        response = requests.get(f"{SORTING_REPARSE_URL}/status", timeout=timeout)
-        return bool(response.ok)
-    except requests.RequestException:
-        return False
+    return _get_sorting_reparse_runtime().service_healthy(timeout=timeout)
 
 
 def _sorting_reparse_launch_spec():
-    configured_dir = os.getenv("ONLINER_PARSER_DIR", "").strip()
-    candidate_dirs = []
-    if configured_dir:
-        candidate_dirs.append(Path(configured_dir).expanduser())
-    candidate_dirs.extend([
-        Path(__file__).resolve().parent.parent / "onliner-parser",
-        Path("/opt/onliner-parser"),
-    ])
-    for parser_dir in candidate_dirs:
-        script_path = parser_dir / "ui_server.py"
-        if not script_path.is_file():
-            continue
-        configured_python = os.getenv("ONLINER_PARSER_PYTHON", "").strip()
-        python_candidates = [
-            Path(configured_python).expanduser() if configured_python else None,
-            parser_dir / ".venv" / "bin" / "python",
-            parser_dir / ".venv" / "bin" / "python3",
-            Path(sys.executable),
-        ]
-        python_path = next((path for path in python_candidates if path and path.is_file()), None)
-        if python_path:
-            return [str(python_path), str(script_path)], parser_dir, parser_dir / "parser_stdout.log"
-    raise RuntimeError(
-        "не найден onliner-parser/ui_server.py; укажи ONLINER_PARSER_DIR в .env"
-    )
+    return _get_sorting_reparse_runtime().launch_spec()
 
 
 def _ensure_sorting_reparse_service(start_timeout=8.0):
-    if _sorting_reparse_service_healthy():
-        return
-    with SORTING_REPARSE_START_LOCK:
-        if _sorting_reparse_service_healthy():
-            return
-        command, parser_dir, log_path = _sorting_reparse_launch_spec()
-        with log_path.open("a", encoding="utf-8") as log_file:
-            subprocess.Popen(
-                command,
-                cwd=str(parser_dir),
-                stdin=subprocess.DEVNULL,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-                close_fds=True,
-            )
-        deadline = time.monotonic() + max(float(start_timeout), 1.0)
-        while time.monotonic() < deadline:
-            if _sorting_reparse_service_healthy(timeout=0.8):
-                return
-            time.sleep(0.2)
-    raise RuntimeError("парсер не запустился за отведённое время; проверь parser_stdout.log")
+    return _get_sorting_reparse_runtime().ensure_service(
+        start_timeout=start_timeout
+    )
 
 
 def _sorting_reparse_items():
-    session_dir = get_active_session_dir()
-    rows = _correct_consolidated_json_rows(session_dir) if session_dir else None
-    items = []
-    seen = set()
-    for row in rows or []:
-        oid = normalize_onliner_id(row[0])
-        category = str(row[9] or "").strip()
-        if not oid or oid in seen or not _is_sorting_review_category(category):
-            continue
-        seen.add(oid)
-        items.append({
-            "onliner_id": oid,
-            "name": str(row[1] or "").strip(),
-            "parent_category": category[len(SORTING_REVIEW_PREFIX):].strip(),
-        })
-    return items
+    return _get_sorting_reparse_runtime().sorting_items()
 
 
 def _all_onliner_reparse_items():
-    session_dir = get_active_session_dir()
-    rows = _correct_consolidated_json_rows(session_dir, apply_visibility=False) if session_dir else None
-    known_categories = db_get_categories_by_ids([row[0] for row in rows or []])
-    items = []
-    seen = set()
-    for row in rows or []:
-        oid = normalize_onliner_id(row[0])
-        if not oid or oid in seen:
-            continue
-        current_category = str(row[9] or "").strip()
-        known_category = _native_catalog_category_for_product(known_categories.get(oid, ""), row[1])
-        if known_category and not _is_sorting_review_category(current_category):
-            seen.add(oid)
-            continue
-        seen.add(oid)
-        items.append({
-            "onliner_id": oid,
-            "name": str(row[1] or "").strip(),
-            "parent_category": current_category,
-            "strict_api": True,
-        })
-    return items
+    return _get_sorting_reparse_runtime().all_items()
 
 
 def _write_sorting_reparse_results_to_db(results):
-    written = _onliner_db_update_categories(results) if results else 0
-    if written:
-        _clear_corrected_json_rows_cache()
-    return written
+    return _get_sorting_reparse_runtime().write_results(results)
 
 
 def _start_sorting_reparse_monitor():
-    global sorting_reparse_monitor_running
-    with SORTING_REPARSE_MONITOR_LOCK:
-        if sorting_reparse_monitor_running:
-            return
-        sorting_reparse_monitor_running = True
-
-    def worker():
-        global sorting_reparse_monitor_running
-        try:
-            while True:
-                try:
-                    response = requests.get(f"{SORTING_REPARSE_URL}/status", timeout=15)
-                    payload = _sorting_reparse_json_payload(response)
-                    results = payload.get("results") or []
-                    _write_sorting_reparse_results_to_db(results)
-                    if not payload.get("is_running"):
-                        break
-                except Exception as exc:
-                    APP_LOGGER.warning("sorting reparse monitor failed: %s", exc)
-                time.sleep(2)
-        finally:
-            with SORTING_REPARSE_MONITOR_LOCK:
-                sorting_reparse_monitor_running = False
-
-    threading.Thread(target=worker, daemon=True).start()
+    return _get_sorting_reparse_runtime().start_monitor()
 
 
 def _sorting_reparse_run_payload():
-    items = _sorting_reparse_items()
-    if not items:
-        return {"ok": False, "error": "Очередь «Требует сортировки» пуста."}, 400
-    try:
-        _ensure_sorting_reparse_service()
-        response = requests.post(f"{SORTING_REPARSE_URL}/run", json={"items": items}, timeout=15)
-        payload = _sorting_reparse_json_payload(response)
-        if response.ok and payload.get("ok"):
-            _start_sorting_reparse_monitor()
-        return payload, response.status_code
-    except Exception as exc:
-        return {"ok": False, "error": _sorting_reparse_error_message(exc)}, 502
+    return _get_sorting_reparse_runtime().run()
 
 
 def _sorting_reparse_run_all_payload():
-    items = _all_onliner_reparse_items()
-    if not items:
-        return {"ok": False, "error": "В текущем прайсе нет товаров с OnlinerID."}, 400
-    try:
-        _ensure_sorting_reparse_service()
-        response = requests.post(f"{SORTING_REPARSE_URL}/run", json={"items": items}, timeout=15)
-        payload = _sorting_reparse_json_payload(response)
-        if response.ok and payload.get("ok"):
-            _start_sorting_reparse_monitor()
-        return payload, response.status_code
-    except Exception as exc:
-        return {"ok": False, "error": _sorting_reparse_error_message(exc)}, 502
+    return _get_sorting_reparse_runtime().run(all_items=True)
 
 
 def _sorting_reparse_status_payload():
-    try:
-        response = requests.get(f"{SORTING_REPARSE_URL}/status", timeout=15)
-        payload = _sorting_reparse_json_payload(response)
-    except Exception as exc:
-        return {"ok": False, "error": _sorting_reparse_error_message(exc)}, 502
-    results = payload.get("results") or []
-    payload["written_to_db"] = _write_sorting_reparse_results_to_db(results)
-    payload["ok"] = True
-    return payload, response.status_code
+    return _get_sorting_reparse_runtime().status()
+
+
+def _get_sorting_reparse_runtime():
+    return APP_SERVICES.get_or_create(
+        "sorting_reparse",
+        lambda: SortingReparseRuntime(
+            base_url=SORTING_REPARSE_URL,
+            project_root=Path(__file__).resolve().parent,
+            get_active_session_dir=lambda: get_active_session_dir(),
+            correct_rows=lambda target, **kwargs: (
+                _correct_consolidated_json_rows(target, **kwargs)
+            ),
+            normalize_onliner_id=normalize_onliner_id,
+            is_sorting_review_category=_is_sorting_review_category,
+            sorting_review_prefix=SORTING_REVIEW_PREFIX,
+            get_categories_by_ids=lambda ids: db_get_categories_by_ids(ids),
+            native_catalog_category_for_product=(
+                _native_catalog_category_for_product
+            ),
+            update_categories=lambda results: (
+                _onliner_db_update_categories(results)
+            ),
+            clear_corrected_rows_cache=_clear_corrected_json_rows_cache,
+            response_json_payload=_sorting_reparse_json_payload,
+            parser_error_message=_sorting_reparse_error_message,
+            logger=APP_LOGGER,
+        ),
+    )
 
 
 app.register_blueprint(create_operations_bp(
@@ -3177,68 +3005,16 @@ app.register_blueprint(create_operations_bp(
 
 
 def _json_row_needs_category_repair(name, raw_category, current_category):
-    if not current_category:
-        return True
-    raw = str(raw_category or "").strip()
-    if normalize_internal_category_name(raw) != raw:
-        return True
-    current = str(current_category or "").strip()
-    text = str(name or "").strip().lower()
-    text_without_prefix = re.sub(r"^\[[^\]]+\]\s*", "", text).strip()
-    inferred = _canonical_ui_category_name(normalize_catalog_category_name(infer_category(name)))
-    if _should_repair_catalog_category(current, inferred):
-        return True
-    if current != "Материнская плата" and re.search(r"^\s*(?:mb|motherboard|мат\s+плат|материнск)\b", text_without_prefix):
-        return True
-    if current in {"БУМАГА", "АКСЕССУАРЫ"}:
-        return True
-    if current in {"WEB", "РАЗВЕТВИТЕЛЬ", "НАБОР"}:
-        return True
-    if current in {"SSD", "Накопители USB", "Монитор"} and (
-        "радиатор" in text or "охлажд" in text or "термопаст" in text
-        or "web камера" in text or "webcam" in text or "разветвитель usb" in text
-        or "usb hub" in text or "dvdrw" in text or "dvd-rw" in text
-        or "набор" in text or "ssd" in text or "hdd" in text
-        or "жестк" in text or "винчестер" in text
-    ):
-        return True
-    if current in {"Монитор", "Периферия", "Аксессуары"} and (
-        "кронштейн" in text
-    ):
-        return True
-    if current == "Кронштейны" and "кронштейн" not in text and (
-        "монитор" in text or "ips" in text or "hdmi" in text or "displayport" in text
-        or "гц" in text or "hz" in text or re.search(r"\d{3,4}\s*x\s*\d{3,4}", text)
-    ):
-        return True
-    if current == "Кабели и переходники" and (
-        "web" in text or "кам" in text or "клавиат" in text or "keyboard" in text
-        or "науш" in text or "гарнитур" in text or "wi-fi" in text or "wifi" in text
-        or "bluetooth" in text or "сетевой usb" in text
-    ):
-        return True
-    if current == "Периферия" and (
-        "монитор" in text or "мышь" in text or "mouse" in text or "клавиат" in text or "keyboard" in text
-    ):
-        return True
-    if current == "Наушники" and (
-        "колонки" in text or "акустик" in text or "soundbar" in text or "speaker" in text
-    ):
-        return True
-    if current == "Системный блок" and re.search(r"\bddr[345]\b|оперативн|\bram\b|so[\s\-]?dimm|\bdimm\b", text_without_prefix):
-        if not re.search(r"\bкомпьютер\b|системный\s+блок|\bпэвм\b|\btgpc\b|iven\s+(?:by|gaming|office|home|pro|ultra)|\bcore\s+i[3579]\b|\bryzen\b", text_without_prefix):
-            return True
-    if current in {"27", "24", "32"} and (
-        "ips" in text or "hdmi" in text or "displayport" in text or "гц" in text or "hz" in text
-    ):
-        return True
-    if current in {"Видеокарта", "SSD", "Процессор", "Оперативная память"} and (
-        "компьютер" in text or "моноблок" in text or "системный блок" in text or "пэвм tgpc" in text
-    ):
-        return True
-    if current == "SSD" and "шасси" in text:
-        return True
-    return False
+    return _category_json_row_needs_repair(
+        name,
+        raw_category,
+        current_category,
+        normalize_internal_category_name=normalize_internal_category_name,
+        canonical_ui_category_name=_canonical_ui_category_name,
+        normalize_catalog_category_name=normalize_catalog_category_name,
+        infer_category=infer_category,
+        should_repair_catalog_category=_should_repair_catalog_category,
+    )
 
 
 def _consolidated_json_df(session_dir, *, apply_visibility=True):
@@ -3495,29 +3271,32 @@ app.register_blueprint(create_main_bp(
 
 
 def _get_manual_id_runtime():
-    return ManualIdRuntime(
-        read_consolidated_json_fast_df=read_consolidated_json_fast_df,
-        read_consolidated_df=read_consolidated_df,
-        write_consolidated_df=lambda target, frame: write_consolidated_df_background(
-            target,
-            frame,
-            label="manual-id",
+    return APP_SERVICES.get_or_create(
+        "manual_id",
+        lambda: ManualIdRuntime(
+            read_consolidated_json_fast_df=read_consolidated_json_fast_df,
+            read_consolidated_df=read_consolidated_df,
+            write_consolidated_df=lambda target, frame: write_consolidated_df_background(
+                target,
+                frame,
+                label="manual-id",
+            ),
+            write_consolidated_json=write_consolidated_json,
+            load_id_cache=load_id_cache,
+            save_id_cache=save_id_cache,
+            sanitize_id_cache=_sanitize_id_cache,
+            load_manual_id_bindings=load_manual_id_bindings,
+            save_manual_id_bindings=save_manual_id_bindings,
+            load_review_queue=load_review_queue,
+            save_review_queue=save_review_queue,
+            append_id_change_journal=append_id_change_journal,
+            load_id_change_journal=load_id_change_journal,
+            save_id_change_journal=save_id_change_journal,
+            fetch_onliner_product_info=fetch_onliner_product_info,
+            normalize_name_key=_normalize_name_key,
+            coerce_bool=_coerce_bool,
+            get_id_cache_key_for_name=_get_id_cache_key_for_name,
         ),
-        write_consolidated_json=write_consolidated_json,
-        load_id_cache=load_id_cache,
-        save_id_cache=save_id_cache,
-        sanitize_id_cache=_sanitize_id_cache,
-        load_manual_id_bindings=load_manual_id_bindings,
-        save_manual_id_bindings=save_manual_id_bindings,
-        load_review_queue=load_review_queue,
-        save_review_queue=save_review_queue,
-        append_id_change_journal=append_id_change_journal,
-        load_id_change_journal=load_id_change_journal,
-        save_id_change_journal=save_id_change_journal,
-        fetch_onliner_product_info=fetch_onliner_product_info,
-        normalize_name_key=_normalize_name_key,
-        coerce_bool=_coerce_bool,
-        get_id_cache_key_for_name=_get_id_cache_key_for_name,
     )
 
 
@@ -3971,22 +3750,25 @@ def _raise_if_validate_clean_cancelled():
 
 
 def _get_ntech_review_runtime():
-    return NTechReviewRuntime(
-        get_active_session_dir=get_active_session_dir,
-        has_consolidated_session_file=_has_consolidated_session_file,
-        consolidated_json_df=_consolidated_json_df,
-        read_consolidated_json_fast_df=read_consolidated_json_fast_df,
-        ensure_category_column=ensure_category_column,
-        precomputed_row_category=_precomputed_row_category,
-        row_category=row_category,
-        get_handler=_ntech_review_handler,
-        load_review_queue=load_review_queue,
-        save_review_queue=save_review_queue,
-        normalize_catalog_category_name=normalize_catalog_category_name,
-        normalize_onliner_id=normalize_onliner_id,
-        status=id_review_status,
-        status_lock=ID_REVIEW_STATUS_LOCK,
-        clock=time.time,
+    return APP_SERVICES.get_or_create(
+        "ntech_review",
+        lambda: NTechReviewRuntime(
+            get_active_session_dir=get_active_session_dir,
+            has_consolidated_session_file=_has_consolidated_session_file,
+            consolidated_json_df=_consolidated_json_df,
+            read_consolidated_json_fast_df=read_consolidated_json_fast_df,
+            ensure_category_column=ensure_category_column,
+            precomputed_row_category=_precomputed_row_category,
+            row_category=row_category,
+            get_handler=_ntech_review_handler,
+            load_review_queue=load_review_queue,
+            save_review_queue=save_review_queue,
+            normalize_catalog_category_name=normalize_catalog_category_name,
+            normalize_onliner_id=normalize_onliner_id,
+            status=id_review_status,
+            status_lock=ID_REVIEW_STATUS_LOCK,
+            clock=time.time,
+        ),
     )
 
 
@@ -3997,13 +3779,10 @@ def _ntech_review_queue_start_response(**kwargs):
         return jsonify(payload), status
     return jsonify(result)
 
-_NTECH_REVIEW_HANDLERS = None
-
-
 def _get_ntech_review_handlers():
-    global _NTECH_REVIEW_HANDLERS
-    if _NTECH_REVIEW_HANDLERS is None:
-        _NTECH_REVIEW_HANDLERS = _build_ntech_review_handlers_from_runtime({
+    return APP_SERVICES.get_or_create(
+        "ntech_review_handlers",
+        lambda: _build_ntech_review_handlers_from_runtime({
             "normalize_name_key": _normalize_name_key,
             "normalize_compact_name": _normalize_compact_name,
             "raw_paren_article_tokens": _raw_paren_article_tokens,
@@ -4043,8 +3822,8 @@ def _get_ntech_review_handlers():
             "review_find_printer_candidates": _review_find_printer_candidates,
             "review_looks_like_peripheral_name": _review_looks_like_peripheral_name,
             "review_find_peripheral_candidates": _review_find_peripheral_candidates,
-        })
-    return _NTECH_REVIEW_HANDLERS
+        }),
+    )
 
 
 def _ntech_review_handler(mode):
@@ -4135,74 +3914,31 @@ def _validate_clean_ids_db_worker(session_dir):
     })
 
 def _manual_id_specialized_candidates(local_name, category="", top_n=12):
-    name = str(local_name or "").strip()
-    if not name:
-        return []
-    limit = max(1, int(top_n or 12))
-    normalized_category = normalize_catalog_category_name(str(category or infer_category(name) or "").strip())
-    prefix_category = _normalized_category_name(name)
-    explicit_prefixes = {
-        "Веб-камеры", "МФУ", "Клавиатура", "Мышь", "Наушники", "Микрофоны",
-        "Акустика", "Накопители USB",
-    }
-    if prefix_category in explicit_prefixes:
-        normalized_category = prefix_category
+    return _get_manual_id_search_runtime().candidates(
+        local_name,
+        category=category,
+        top_n=top_n,
+    )
 
-    if _is_iven_pc_name(name):
-        return db_search_iven_pc_candidates(name, limit=limit)
-    if _is_tgpc_pc_name(name):
-        return db_search_tgpc_pc_candidates(name, limit=limit)
-    if _is_iven_laptop_name(name, normalized_category):
-        return _supplier_laptop_review_candidates(
-            name,
-            top_n=limit,
-            candidate_filter=_is_iven_laptop_candidate,
-            source_label="manual_laptop_db",
-        )
 
-    mode_by_category = {
-        "Процессор": "cpu",
-        "Материнская плата": "board",
-        "Монитор": "monitor",
-        "Видеокарта": "gpu",
-        "Оперативная память": "ram",
-        "SSD": "ssd",
-        "Блок питания": "psu",
-        "Корпус": "case",
-        "Жесткий диск": "hdd",
-        "Кулер": "cooler",
-        "Кулеры": "cooler",
-        "Охлаждение": "cooler",
-        "Принтер": "printer",
-        "Принтеры": "printer",
-        "Принтер и МФУ": "printer",
-        "МФУ": "printer",
-        "Картриджи": "printer",
-        "Клавиатура": "peripheral",
-        "Мышь": "peripheral",
-        "Наушники": "peripheral",
-        "Акустика": "peripheral",
-    }
-    mode = mode_by_category.get(normalized_category)
-    if not mode:
-        return []
-    handler = _ntech_review_handler(mode)
-    row = {"Поставщик": "manual"}
-    if not handler.is_target(row, name, normalized_category):
-        return []
-    result = handler.build_row_result(0, row, name, normalized_category, int(time.time())) or {}
-    queue_candidates = (result.get("queue_item") or {}).get("candidates") or []
-    report_candidates = (result.get("report_item") or {}).get("candidates") or []
-    candidates = list(queue_candidates or report_candidates)
-    if mode == "peripheral" and normalized_category in {"Клавиатура", "Мышь", "Наушники", "Акустика"}:
-        candidates = [
-            candidate
-            for candidate in candidates
-            if normalize_catalog_category_name(
-                infer_category(str((candidate or {}).get("name", "") or ""))
-            ) == normalized_category
-        ]
-    return candidates[:limit]
+def _get_manual_id_search_runtime():
+    return APP_SERVICES.get_or_create(
+        "manual_id_search",
+        lambda: ManualIdSearchRuntime(
+            normalize_catalog_category_name=normalize_catalog_category_name,
+            infer_category=infer_category,
+            normalized_category_from_name=_normalized_category_name,
+            is_iven_pc_name=_is_iven_pc_name,
+            is_tgpc_pc_name=_is_tgpc_pc_name,
+            is_iven_laptop_name=_is_iven_laptop_name,
+            search_iven_pc_candidates=db_search_iven_pc_candidates,
+            search_tgpc_pc_candidates=db_search_tgpc_pc_candidates,
+            supplier_laptop_candidates=_supplier_laptop_review_candidates,
+            is_iven_laptop_candidate=_is_iven_laptop_candidate,
+            get_review_handler=_ntech_review_handler,
+            clock=time.time,
+        ),
+    )
 
 
 def _id_replace_candidates_payload(payload):
@@ -4300,20 +4036,23 @@ def _isolated_verify_all_ids_status():
 
 
 def _get_id_validation_runtime():
-    return IdValidationRuntime(
-        get_active_session_dir=get_active_session_dir,
-        verify_status=verify_all_ids_status,
-        verify_lock=VERIFY_ALL_IDS_LOCK,
-        validate_status=validate_clean_ids_status,
-        validate_lock=VALIDATE_CLEAN_IDS_LOCK,
-        verify_worker=_verify_all_ids_worker,
-        validate_api_worker=_validate_clean_ids_worker,
-        validate_db_worker=_validate_clean_ids_db_worker,
-        thread_factory=threading.Thread,
-        isolated_verify_start=_start_isolated_verify_all_ids,
-        isolated_verify_status=_isolated_verify_all_ids_status,
-        before_validate_start=_prepare_validate_clean_start,
-        cancel_validate=_cancel_validate_clean,
+    return APP_SERVICES.get_or_create(
+        "id_validation",
+        lambda: IdValidationRuntime(
+            get_active_session_dir=get_active_session_dir,
+            verify_status=verify_all_ids_status,
+            verify_lock=VERIFY_ALL_IDS_LOCK,
+            validate_status=validate_clean_ids_status,
+            validate_lock=VALIDATE_CLEAN_IDS_LOCK,
+            verify_worker=_verify_all_ids_worker,
+            validate_api_worker=_validate_clean_ids_worker,
+            validate_db_worker=_validate_clean_ids_db_worker,
+            thread_factory=threading.Thread,
+            isolated_verify_start=_start_isolated_verify_all_ids,
+            isolated_verify_status=_isolated_verify_all_ids_status,
+            before_validate_start=_prepare_validate_clean_start,
+            cancel_validate=_cancel_validate_clean,
+        ),
     )
 
 
@@ -4619,20 +4358,23 @@ def _review_queue_match_name_key(queue_key, entry):
 
 
 def _get_review_queue_runtime():
-    return ReviewQueueRuntime(
-        get_active_session_dir=get_active_session_dir,
-        load_review_queue=load_review_queue,
-        save_review_queue=save_review_queue,
-        read_consolidated_json_fast_df=read_consolidated_json_fast_df,
-        write_consolidated_json=write_consolidated_json,
-        write_consolidated_df_background=write_consolidated_df_background,
-        load_manual_id_bindings=load_manual_id_bindings,
-        save_manual_id_bindings=save_manual_id_bindings,
-        append_id_change_journal=append_id_change_journal,
-        normalize_name_key=_normalize_name_key,
-        normalize_onliner_id=normalize_onliner_id,
-        manual_binding_scoped_key=_manual_binding_scoped_key,
-        clock=time.time,
+    return APP_SERVICES.get_or_create(
+        "review_queue",
+        lambda: ReviewQueueRuntime(
+            get_active_session_dir=get_active_session_dir,
+            load_review_queue=load_review_queue,
+            save_review_queue=save_review_queue,
+            read_consolidated_json_fast_df=read_consolidated_json_fast_df,
+            write_consolidated_json=write_consolidated_json,
+            write_consolidated_df_background=write_consolidated_df_background,
+            load_manual_id_bindings=load_manual_id_bindings,
+            save_manual_id_bindings=save_manual_id_bindings,
+            append_id_change_journal=append_id_change_journal,
+            normalize_name_key=_normalize_name_key,
+            normalize_onliner_id=normalize_onliner_id,
+            manual_binding_scoped_key=_manual_binding_scoped_key,
+            clock=time.time,
+        ),
     )
 
 
@@ -4823,7 +4565,9 @@ app.register_blueprint(create_category_reference_bp(
 
 
 def _get_category_management_runtime():
-    return CategoryManagementRuntime(
+    return APP_SERVICES.get_or_create(
+        "category_management",
+        lambda: CategoryManagementRuntime(
         get_active_session_dir=get_active_session_dir,
         canonical_supplier_name=_canonical_supplier_name,
         load_visibility_map=load_visibility_map,
@@ -4862,7 +4606,8 @@ def _get_category_management_runtime():
         override_lock=CATEGORY_OVERRIDE_LOCK,
         category_preview_items_payload=_category_preview_items_payload,
         load_market_cache=load_onliner_market_cache,
-        get_market_stats_from_cache_only=get_onliner_market_stats_from_cache_only,
+            get_market_stats_from_cache_only=get_onliner_market_stats_from_cache_only,
+        ),
     )
 
 
@@ -4960,20 +4705,23 @@ def api_onliner_b2b_probe():
 
 
 def _get_source_runtime():
-    return SourceRuntime(
-        session_obj=session,
-        load_settings=load_app_settings,
-        fetch_worker=_fetch_api_source_worker,
-        thread_factory=lambda target: threading.Thread(target=target, daemon=True).start(),
-        get_history=get_api_fetch_history,
-        process_supplier_files=_process_supplier_files,
-        finalize_processed_session=_finalize_processed_session,
-        append_history=append_api_fetch_history,
-        redirect_for_session=lambda sid: url_for("main_api.result_page", sid=sid),
-        enqueue_fetch=(
-            _enqueue_api_source_fetch
-            if DURABLE_JOB_QUEUE is not None
-            else None
+    return APP_SERVICES.get_or_create(
+        "source",
+        lambda: SourceRuntime(
+            session_obj=session,
+            load_settings=load_app_settings,
+            fetch_worker=_fetch_api_source_worker,
+            thread_factory=lambda target: threading.Thread(target=target, daemon=True).start(),
+            get_history=get_api_fetch_history,
+            process_supplier_files=_process_supplier_files,
+            finalize_processed_session=_finalize_processed_session,
+            append_history=append_api_fetch_history,
+            redirect_for_session=lambda sid: url_for("main_api.result_page", sid=sid),
+            enqueue_fetch=(
+                _enqueue_api_source_fetch
+                if DURABLE_JOB_QUEUE is not None
+                else None
+            ),
         ),
     )
 
@@ -5062,7 +4810,9 @@ app.register_blueprint(create_onliner_bp(
 
 
 def _get_category_extra_runtime():
-    return CategoryExtraRuntime(
+    return APP_SERVICES.get_or_create(
+        "category_extra",
+        lambda: CategoryExtraRuntime(
         get_active_session_dir=get_active_session_dir,
         resolve_session_dir=_resolve_session_dir,
         has_consolidated_session_file=_has_consolidated_session_file,
@@ -5091,7 +4841,8 @@ def _get_category_extra_runtime():
         predict_openai_category=_openai_autosort_predict_category,
         openai_api_key=OPENAI_API_KEY,
         autosort_max_items=OPENAI_AUTOSORT_MAX_ITEMS,
-        autosort_max_workers=OPENAI_AUTOSORT_MAX_WORKERS,
+            autosort_max_workers=OPENAI_AUTOSORT_MAX_WORKERS,
+        ),
     )
 
 

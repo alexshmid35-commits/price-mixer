@@ -110,14 +110,19 @@ def test_sorting_reparse_db_write_clears_corrected_rows_cache(monkeypatch):
 
 
 def test_sorting_reparse_service_is_not_restarted_when_healthy(monkeypatch):
-    monkeypatch.setattr(app_module, "_sorting_reparse_service_healthy", lambda timeout=1.0: True)
+    runtime = app_module._get_sorting_reparse_runtime()
+    monkeypatch.setattr(
+        runtime,
+        "service_healthy",
+        lambda timeout=1.0: True,
+    )
 
     def unexpected_launch():
         raise AssertionError("Healthy parser must not be restarted")
 
-    monkeypatch.setattr(app_module, "_sorting_reparse_launch_spec", unexpected_launch)
+    monkeypatch.setattr(runtime, "launch_spec", unexpected_launch)
 
-    assert app_module._ensure_sorting_reparse_service() is None
+    assert runtime.ensure_service() is None
 
 
 def test_sorting_reparse_service_starts_on_demand(monkeypatch, tmp_path):
@@ -127,19 +132,23 @@ def test_sorting_reparse_service_starts_on_demand(monkeypatch, tmp_path):
     health_checks = iter([False, False, True])
     launches = []
 
+    runtime = app_module._get_sorting_reparse_runtime()
     monkeypatch.setattr(
-        app_module,
-        "_sorting_reparse_service_healthy",
+        runtime,
+        "service_healthy",
         lambda timeout=1.0: next(health_checks),
     )
     monkeypatch.setattr(
-        app_module,
-        "_sorting_reparse_launch_spec",
+        runtime,
+        "launch_spec",
         lambda: (["python", str(script_path)], Path(tmp_path), log_path),
     )
-    monkeypatch.setattr(app_module.subprocess, "Popen", lambda *args, **kwargs: launches.append((args, kwargs)))
+    monkeypatch.setattr(
+        "price_mixer.services.sorting_reparse_runtime.subprocess.Popen",
+        lambda *args, **kwargs: launches.append((args, kwargs)),
+    )
 
-    assert app_module._ensure_sorting_reparse_service() is None
+    assert runtime.ensure_service() is None
     assert len(launches) == 1
     assert launches[0][0][0] == ["python", str(script_path)]
 

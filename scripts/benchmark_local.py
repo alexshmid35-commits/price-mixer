@@ -4,15 +4,16 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import platform
+import resource
 import statistics
 import subprocess
 import sys
 import time
-
+import tracemalloc
+from datetime import UTC, datetime
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -23,7 +24,6 @@ from price_mixer.services.consolidated_paging import (  # noqa: E402
     build_consolidated_page,
 )
 
-
 SUPPLIERS = ("IVEN", "IVEN_zakaz", "Tradex", "N-Tech")
 CATEGORIES = ("SSD", "Монитор", "Ноутбук", "ПЭВМ")
 
@@ -31,22 +31,27 @@ CATEGORIES = ("SSD", "Монитор", "Ноутбук", "ПЭВМ")
 def generate_rows(size):
     rows = []
     for index in range(max(0, int(size))):
-        rows.append([
-            "" if index % 7 == 0 else str(index // 3),
-            f"Product Model {index % 13000} Variant {index}",
-            float(index % 9000) + 0.25,
-            SUPPLIERS[index % len(SUPPLIERS)],
-            "12",
-            str(1 + index % 3),
-            float(index % 9000) + 10.0,
-            float(index % 9000) + 15.0,
-            index,
-            CATEGORIES[index % len(CATEGORIES)],
-        ])
+        rows.append(
+            [
+                "" if index % 7 == 0 else str(index // 3),
+                f"Product Model {index % 13000} Variant {index}",
+                float(index % 9000) + 0.25,
+                SUPPLIERS[index % len(SUPPLIERS)],
+                "12",
+                str(1 + index % 3),
+                float(index % 9000) + 10.0,
+                float(index % 9000) + 15.0,
+                index,
+                CATEGORIES[index % len(CATEGORIES)],
+            ]
+        )
     return rows
 
 
 def benchmark_size(size, *, repeats=12):
+    cpu_started = time.process_time()
+    rss_before_kb = _max_rss_kb()
+    tracemalloc.start()
     rows = generate_rows(size)
     order = [(1, "asc")]
     started = time.perf_counter()
@@ -115,8 +120,16 @@ def benchmark_size(size, *, repeats=12):
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
+    _current_bytes, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
     return {
         "rows": int(size),
+        "cpu_ms": round(
+            (time.process_time() - cpu_started) * 1000.0,
+            3,
+        ),
+        "peak_python_bytes": int(peak_bytes),
+        "max_rss_delta_kb": max(0, _max_rss_kb() - rss_before_kb),
         "uncached_page_ms": round(uncached_ms, 3),
         "cold_cached_page_ms": round(cold_ms, 3),
         "warm_page_p50_ms": round(statistics.median(warm_page), 3),
@@ -134,22 +147,16 @@ def benchmark_size(size, *, repeats=12):
 def build_report(sizes, *, repeats=12):
     return {
         "schema": "price-mixer-benchmark-v1",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "git_sha": _git_sha(),
         "python": platform.python_version(),
         "platform": platform.platform(),
-        "results": [
-            benchmark_size(size, repeats=repeats)
-            for size in sizes
-        ],
+        "results": [benchmark_size(size, repeats=repeats) for size in sizes],
     }
 
 
 def compare_reports(current, baseline, *, threshold_percent=20.0):
-    baseline_by_rows = {
-        int(item["rows"]): item
-        for item in baseline.get("results", [])
-    }
+    baseline_by_rows = {int(item["rows"]): item for item in baseline.get("results", [])}
     regressions = []
     for current_item in current.get("results", []):
         rows = int(current_item["rows"])
@@ -162,19 +169,17 @@ def compare_reports(current, baseline, *, threshold_percent=20.0):
             previous_value = float(previous.get(metric, 0) or 0)
             if previous_value <= 0:
                 continue
-            increase = (
-                (float(current_value) - previous_value)
-                / previous_value
-                * 100.0
-            )
+            increase = (float(current_value) - previous_value) / previous_value * 100.0
             if increase > float(threshold_percent):
-                regressions.append({
-                    "rows": rows,
-                    "metric": metric,
-                    "baseline": previous_value,
-                    "current": float(current_value),
-                    "increase_percent": round(increase, 2),
-                })
+                regressions.append(
+                    {
+                        "rows": rows,
+                        "metric": metric,
+                        "baseline": previous_value,
+                        "current": float(current_value),
+                        "increase_percent": round(increase, 2),
+                    }
+                )
     return regressions
 
 
@@ -191,6 +196,13 @@ def _percentile(values, percentile):
 
 def _elapsed_ms(started):
     return (time.perf_counter() - started) * 1000.0
+
+
+def _max_rss_kb():
+    value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    if sys.platform == "darwin":
+        return value // 1024
+    return value
 
 
 def _git_sha():
@@ -223,16 +235,10 @@ def _parser():
 
 def main(argv=None):
     args = _parser().parse_args(argv)
-    sizes = [
-        int(value)
-        for value in str(args.sizes).split(",")
-        if str(value).strip()
-    ]
+    sizes = [int(value) for value in str(args.sizes).split(",") if str(value).strip()]
     report = build_report(sizes, repeats=args.repeats)
     if args.baseline:
-        baseline = json.loads(
-            Path(args.baseline).read_text(encoding="utf-8")
-        )
+        baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
         report["regressions"] = compare_reports(
             report,
             baseline,

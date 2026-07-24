@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from contextlib import suppress
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 from price_mixer.logging_config import get_logger
-
+from price_mixer.product_schema import ProductField
 
 LOGGER = get_logger("price_mixer.processing")
 
@@ -23,7 +25,7 @@ def _manual_binding_supplier_names(manual):
         raw_suppliers = manual.get("supplier", "")
     if isinstance(raw_suppliers, str):
         items = [part.strip() for part in raw_suppliers.replace(";", ",").split(",")]
-    elif isinstance(raw_suppliers, (list, tuple, set)):
+    elif isinstance(raw_suppliers, list | tuple | set):
         items = list(raw_suppliers)
     else:
         items = []
@@ -43,8 +45,10 @@ def infer_supplier_from_filename(filename, app_settings=None, load_app_settings:
     if not name:
         return ""
     compact_name = name.replace("-", "").replace("_", "").replace(" ", "")
-    settings = app_settings if app_settings is not None else (load_app_settings() if callable(load_app_settings) else {})
-    rules = (((settings or {}).get("suppliers") or {}).get("filename_rules") or [])
+    settings = (
+        app_settings if app_settings is not None else (load_app_settings() if callable(load_app_settings) else {})
+    )
+    rules = ((settings or {}).get("suppliers") or {}).get("filename_rules") or []
     for rule in rules:
         if not isinstance(rule, dict):
             continue
@@ -102,7 +106,7 @@ def process_supplier_files(
     is_iven_pc_name: Callable[[Any], bool],
     iven_pc_onliner_id_mismatch_known: Callable[[Any, Any], bool],
     allow_manual_binding_for_supplier: Callable[[str, Any, Any], bool],
-    lookup_manual_binding_for_name: Callable[[dict, Any], dict | None],
+    lookup_manual_binding_for_name: Callable[..., dict | None],
     id_cache_keys_for_iven_pc_name: Callable[[Any], list[str]],
     get_id_cache_key_for_name: Callable[[Any], str],
     is_trusted_cached_id: Callable[..., bool],
@@ -149,9 +153,7 @@ def process_supplier_files(
         try:
             df = parse_generic_excel(filepath, supplier_name)
             if df.empty:
-                parse_errors.append(
-                    f"{display_name}: не найдено товарных строк с названием и ценой"
-                )
+                parse_errors.append(f"{display_name}: не найдено товарных строк с названием и ценой")
                 LOGGER.warning(
                     "supplier file has no product rows file=%s",
                     display_name,
@@ -198,7 +200,7 @@ def process_supplier_files(
     log_step("categories_applied", rows=len(consolidated_df))
 
     ids_before_overlays = consolidated_df.get(
-        "OnlinerID",
+        ProductField.ONLINER_ID,
         pd.Series("", index=consolidated_df.index, dtype="object"),
     ).map(normalize_onliner_id)
 
@@ -214,49 +216,57 @@ def process_supplier_files(
         save_id_cache(id_cache)
     id_fanout = build_id_fanout_map(id_cache)
     log_step("id_state_loaded", manual_bindings=len(manual_bindings), id_cache=len(id_cache))
-    if "Ссылка" not in consolidated_df.columns:
-        consolidated_df["Ссылка"] = ""
+    if ProductField.LINK not in consolidated_df.columns:
+        consolidated_df[ProductField.LINK] = ""
     for i, row in consolidated_df.iterrows():
-        name = row.get("Название", "")
-        supplier_name = str(row.get("Поставщик", "") or "").strip().upper()
+        name = row.get(ProductField.NAME, "")
+        supplier_name = str(row.get(ProductField.SUPPLIER, "") or "").strip().upper()
         is_iven_supplier = supplier_name in {"IVEN"}
         is_ntech_supplier = supplier_name in {"N-TECH", "NTECH"}
         if is_iven_supplier and is_iven_pc_name(name):
-            current_id = normalize_onliner_id(row.get("OnlinerID", ""))
+            current_id = normalize_onliner_id(row.get(ProductField.ONLINER_ID, ""))
             if current_id and iven_pc_onliner_id_mismatch_known(name, current_id):
-                consolidated_df.at[i, "OnlinerID"] = ""
-                consolidated_df.at[i, "Ссылка"] = ""
+                consolidated_df.at[i, ProductField.ONLINER_ID] = ""
+                consolidated_df.at[i, ProductField.LINK] = ""
 
         # manual_bindings are user decisions and must override supplier-provided IDs.
-        allow_manual_binding = allow_manual_binding_for_supplier(supplier_name, name, row.get("Категория", ""))
+        allow_manual_binding = allow_manual_binding_for_supplier(
+            supplier_name,
+            name,
+            row.get(ProductField.CATEGORY, ""),
+        )
         if allow_manual_binding:
             try:
                 manual = lookup_manual_binding_for_name(manual_bindings, name, supplier_name)
             except TypeError:
                 manual = lookup_manual_binding_for_name(manual_bindings, name)
-            if isinstance(manual, dict):
-                if not _manual_binding_applies_to_supplier(manual, supplier_name):
-                    manual = None
+            if isinstance(manual, dict) and not _manual_binding_applies_to_supplier(
+                manual,
+                supplier_name,
+            ):
+                manual = None
             if isinstance(manual, dict):
                 if bool(manual.get("blocked", False)):
-                    consolidated_df.at[i, "OnlinerID"] = ""
-                    consolidated_df.at[i, "Ссылка"] = ""
+                    consolidated_df.at[i, ProductField.ONLINER_ID] = ""
+                    consolidated_df.at[i, ProductField.LINK] = ""
                     continue
                 mid = normalize_onliner_id(manual.get("id", ""))
                 if mid:
-                    consolidated_df.at[i, "OnlinerID"] = mid
+                    consolidated_df.at[i, ProductField.ONLINER_ID] = mid
                     murl = str(manual.get("url", "")).strip()
                     if murl:
-                        consolidated_df.at[i, "Ссылка"] = murl
+                        consolidated_df.at[i, ProductField.LINK] = murl
                     continue
 
         allow_id_cache = (not is_iven_supplier and not is_ntech_supplier) or (
             is_iven_supplier and is_iven_pc_name(name)
         )
         if allow_id_cache:
-            oid = row.get("OnlinerID")
+            oid = row.get(ProductField.ONLINER_ID)
             if not oid or str(oid).strip() == "" or str(oid) == "nan":
-                cache_keys = id_cache_keys_for_iven_pc_name(name) if is_iven_supplier else [get_id_cache_key_for_name(name)]
+                cache_keys = (
+                    id_cache_keys_for_iven_pc_name(name) if is_iven_supplier else [get_id_cache_key_for_name(name)]
+                )
                 for cache_key in cache_keys:
                     if not cache_key or cache_key not in id_cache:
                         continue
@@ -266,11 +276,14 @@ def process_supplier_files(
                         if cached_id:
                             if is_iven_supplier and not iven_pc_onliner_id_matches_name(name, cached_id):
                                 continue
-                            consolidated_df.at[i, "OnlinerID"] = cached_id
+                            consolidated_df.at[
+                                i,
+                                ProductField.ONLINER_ID,
+                            ] = cached_id
                             break
 
     duplicate_ids_cleared = clear_duplicate_onliner_ids_for_suppliers(consolidated_df, ["IVEN"])
-    ids_after_overlays = consolidated_df["OnlinerID"].map(normalize_onliner_id)
+    ids_after_overlays = consolidated_df[ProductField.ONLINER_ID].map(normalize_onliner_id)
     changed_id_mask = ids_after_overlays.ne(ids_before_overlays)
     changed_id_count = int(changed_id_mask.sum())
     log_step(
@@ -281,8 +294,11 @@ def process_supplier_files(
 
     if changed_id_count:
         changed_rows = ensure_category_column(consolidated_df.loc[changed_id_mask].copy())
-        if "Категория" in changed_rows.columns:
-            consolidated_df.loc[changed_id_mask, "Категория"] = changed_rows["Категория"]
+        if ProductField.CATEGORY in changed_rows.columns:
+            consolidated_df.loc[
+                changed_id_mask,
+                ProductField.CATEGORY,
+            ] = changed_rows[ProductField.CATEGORY]
     log_step("changed_id_categories_refreshed", rows=changed_id_count)
 
     consolidated_df = apply_saved_markups_to_df(consolidated_df)
@@ -294,7 +310,7 @@ def process_supplier_files(
     output_path.unlink(missing_ok=True)
     log_step("xlsx_deferred", path=output_path.name)
 
-    snapshot_diff = {}
+    snapshot_diff: dict[str, Any] = {}
     save_session_supplier_diff(session_dir, {})
 
     stats = {
@@ -304,14 +320,14 @@ def process_supplier_files(
         "matched": int(all_data["onliner_id"].notna().sum()) if "onliner_id" in all_data.columns else 0,
         "without_id": count_rows_without_onliner_id(consolidated_df),
         "duplicate_id_rows": count_rows_with_duplicate_onliner_id(consolidated_df),
-        "show_checks_block": coerce_bool((((app_settings or {}).get("ui") or {}).get("show_checks_block", True)), default=True),
+        "show_checks_block": coerce_bool(
+            (((app_settings or {}).get("ui") or {}).get("show_checks_block", True)), default=True
+        ),
         "snapshot_diff": snapshot_diff,
     }
 
-    try:
+    with suppress(Exception):
         maybe_cleanup_old_uploads(exclude_dirs=[session_dir, last_active_session_dir], min_interval_sec=60)
-    except Exception:
-        pass
     log_step("done", rows=len(consolidated_df), without_id=stats["without_id"])
 
     return {

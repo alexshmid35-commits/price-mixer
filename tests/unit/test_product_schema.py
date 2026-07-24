@@ -10,3 +10,4 @@ def test_product_schema_has_one_canonical_mapping():
     assert CONSOLIDATED_COLUMNS[-1] == ProductField.CATEGORY
     assert ProductWireIndex.ROW_INDEX == 8
     assert ProductWireIndex.CATEGORY == 9
+    assert ProductField.LINK == "Ссылка"
