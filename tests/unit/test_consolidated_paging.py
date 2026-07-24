@@ -27,6 +27,8 @@ def test_build_consolidated_page_paginates_and_returns_global_meta():
     assert payload["recordsFiltered"] == 5
     assert payload["data"][0][1] == "Monitor"
     assert payload["meta"]["duplicate_ids"] == {"10": [2, 100.0, 120.0]}
+    assert payload["meta"]["duplicate_id_count"] == 1
+    assert payload["meta"]["duplicate_row_count"] == 2
     assert payload["meta"]["without_id_count"] == 2
     assert payload["meta"]["supplier_count"] == 3
     assert payload["meta"]["badge_counts"] == {"mouse": 1}

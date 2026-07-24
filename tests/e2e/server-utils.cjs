@@ -14,6 +14,8 @@ const adminUsername = 'e2e-admin';
 const adminPassword = 'e2e-test-password-long';
 
 function resolvePythonPath() {
+  const configured = String(process.env.PRICE_MIXER_TEST_PYTHON || '').trim();
+  if (configured && fs.existsSync(configured)) return configured;
   const candidates = process.platform === 'win32'
     ? [
         path.join(rootDir, '.venv-win', 'Scripts', 'python.exe'),

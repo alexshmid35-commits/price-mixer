@@ -48,7 +48,11 @@ function applyMainTableServerMeta(meta){
     duplicateIdFilterSet = nextSet;
     duplicateIdPriceStats = nextPrices;
     loadedSupplierCount = Math.max(1, Number(meta.supplier_count || loadedSupplierCount || 1));
-    setDuplicateIdCounterValue(Object.keys(nextSet).length);
+    setDuplicateIdCounterValue(Number(
+        meta.duplicate_row_count !== undefined
+            ? meta.duplicate_row_count
+            : Object.keys(nextSet).length
+    ));
 
     mainTableNoIdCategoryBuckets = Array.isArray(meta.without_id_category_counts)
         ? meta.without_id_category_counts.slice()

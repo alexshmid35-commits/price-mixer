@@ -148,6 +148,16 @@ def _build_page_from_entry(
         source[index]
         for index in filtered_indexes[page_start : page_start + page_length]
     ]
+    page_ids = {
+        _cell_text(row, 0)
+        for row in page
+        if _cell_text(row, 0)
+    }
+    page_duplicate_meta = {
+        onliner_id: entry["duplicate_meta"][onliner_id]
+        for onliner_id in page_ids
+        if onliner_id in entry["duplicate_meta"]
+    }
 
     return {
         "draw": max(0, int(draw or 0)),
@@ -155,7 +165,12 @@ def _build_page_from_entry(
         "recordsFiltered": filtered_count,
         "data": page,
         "meta": {
-            "duplicate_ids": entry["duplicate_meta"],
+            "duplicate_ids": page_duplicate_meta,
+            "duplicate_id_count": len(entry["duplicate_meta"]),
+            "duplicate_row_count": sum(
+                values[0]
+                for values in entry["duplicate_meta"].values()
+            ),
             "without_id_category_counts": entry["no_id_category_counts"],
             "without_id_count": sum(
                 item["count"]

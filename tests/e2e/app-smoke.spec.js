@@ -29,6 +29,12 @@ test('health, version and request correlation are available', async ({
     mode: 'external',
     status: 'ok',
   });
+
+  const staticAsset = await request.get('/static/js/result-pevm.js');
+  expect(staticAsset.status()).toBe(200);
+  expect(staticAsset.headers()['cache-control']).toBe(
+    'public, max-age=300',
+  );
 });
 
 test('home page renders upload form', async ({ page }) => {
@@ -59,7 +65,20 @@ test('synthetic supplier price uploads, consolidates and downloads', async ({
 
   const result = await request.get(uploadPayload.redirect_url);
   expect(result.status()).toBe(200);
-  expect(await result.text()).toContain('Price Mixer');
+  const resultHtml = await result.text();
+  expect(resultHtml).toContain('Price Mixer');
+  expect(resultHtml).toContain('id="run-all-pevm-checks-btn"');
+  expect(resultHtml).toContain('id="autofill-ntech-pc-btn"');
+  expect(resultHtml).toContain('id="autofill-iven-pc-btn"');
+
+  const ntechPeVmStatus = await request.get(
+    '/api/autofill-ntech-pc-status',
+  );
+  const ivenPeVmStatus = await request.get(
+    '/api/autofill-iven-pc-status',
+  );
+  expect(ntechPeVmStatus.status()).toBe(200);
+  expect(ivenPeVmStatus.status()).toBe(200);
 
   const stats = await request.get('/api/stats');
   expect(stats.status()).toBe(200);

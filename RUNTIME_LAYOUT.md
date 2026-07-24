@@ -85,8 +85,10 @@ documents.
 ## Backups
 
 `backups/`, `*.backup*`, and `*.before_*` are classified as backup artifacts.
-They are never candidates for automatic cleanup. A future retention policy
-must verify restore integrity before removing any older copy.
+Only timestamped scheduled backups are candidates for automatic retention.
+The scheduler keeps seven daily and four weekly verified restore points by
+default. A directory that fails manifest/hash/SQLite verification is reported
+and never removed automatically.
 
 ## Production directories
 
