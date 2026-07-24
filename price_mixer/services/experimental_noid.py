@@ -29,6 +29,22 @@ STRONG_REASONS = {
 LOGGER = get_logger("price_mixer.jobs.experimental_noid")
 
 
+def is_separate_pevm_row(
+    row,
+    *,
+    canonical_supplier_name,
+    is_ntech_pevm_name,
+    is_iven_pevm_name,
+):
+    supplier = canonical_supplier_name(row.get("Поставщик", ""))
+    name = str(row.get("Название", "") or "").strip()
+    if supplier == "N-Tech":
+        return bool(is_ntech_pevm_name(name))
+    if supplier == "IVEN":
+        return bool(is_iven_pevm_name(name))
+    return False
+
+
 def classify_candidates(candidates, *, exact=False):
     active = [item for item in (candidates or []) if not item.get("rejected")]
     if not active:
@@ -74,6 +90,7 @@ class ExperimentalNoIdRuntime:
         find_top_candidates,
         confirm_batch,
         catalog_revision=None,
+        exclude_row=None,
         start_thread=None,
         max_workers=8,
     ):
@@ -85,6 +102,7 @@ class ExperimentalNoIdRuntime:
         self.find_top_candidates = find_top_candidates
         self.catalog_revision = catalog_revision or (lambda: "unavailable")
         self.confirm_batch = confirm_batch
+        self.exclude_row = exclude_row or (lambda _row: False)
         self.start_thread = start_thread or self._default_start_thread
         self.max_workers = max(1, min(int(max_workers or 8), 12))
         self.lock = threading.RLock()
@@ -227,11 +245,15 @@ class ExperimentalNoIdRuntime:
 
     def _collect_tasks(self, dataframe):
         tasks = {}
+        excluded = 0
         for row_idx, row in dataframe.iterrows():
             if self.normalize_onliner_id(row.get("OnlinerID", "")):
                 continue
             name = str(row.get("Название", "") or "").strip()
             if not name:
+                continue
+            if self.exclude_row(row):
+                excluded += 1
                 continue
             supplier = str(row.get("Поставщик", "") or "").strip()
             name_key = self.normalize_name_key(name)
@@ -250,7 +272,7 @@ class ExperimentalNoIdRuntime:
                 "category": str(row.get("Категория", "") or "").strip(),
                 "occurrences": 1,
             }
-        return list(tasks.values())
+        return list(tasks.values()), excluded
 
     def _load_rejections(self):
         out = set()
@@ -474,20 +496,26 @@ class ExperimentalNoIdRuntime:
     def _run_worker(self, job_id, session_dir):
         try:
             dataframe = self.read_dataframe(session_dir)
-            tasks = self._collect_tasks(dataframe)
+            tasks, excluded = self._collect_tasks(dataframe)
             total = len(tasks)
             self._update_job(
                 job_id,
                 status="running",
                 total=total,
                 processed=0,
-                message=f"Найдено {total} товаров без ID.",
+                message=(
+                    f"Найдено {total} товаров без ID для общего подбора. "
+                    f"ПЭВМ исключено: {excluded}."
+                ),
             )
             if not tasks:
                 self._update_job(
                     job_id,
                     status="completed",
-                    message="В текущем прайсе нет товаров без ID.",
+                    message=(
+                        "В текущем прайсе нет товаров без ID для общего подбора. "
+                        f"ПЭВМ исключено: {excluded}."
+                    ),
                     finished_at=int(time.time()),
                 )
                 return
@@ -543,6 +571,7 @@ class ExperimentalNoIdRuntime:
                 cache_misses=cache_misses,
                 message=(
                     f"Подбор завершён. Обработано {total} товаров без ID. "
+                    f"ПЭВМ исключено: {excluded}. "
                     f"Кэш: {cache_hits}, новых расчётов: {cache_misses}."
                     + (f" Ошибок отдельных позиций: {errors}." if errors else "")
                 ),

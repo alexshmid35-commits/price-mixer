@@ -37,6 +37,7 @@ def test_duplicate_id_counter_visible_for_multiple_suppliers():
     assert 'id="cpu-review-btn"' not in html
     assert 'id="experimental-noid-start-btn"' in html
     assert 'id="experimental-noid-open-btn"' in html
+    assert "Подобрать без ID, кроме ПЭВМ" in html
     assert 'id="iven-laptop-review-btn"' in html
     assert 'id="iven-zakaz-laptop-review-btn"' in html
     assert 'id="tradex-laptop-review-btn"' in html
@@ -180,6 +181,11 @@ def test_result_template_uses_static_bootstrap_script():
     noid_text = noid_js.read_text(encoding="utf-8")
     assert "function renderNoIdInlinePicker" in noid_text
     assert "function applyNoIdCandidate" in noid_text
+
+    experimental_noid_js = Path(__file__).resolve().parents[2] / "static" / "js" / "result-experimental-noid.js"
+    experimental_noid_text = experimental_noid_js.read_text(encoding="utf-8")
+    assert "Пересобрать без ПЭВМ" in experimental_noid_text
+    assert "новый подбор исключит ПЭВМ" in experimental_noid_text
 
     main_table_js = Path(__file__).resolve().parents[2] / "static" / "js" / "result-main-table.js"
     main_table_text = main_table_js.read_text(encoding="utf-8")

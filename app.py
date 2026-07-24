@@ -160,7 +160,10 @@ from price_mixer.services.export_stats import (
     without_id_category_counts_from_df as _export_stats_without_id_category_counts_from_df,
     without_id_category_counts_from_json_rows as _export_stats_without_id_category_counts_from_json_rows,
 )
-from price_mixer.services.experimental_noid import ExperimentalNoIdRuntime
+from price_mixer.services.experimental_noid import (
+    ExperimentalNoIdRuntime,
+    is_separate_pevm_row,
+)
 from price_mixer.services.export_filters import (
     apply_export_duplicate_id_filter as _export_filter_duplicate_ids,
     apply_export_keep_lowest_price_per_onliner_id as _export_filter_keep_lowest_price,
@@ -3698,6 +3701,12 @@ def _get_experimental_noid_runtime():
                 find_top_candidates=db_find_top_candidates,
                 catalog_revision=_onliner_db_catalog_revision,
                 confirm_batch=_manual_id_confirm_batch_payload,
+                exclude_row=lambda row: is_separate_pevm_row(
+                    row,
+                    canonical_supplier_name=_canonical_supplier_name,
+                    is_ntech_pevm_name=_is_tgpc_pc_name,
+                    is_iven_pevm_name=_is_iven_pc_name,
+                ),
                 max_workers=8,
             )
     return EXPERIMENTAL_NOID_RUNTIME

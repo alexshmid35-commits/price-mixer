@@ -3,7 +3,11 @@ import sqlite3
 
 import pandas as pd
 
-from price_mixer.services.experimental_noid import ExperimentalNoIdRuntime, classify_candidates
+from price_mixer.services.experimental_noid import (
+    ExperimentalNoIdRuntime,
+    classify_candidates,
+    is_separate_pevm_row,
+)
 
 
 def test_classify_candidates_keeps_close_high_scores_ambiguous():
@@ -23,7 +27,7 @@ def test_classify_candidates_marks_only_reliable_reason_strong():
     assert classify_candidates(fuzzy)[0] == "possible"
 
 
-def _runtime(tmp_path, frame=None):
+def _runtime(tmp_path, frame=None, exclude_row=None):
     db_path = tmp_path / "catalog.db"
 
     @contextmanager
@@ -73,10 +77,63 @@ def _runtime(tmp_path, frame=None):
         find_exact=exact,
         find_top_candidates=candidates,
         confirm_batch=confirm,
+        exclude_row=exclude_row,
         start_thread=lambda target: target(),
         max_workers=2,
     )
     return runtime, confirmations
+
+
+def test_runtime_excludes_only_pevm_handled_by_separate_supplier_modules(tmp_path):
+    frame = pd.DataFrame([
+        {
+            "OnlinerID": "",
+            "Название": "ПЭВМ TGPC Action 5 81872 A-X Ryzen 5",
+            "Поставщик": "N-Tech",
+            "Категория": "Компьютеры",
+        },
+        {
+            "OnlinerID": "",
+            "Название": "Компьютер IVEN BY Gaming Black 180557 Ryzen 5",
+            "Поставщик": "IVEN",
+            "Категория": "Компьютеры",
+        },
+        {
+            "OnlinerID": "",
+            "Название": "Кабель питания для ПЭВМ IVEN 1.8 м",
+            "Поставщик": "IVEN",
+            "Категория": "Кабели",
+        },
+        {
+            "OnlinerID": "",
+            "Название": "Компьютер Acer Veriton",
+            "Поставщик": "Tradex",
+            "Категория": "Компьютеры",
+        },
+    ])
+
+    def exclude(row):
+        return is_separate_pevm_row(
+            row,
+            canonical_supplier_name=lambda value: str(value or "").strip(),
+            is_ntech_pevm_name=lambda name: "tgpc" in name.casefold(),
+            is_iven_pevm_name=lambda name: "компьютер iven" in name.casefold(),
+        )
+
+    runtime, _confirmations = _runtime(tmp_path, frame=frame, exclude_row=exclude)
+    session_dir = tmp_path / "abc12345"
+    session_dir.mkdir()
+    body, status_code = runtime.start(session_dir)
+
+    assert status_code == 202
+    job = runtime.status(session_dir, body["job_id"])["job"]
+    assert job["total"] == 2
+    assert "ПЭВМ исключено: 2" in job["message"]
+    report = runtime.items(session_dir, {"job_id": body["job_id"]})
+    assert {item["product_name"] for item in report["items"]} == {
+        "Кабель питания для ПЭВМ IVEN 1.8 м",
+        "Компьютер Acer Veriton",
+    }
 
 
 def test_runtime_builds_persistent_review_and_confirms_manually(tmp_path):

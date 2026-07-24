@@ -91,9 +91,9 @@
         var reportNote = byId('experimental-noid-report-note');
         var reportSummary = byId('experimental-noid-report-summary');
         if(!job){
-            if(startBtn){ startBtn.disabled = false; startBtn.textContent = 'Подобрать все без ID'; }
+            if(startBtn){ startBtn.disabled = false; startBtn.textContent = 'Подобрать без ID, кроме ПЭВМ'; }
             if(openBtn){ openBtn.disabled = true; }
-            if(note){ note.textContent = 'Готов к проверке текущего прайса.'; }
+            if(note){ note.textContent = 'ПЭВМ исключены и проверяются в отдельном модуле.'; }
             if(progress){ progress.hidden = true; }
             if(summary){ summary.innerHTML = ''; }
             return;
@@ -103,11 +103,15 @@
         var percent = Math.max(0, Math.min(100, Number(job.percent || 0)));
         if(startBtn){
             startBtn.disabled = running;
-            startBtn.textContent = running ? ('Подбираю ' + percent + '%') : 'Запустить заново';
+            startBtn.textContent = running ? ('Подбираю ' + percent + '%') : 'Пересобрать без ПЭВМ';
         }
         if(openBtn){ openBtn.disabled = !state.jobId; }
         if(note){
-            note.textContent = (job.message || '') + (job.error ? (' ' + job.error) : '');
+            var jobMessage = String(job.message || '');
+            var scopeHint = !running && jobMessage.indexOf('ПЭВМ исключено:') < 0
+                ? ' Пересобери отчёт: новый подбор исключит ПЭВМ.'
+                : '';
+            note.textContent = jobMessage + (job.error ? (' ' + job.error) : '') + scopeHint;
         }
         if(progress){ progress.hidden = !running; }
         if(progressValue){ progressValue.style.width = percent + '%'; }
