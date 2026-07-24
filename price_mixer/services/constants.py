@@ -4,7 +4,10 @@ import os
 import threading
 from pathlib import Path
 
+from price_mixer.runtime_paths import get_runtime_paths
+
 SCRIPT_DIR = Path(__file__).parent.parent.resolve()
+RUNTIME_PATHS = get_runtime_paths()
 OUTPUT_FILE = SCRIPT_DIR / "consolidated_price.xlsx"
 
 SUPPLIERS = {
@@ -84,8 +87,8 @@ SUPPLIERS = {
     },
 }
 
-CACHE_FILE = SCRIPT_DIR / "onliner_cache.json"
-ONLINER_ID_CACHE = SCRIPT_DIR / "onliner_id_cache.json"
+CACHE_FILE = RUNTIME_PATHS.cache_file("onliner_cache.json")
+ONLINER_ID_CACHE = RUNTIME_PATHS.cache_file("onliner_id_cache.json")
 
 QUERY_CACHE = {}
 QUERY_CACHE_LOCK = threading.Lock()

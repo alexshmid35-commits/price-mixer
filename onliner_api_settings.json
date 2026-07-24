@@ -1,8 +1,0 @@
-{
-  "proxy_pool": [],
-  "allow_direct": true,
-  "retry_attempts": 3,
-  "backoff_sec": 0.6,
-  "proxy_cooldown_sec": 180,
-  "max_parallel_workers": 10
-}

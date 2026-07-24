@@ -1,9 +1,0 @@
-{
-  "enabled": false,
-  "interval_hours": 3,
-  "last_run_ts": 1773130755,
-  "last_started_ts": 1773410614,
-  "last_status": "running",
-  "last_count": 1200,
-  "last_message": "Автообновление выключено."
-}

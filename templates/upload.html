@@ -24,14 +24,15 @@ a:hover { text-decoration: underline; }
 .settings-card { background: #fff; border: 1px solid #d9e2f1; border-radius: 8px; padding: 14px; }
 .settings-note { font-size: 13px; color: #5f6368; line-height: 1.45; }
 .settings-list { margin-top: 10px; padding-left: 18px; color: #5f6368; font-size: 13px; line-height: 1.5; }
-.settings-form { display: grid; gap: 12px; }
+.settings-form { display: grid; gap: 10px; padding-bottom: 8px; }
 .settings-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
 .settings-tab { padding: 8px 12px; border: 1px solid #cfd8e3; border-radius: 999px; background: #fff; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
 .settings-tab:hover { background: #f8fafc; border-color: #b9c7d8; }
 .settings-tab.active { background: #1a73e8; border-color: #1a73e8; color: #fff; }
-.settings-pane { display: none; gap: 12px; }
+.settings-pane { display: none; gap: 10px; }
 .settings-pane.active { display: grid; }
-.settings-section { border: 1px solid #d9e2f1; border-radius: 8px; background: #fff; padding: 12px; }
+.settings-section { border: 1px solid #d9e2f1; border-radius: 8px; background: #fff; padding: 10px 12px; }
+.settings-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 12px; background: #f1f5f9; border: 1px solid #d9e2f1; border-radius: 8px; }
 .settings-section h3 { font-size: 14px; color: #1f2937; margin-bottom: 8px; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .settings-field { display: flex; flex-direction: column; gap: 5px; }
@@ -42,7 +43,7 @@ a:hover { text-decoration: underline; }
 .settings-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; }
 .settings-checkbox input { width: 15px; height: 15px; }
 .settings-help { margin-top: 6px; font-size: 12px; color: #64748b; line-height: 1.45; white-space: pre-wrap; }
-.settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.settings-help.wide { grid-column: 1 / -1; }
 @media (max-width: 900px) {
   .settings-grid { grid-template-columns: 1fr; }
   .settings-tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
@@ -51,10 +52,10 @@ a:hover { text-decoration: underline; }
   .settings-modal { padding: 10px; align-items: flex-start; }
 }
 
-.drop-zone { border: 3px dashed #d0d0e0; border-radius: 16px; padding: 50px 30px; text-align: center; transition: border-color .2s, background .2s; cursor: pointer; }
+.drop-zone { position: relative; border: 3px dashed #d0d0e0; border-radius: 16px; padding: 50px 30px; text-align: center; transition: border-color .2s, background .2s; cursor: pointer; }
 .drop-zone:hover, .drop-zone.drag-over { border-color: #6c63ff; background: #f8f7ff; }
 .drop-zone.has-files { border-color: #4caf50; background: #f0faf0; }
-.drop-zone input[type=file] { display: none; }
+.drop-zone input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .drop-zone .icon { font-size: 48px; margin-bottom: 12px; }
 .drop-zone .main-text { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
 .drop-zone .sub-text { font-size: 14px; color: #888; }
@@ -129,6 +130,7 @@ a:hover { text-decoration: underline; }
         <div class="sub-text">Поддерживаются .xls и .xlsx</div>
         <input type="file" name="files" id="file-input" multiple accept=".xls,.xlsx">
     </div>
+    <div id="native-file-inputs" style="display:none;"></div>
     <div class="file-list" id="file-list"></div>
     <div class="hint">Для каждого файла укажите имя поставщика (например: BN, Tradex, TGPC)</div>
     <div class="actions" id="actions-area" style="display:none; margin-top:12px;">
@@ -169,11 +171,55 @@ a:hover { text-decoration: underline; }
     </div>
 </div>
 <script>
-var dt = new DataTransfer();
+var selectedFiles = [];
 var fileInput = document.getElementById('file-input');
 var dropZone = document.getElementById('drop-zone');
 var fileList = document.getElementById('file-list');
 var actionsArea = document.getElementById('actions-area');
+var nativeFileInputs = document.getElementById('native-file-inputs');
+
+function bindManualFileInput(input) {
+    if(!input){ return; }
+    input.addEventListener('change', handleManualFileInputChange);
+    input.addEventListener('input', handleManualFileInputChange);
+}
+
+function createFreshFileInput() {
+    var fresh = document.createElement('input');
+    fresh.type = 'file';
+    fresh.name = 'files';
+    fresh.id = 'file-input';
+    fresh.multiple = true;
+    fresh.accept = '.xls,.xlsx';
+    dropZone.appendChild(fresh);
+    fileInput = fresh;
+    bindManualFileInput(fileInput);
+}
+
+function handleManualFileInputChange(e) {
+    var input = (e && e.target) ? e.target : fileInput;
+    var files = input.files || [];
+    if(!files.length){ return; }
+    addSelectedFiles(files);
+    if(input && nativeFileInputs && input.parentNode){
+        input.removeAttribute('id');
+        input.style.display = 'none';
+        nativeFileInputs.appendChild(input);
+        createFreshFileInput();
+    }
+    updateFileList();
+}
+
+bindManualFileInput(fileInput);
+dropZone.addEventListener('dragover', function(e){ e.preventDefault(); this.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', function(e){ this.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', function(e){
+    e.preventDefault();
+    this.classList.remove('drag-over');
+    addSelectedFiles(e.dataTransfer.files || []);
+    syncFileInputFromSelectedFiles();
+    updateFileList();
+});
 
 (function setupUploadSettingsUI(){
     var container = document.querySelector('.container');
@@ -246,208 +292,94 @@ var actionsArea = document.getElementById('actions-area');
 var uploadAppSettings = null;
 
 (function enhanceUploadSettingsUI(){
-    var settingsModal = document.getElementById('settings-modal');
-    if(!settingsModal){ return; }
-    settingsModal.innerHTML = `
+    var modal = document.getElementById('settings-modal');
+    if(!modal){ return; }
+    modal.innerHTML = `
         <div class="settings-sheet">
             <div class="settings-head">
                 <div class="settings-title">Настройки</div>
                 <button type="button" class="btn btn-outline settings-close" id="close-settings-btn">Закрыть</button>
             </div>
             <div class="settings-form">
-                <div class="settings-tabs">
-                    <button type="button" class="settings-tab active" data-settings-tab="general">Основные</button>
+                <div class="settings-tabs" role="tablist">
+                    <button type="button" class="settings-tab active" data-settings-pane="settings-pane-interface">Интерфейс</button>
+                    <button type="button" class="settings-tab" data-settings-pane="settings-pane-export">Выгрузка</button>
+                    <button type="button" class="settings-tab" data-settings-pane="settings-pane-cleanup">Очистка</button>
                 </div>
-                <div class="settings-pane active" data-settings-pane="general">
+                <div class="settings-pane active" id="settings-pane-interface">
                     <div class="settings-section">
-                        <h3>Экспорт прайса</h3>
+                        <h3>Интерфейс</h3>
                         <div class="settings-grid">
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-export-include-without-id"> Выгружать товары без ID</label></div>
                             <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-ui-show-checks-block"> Показывать блок проверок</label></div>
-                            <div class="settings-field"><label for="st-export-price-name">Имя выгружаемого прайса</label><input id="st-export-price-name" type="text" placeholder="consolidated_price"></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-export-keep-lowest-price-per-id"> Не выгружать дубли OnlinerID (оставлять строку с минимальной ценой)</label></div>
-                            <div class="settings-field"><label for="st-export-only-pc-price-name">Имя прайса при выгрузке только ПЭВМ</label><input id="st-export-only-pc-price-name" type="text" placeholder="N-tech_TGPC_Beznal"></div>
-                            <div class="settings-field wide">
-                                <label for="st-export-skip-duplicate-suppliers">Не включать в выгрузку товары с одинаковыми OnlinerID для поставщиков</label>
-                                <textarea id="st-export-skip-duplicate-suppliers" spellcheck="false" placeholder="Например: TGPC"></textarea>
-                                <div class="settings-help">По одному поставщику на строку. Если у поставщика один и тот же OnlinerID стоит у разных товаров, такие конфликтные строки не попадут в скачиваемый прайс.</div>
-                            </div>
-                            <div class="settings-field wide">
-                                <label for="st-export-only-pc-suppliers">Выгружать только ПЭВМ для поставщиков</label>
-                                <textarea id="st-export-only-pc-suppliers" spellcheck="false" placeholder="Например: TGPC"></textarea>
-                                <div class="settings-help">По одному поставщику на строку. Для этих поставщиков в скачиваемый прайс попадут только строки ПЭВМ / системных блоков.</div>
+                            <div class="settings-help">Включает большой блок подбора и проверки Onliner ID на рабочем экране. Сам подбор ID и ручные подтверждения при выключении не удаляются.</div>
                         </div>
                     </div>
-                    <div style="border-top:1px solid #e5e7eb; margin-top:16px; padding-top:16px;"></div><div class="settings-section">
-                        <h3>Автоопределение поставщиков</h3>
+                </div>
+                <div class="settings-pane" id="settings-pane-export">
+                    <div class="settings-section">
+                        <h3>Выгрузка в Google Таблицу</h3>
                         <div class="settings-grid">
-                            <div class="settings-field wide">
-                                <label for="st-supplier-rules">Правила автоопределения поставщика по имени файла</label>
-                                <textarea id="st-supplier-rules" spellcheck="false"></textarea>
-                                <div class="settings-help">Каждая строка: часть_имени_файла=ИмяПоставщика
-Пример:
-price_bn=TGPC
-tradex=Tradex
-1374=BN-1374</div>
-                            </div>
+                            <div class="settings-field wide"><label for="st-export-sheet-id">ID или ссылка Google-таблицы</label><input id="st-export-sheet-id" type="text" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/... или ID"></div>
+                            <div class="settings-field"><label for="st-export-sheet-tab">Лист выгрузки</label><input id="st-export-sheet-tab" type="text" maxlength="99" autocomplete="off" placeholder="Price"></div>
+                            <div class="settings-help wide">Эти значения используются кнопкой выгрузки в Google Таблицу. Если поле ID пустое, будет использовано значение из .env.</div>
                         </div>
                     </div>
-                    <div class="settings-section" style="display:none;">
-                        <!-- <h3>Подбор по моделям (скрыто)</h3> -->
-                        <div class="settings-grid">
-                            <div class="settings-field"><label for="st-noid-max-candidates">Кандидатов показывать</label><input id="st-noid-max-candidates" type="number" min="10" max="150"></div>
-                            <div class="settings-field"><label for="st-noid-max-queries">Запросов на поиск</label><input id="st-noid-max-queries" type="number" min="1" max="8"></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-noid-prefer-paren-model"> Сначала учитывать модель в скобках</label></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-noid-prefer-article"> Учитывать article-like токены и модели</label></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-noid-include-brand"> Добавлять бренд в поисковые запросы</label></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-noid-require-category-hint"> Жестко фильтровать кандидатов по категории</label></div>
-                            <div class="settings-field wide">
-                                <label for="st-noid-category-rules">Правила по категориям и комплектующим</label>
-                                <textarea id="st-noid-category-rules" spellcheck="false"></textarea>
-                                <div class="settings-help">Это JSON по категориям. Поля:
-query_hint - подсказка к запросу
-must_contain - слова, которые желательно видеть в Onliner
-ignore_words - слова, которые нужно занижать
-
-Редактируй под свои категории.</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div style="border-top:1px solid #e5e7eb; margin-top:16px; padding-top:16px;"></div><div class="settings-section">
+                </div>
+                <div class="settings-pane" id="settings-pane-cleanup">
+                    <div class="settings-section">
                         <h3>Очистка временных файлов</h3>
                         <div class="settings-grid">
                             <div class="settings-field"><label for="st-cleanup-keep-sessions">Хранить последних сессий</label><input id="st-cleanup-keep-sessions" type="number" min="3" max="200"></div>
                             <div class="settings-field"><label for="st-cleanup-keep-days">Хранить сессии, дней</label><input id="st-cleanup-keep-days" type="number" min="1" max="90"></div>
                             <div class="settings-field"><label for="st-cleanup-keep-api-hours">Хранить временные API-файлы, часов</label><input id="st-cleanup-keep-api-hours" type="number" min="1" max="168"></div>
-                            <div class="settings-help">Чистим только старые папки в uploads. Глобальные кэши, ручные ID, категории, наценки и сравнение с прошлой выгрузкой не трогаются.</div>
-                        </div>
-                    </div>
-                    <div style="border-top:1px solid #e5e7eb; margin-top:16px; padding-top:16px;"></div><div class="settings-section">
-                        <h3>Автоматический поиск Onliner ID</h3>
-                        <div class="settings-grid">
-                            <div class="settings-field"><label for="st-verify-threshold">Порог совпадения названия</label><input id="st-verify-threshold" type="number" min="0.1" max="0.99" step="0.01"></div>
-                            <div class="settings-field"><label for="st-verify-api-no-name-status">Если API не вернул название</label><select id="st-verify-api-no-name-status"><option value="review">Проверить</option><option value="mismatch">Несовпадение</option></select></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-verify-trust-manual"> Ручное подтверждение считать абсолютным OK</label></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-verify-force-refresh"> При проверке ID всегда заново ходить в API</label></div>
-                            <div class="settings-field wide"><label class="settings-checkbox"><input type="checkbox" id="st-verify-require-priority"> Совпадением считать только article/model причины</label></div>
+                            <div class="settings-help">Чистим только старые папки в uploads. Глобальные кэши, ручные ID, категории, наценки и сравнение с прошлой выгрузкой не трогаем.</div>
                         </div>
                     </div>
                 </div>
+                <div class="settings-actions">
+                    <button type="button" class="btn btn-outline" id="reset-settings-btn">Отменить изменения</button>
+                    <button type="button" class="btn" id="save-settings-btn">Сохранить настройки</button>
+                </div>
+                <div class="settings-note" id="settings-save-note" style="text-align:center;"></div>
             </div>
         </div>`;
 
-    function rulesToText(rules){
-        if(!Array.isArray(rules)){ return ''; }
-        return rules.map(function(it){
-            return String((it && it.pattern) || '').trim() + '=' + String((it && it.supplier) || '').trim();
-        }).filter(Boolean).join('\n');
-    }
-
-    function textToRules(text){
-        return String(text || '').split(/\r?\n/).map(function(line){
-            var raw = String(line || '').trim();
-            if(!raw || raw.indexOf('=') < 0){ return null; }
-            var parts = raw.split('=');
-            var pattern = String(parts.shift() || '').trim();
-            var supplier = String(parts.join('=') || '').trim();
-            if(!pattern || !supplier){ return null; }
-            return {pattern: pattern, supplier: supplier};
-        }).filter(Boolean);
-    }
-
     function applySettingsToForm(settings){
         uploadAppSettings = settings || {};
-        var exportCfg = uploadAppSettings.export || {};
         var uiCfg = uploadAppSettings.ui || {};
-        var cacheApi = uploadAppSettings.cache_api || {};
-        var b2b = uploadAppSettings.onliner_b2b || {};
-        var suppliers = uploadAppSettings.suppliers || {};
-        var apiSources = uploadAppSettings.api_sources || {};
-        var dbGsheet = uploadAppSettings.onliner_db_import || {};
+        var exportCfg = uploadAppSettings.export || {};
         var uploadsCleanup = uploadAppSettings.uploads_cleanup || {};
-        var iven = apiSources.iven || {};
-        var tradex = apiSources.tradex || {};
-        var ntech = apiSources.ntech || {};
-        var noId = uploadAppSettings.no_id_search || {};
-        var verifyId = uploadAppSettings.verify_id || {};
-        document.getElementById('st-export-include-without-id').checked = !!exportCfg.include_without_id;
         document.getElementById('st-ui-show-checks-block').checked = (uiCfg.show_checks_block !== false);
-        document.getElementById('st-export-price-name').value = exportCfg.price_name || 'consolidated_price';
-        document.getElementById('st-export-keep-lowest-price-per-id').checked = !!exportCfg.keep_lowest_price_per_onliner_id;
-        document.getElementById('st-export-only-pc-price-name').value = exportCfg.only_pc_price_name || 'N-tech_TGPC_Beznal';
-        document.getElementById('st-export-skip-duplicate-suppliers').value = Array.isArray(exportCfg.exclude_duplicate_id_suppliers) ? exportCfg.exclude_duplicate_id_suppliers.join('\n') : '';
-        document.getElementById('st-export-only-pc-suppliers').value = Array.isArray(exportCfg.only_pc_suppliers) ? exportCfg.only_pc_suppliers.join('\n') : '';
+        document.getElementById('st-export-sheet-id').value = exportCfg.google_sheets_spreadsheet_url_or_id || '';
+        document.getElementById('st-export-sheet-tab').value = exportCfg.google_sheets_tab || 'Price';
         document.getElementById('st-cleanup-keep-sessions').value = uploadsCleanup.keep_last_sessions || 20;
         document.getElementById('st-cleanup-keep-days').value = uploadsCleanup.keep_days || 7;
         document.getElementById('st-cleanup-keep-api-hours').value = uploadsCleanup.keep_api_fetch_hours || 12;
-        document.getElementById('st-noid-max-candidates').value = noId.max_candidates || 80;
-        document.getElementById('st-noid-max-queries').value = noId.max_queries || 4;
-        document.getElementById('st-noid-prefer-paren-model').checked = !!noId.prefer_paren_model;
-        document.getElementById('st-noid-prefer-article').checked = !!noId.prefer_article_tokens;
-        document.getElementById('st-noid-include-brand').checked = !!noId.include_brand_token;
-        document.getElementById('st-noid-require-category-hint').checked = !!noId.require_category_hint;
-        document.getElementById('st-noid-category-rules').value = noId.category_rules_text || '';
-        document.getElementById('st-verify-threshold').value = verifyId.match_threshold || 0.74;
-        document.getElementById('st-verify-api-no-name-status').value = verifyId.api_no_name_status || 'review';
-        document.getElementById('st-verify-trust-manual').checked = !!verifyId.trust_manual_confirmed;
-        document.getElementById('st-verify-force-refresh').checked = !!verifyId.force_refresh_api;
-        document.getElementById('st-verify-require-priority').checked = !!verifyId.require_article_or_model_priority;
     }
 
     function collectSettingsForm(){
         return {
-            export: {
-                include_without_id: document.getElementById('st-export-include-without-id').checked,
-                price_name: document.getElementById('st-export-price-name').value,
-                keep_lowest_price_per_onliner_id: document.getElementById('st-export-keep-lowest-price-per-id').checked,
-                only_pc_price_name: document.getElementById('st-export-only-pc-price-name').value,
-                exclude_duplicate_id_suppliers: String(document.getElementById('st-export-skip-duplicate-suppliers').value || '').split(/\r?\n/).map(function(v){
-                    return String(v || '').trim();
-                }).filter(Boolean),
-                only_pc_suppliers: String(document.getElementById('st-export-only-pc-suppliers').value || '').split(/\r?\n/).map(function(v){
-                    return String(v || '').trim();
-                }).filter(Boolean),
-            },
             ui: {
                 show_checks_block: document.getElementById('st-ui-show-checks-block').checked
             },
-            cache_api: {
-            },
-            suppliers: {
-                filename_rules: textToRules(document.getElementById('st-supplier-rules').value)
+            export: {
+                google_sheets_spreadsheet_url_or_id: document.getElementById('st-export-sheet-id').value,
+                google_sheets_tab: document.getElementById('st-export-sheet-tab').value
             },
             uploads_cleanup: {
                 keep_last_sessions: document.getElementById('st-cleanup-keep-sessions').value,
                 keep_days: document.getElementById('st-cleanup-keep-days').value,
                 keep_api_fetch_hours: document.getElementById('st-cleanup-keep-api-hours').value
-            },
-            no_id_search: {
-                max_candidates: document.getElementById('st-noid-max-candidates').value,
-                max_queries: document.getElementById('st-noid-max-queries').value,
-                prefer_paren_model: document.getElementById('st-noid-prefer-paren-model').checked,
-                prefer_article_tokens: document.getElementById('st-noid-prefer-article').checked,
-                include_brand_token: document.getElementById('st-noid-include-brand').checked,
-                require_category_hint: document.getElementById('st-noid-require-category-hint').checked,
-                category_rules_text: document.getElementById('st-noid-category-rules').value
-            },
-            verify_id: {
-                match_threshold: document.getElementById('st-verify-threshold').value,
-                api_no_name_status: document.getElementById('st-verify-api-no-name-status').value,
-                trust_manual_confirmed: document.getElementById('st-verify-trust-manual').checked,
-                force_refresh_api: document.getElementById('st-verify-force-refresh').checked,
-                require_article_or_model_priority: document.getElementById('st-verify-require-priority').checked
             }
         };
     }
 
-    function activateSettingsTab(tabName){
-        var tabs = settingsModal.querySelectorAll('[data-settings-tab]');
-        var panes = settingsModal.querySelectorAll('[data-settings-pane]');
-        tabs.forEach(function(tab){
-            tab.classList.toggle('active', tab.getAttribute('data-settings-tab') === tabName);
+    function activateSettingsPane(paneId){
+        document.querySelectorAll('.settings-tab').forEach(function(tab){
+            tab.classList.toggle('active', tab.getAttribute('data-settings-pane') === paneId);
         });
-        panes.forEach(function(pane){
-            pane.classList.toggle('active', pane.getAttribute('data-settings-pane') === tabName);
+        document.querySelectorAll('.settings-pane').forEach(function(pane){
+            pane.classList.toggle('active', pane.id === paneId);
         });
     }
 
@@ -488,30 +420,42 @@ ignore_words - слова, которые нужно занижать
     var closeBtn = document.getElementById('close-settings-btn');
     if(openBtn){
         openBtn.onclick = function(){
-            settingsModal.classList.add('active');
+            modal.classList.add('active');
             loadAppSettingsToModal();
         };
     }
     if(closeBtn){
         closeBtn.onclick = function(){
-            settingsModal.classList.remove('active');
+            modal.classList.remove('active');
         };
     }
+    document.addEventListener('click', function(e){
+        var tab = e.target && e.target.closest ? e.target.closest('.settings-tab[data-settings-pane]') : null;
+        if(tab){
+            e.preventDefault();
+            activateSettingsPane(tab.getAttribute('data-settings-pane'));
+            return;
+        }
+        var close = e.target && e.target.closest ? e.target.closest('#close-settings-btn') : null;
+        if(close){
+            e.preventDefault();
+            modal.classList.remove('active');
+        }
+    });
+    document.addEventListener('keydown', function(e){
+        if(e.key === 'Escape'){
+            modal.classList.remove('active');
+        }
+    });
     var saveBtn = document.getElementById('save-settings-btn');
     if(saveBtn){ saveBtn.onclick = saveAppSettingsFromModal; }
     var resetBtn = document.getElementById('reset-settings-btn');
     if(resetBtn){ resetBtn.onclick = loadAppSettingsToModal; }
-    settingsModal.querySelectorAll('[data-settings-tab]').forEach(function(tab){
-        tab.onclick = function(){
-            activateSettingsTab(tab.getAttribute('data-settings-tab') || 'general');
-        };
-    });
-    settingsModal.onclick = function(e){
+    modal.onclick = function(e){
         if(e.target && e.target.id === 'settings-modal'){
-            settingsModal.classList.remove('active');
+            modal.classList.remove('active');
         }
     };
-    activateSettingsTab('general');
     loadAppSettingsToModal();
 })();
 
@@ -741,10 +685,6 @@ function loadApiSourceStatuses(){
 }
 
 function startApiSourceFetch(sourceKey){
-    var isIven = String(sourceKey || '').trim().toLowerCase() === 'iven';
-    if(!isIven){
-        showBusyOverlay('Выгружаем прайс', 'Подготавливаем запрос к поставщику...');
-    }
     fetch('/api/source-fetch-start', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -754,9 +694,6 @@ function startApiSourceFetch(sourceKey){
         loadApiSourceStatuses();
         scheduleApiSourcePoll();
     }).catch(function(){
-        if(!isIven){
-            hideBusyOverlay();
-        }
         loadApiSourceStatuses();
     });
 }
@@ -765,26 +702,15 @@ function startApiSourceFetchAndProcess(sourceKey){
     var card = document.querySelector('.api-source-item[data-source="' + sourceKey + '"]');
     var processBtn = card ? card.querySelector('.api-source-process') : null;
     if(processBtn && !processBtn.disabled){
-        showBusyOverlay('Обрабатываем прайс', 'Файл уже выгружен. Сейчас запускаем обработку и откроем результат.');
         processApiSource(sourceKey);
         return;
     }
-    var isIven = String(sourceKey || '').trim().toLowerCase() === 'iven';
     apiSourceAutoProcessMap[sourceKey] = true;
-    if(!isIven){
-        showBusyOverlay('Выгружаем и обрабатываем прайс', 'Сначала получим файл у поставщика, потом автоматически запустим обработку.');
-    }
     startApiSourceFetch(sourceKey);
     scheduleApiSourcePoll();
 }
 
 function processApiSource(sourceKey){
-    startBusyStageRotation('Обрабатываем прайс', [
-        'Загружаем файл во внутренний конвейер...',
-        'Парсим Excel и определяем колонки...',
-        'Сводим товары и применяем сохранённые правила...',
-        'Подготавливаем результат к открытию...'
-    ], 1700);
     fetch('/api/source-process', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -793,7 +719,6 @@ function processApiSource(sourceKey){
         if(!d || d.status !== 'ok' || !d.redirect_url){ throw new Error((d && d.message) || 'process_failed'); }
         window.location.href = d.redirect_url;
     }).catch(function(err){
-        hideBusyOverlay();
         alert((err && err.message) ? err.message : 'Не удалось обработать прайс');
     });
 }
@@ -846,13 +771,23 @@ document.addEventListener('click', function(e){
 
 function detectSupplier(fname) {
     var fl = fname.toLowerCase();
+    var compactFileName = fl.replace(/[-_\\s]+/g, '');
+    if (compactFileName.indexOf('ivenzakaz') >= 0) return 'IVEN_zakaz';
     var supplierRules = (((uploadAppSettings || {}).suppliers || {}).filename_rules || []);
     for (var r = 0; r < supplierRules.length; r++) {
         var rule = supplierRules[r] || {};
         var pattern = String(rule.pattern || '').toLowerCase().trim();
         var supplier = String(rule.supplier || '').trim();
-        if (pattern && supplier && fl.indexOf(pattern) >= 0) return supplier;
+        if (pattern && supplier && fl.indexOf(pattern) >= 0) {
+            var compactSupplier = supplier.toLowerCase().replace(/[-_\\s]+/g, '');
+            if (compactSupplier === 'ntech') return 'N-Tech';
+            if (compactSupplier === 'ivenzakaz') return 'IVEN_zakaz';
+            if (compactSupplier === 'iven') return 'IVEN';
+            return supplier;
+        }
     }
+    if (fl.indexOf('ntech') >= 0 || fl.indexOf('n-tech') >= 0 || fl.indexOf('n_tech') >= 0) return 'N-Tech';
+    if (fl.indexOf('iven') >= 0) return 'IVEN';
     if (fl.indexOf('tradex') >= 0) return 'Tradex';
     if (fl.indexOf('1030z') >= 0) return 'BN-1030Z';
     if (fl.indexOf('1030') >= 0) return 'BN-1030';
@@ -861,9 +796,73 @@ function detectSupplier(fname) {
     return '';
 }
 
+function makeDataTransfer() {
+    try {
+        return new DataTransfer();
+    } catch (e) {
+        return null;
+    }
+}
+
+function sameSelectedFile(a, b) {
+    return a && b && a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
+function addSelectedFiles(files) {
+    for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var exists = selectedFiles.some(function(existing){ return sameSelectedFile(existing, f); });
+        if (!exists) selectedFiles.push(f);
+    }
+}
+
+function getSupplierByFileName(fname) {
+    var input = null;
+    document.querySelectorAll('.supplier-input').forEach(function(candidate){
+        if(!input && candidate.dataset && candidate.dataset.fname === fname){
+            input = candidate;
+        }
+    });
+    var typed = input ? String(input.value || '').trim() : '';
+    return typed || detectSupplier(fname);
+}
+
+function buildManualUploadFormData() {
+    var formData = new FormData();
+    var added = [];
+    for (var i = 0; i < selectedFiles.length; i++) {
+        var f = selectedFiles[i];
+        var exists = added.some(function(existing){ return sameSelectedFile(existing, f); });
+        if (exists) { continue; }
+        added.push(f);
+        formData.append('files', f, f.name);
+        formData.append('supplier_' + encodeURIComponent(f.name), getSupplierByFileName(f.name));
+    }
+    return formData;
+}
+
+function setManualSubmitDisabled(disabled) {
+    var submitBtn = document.getElementById('submit-btn');
+    if (submitBtn) { submitBtn.disabled = !!disabled; }
+}
+
+function syncFileInputFromSelectedFiles() {
+    var nextDt = makeDataTransfer();
+    if (!nextDt) return false;
+    for (var i = 0; i < selectedFiles.length; i++) {
+        nextDt.items.add(selectedFiles[i]);
+    }
+    try {
+        fileInput.files = nextDt.files;
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 function updateFileList() {
     fileList.innerHTML = '';
-    if (dt.files.length === 0) {
+    if (selectedFiles.length === 0) {
         dropZone.classList.remove('has-files');
         actionsArea.style.display = 'none';
         fileInput.value = '';
@@ -872,46 +871,42 @@ function updateFileList() {
     dropZone.classList.add('has-files');
     actionsArea.style.display = 'block';
     
-    var fileNames = [];
-    for (var i = 0; i < dt.files.length; i++) {
-        var f = dt.files[i];
+    for (var i = 0; i < selectedFiles.length; i++) {
+        var f = selectedFiles[i];
         var detected = detectSupplier(f.name);
         var div = document.createElement('div');
         div.className = 'file-item';
-        div.innerHTML = '<span class="fname" data-fname="' + f.name + '">' + f.name + '</span>' +
-            '<input type="text" class="supplier-input" data-fname="' + f.name + '" value="' + detected + '" placeholder="Имя поставщика">' +
-            '<span class="remove" data-fname="'+f.name+'">&times;</span>';
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'fname';
+        nameSpan.dataset.fname = f.name;
+        nameSpan.textContent = f.name;
+        var supplierInput = document.createElement('input');
+        supplierInput.type = 'text';
+        supplierInput.className = 'supplier-input';
+        supplierInput.dataset.fname = f.name;
+        supplierInput.name = 'supplier_' + encodeURIComponent(f.name);
+        supplierInput.value = detected;
+        supplierInput.placeholder = 'Имя поставщика';
+        var removeBtn = document.createElement('span');
+        removeBtn.className = 'remove';
+        removeBtn.dataset.index = String(i);
+        removeBtn.textContent = '×';
+        div.appendChild(nameSpan);
+        div.appendChild(supplierInput);
+        div.appendChild(removeBtn);
         fileList.appendChild(div);
-        fileNames.push(f.name);
     }
     
     document.querySelectorAll('.remove').forEach(function(el){
         el.addEventListener('click', function(e){
             e.stopPropagation();
-            var fname = this.dataset.fname;
-            var newDt = new DataTransfer();
-            for(var j=0; j<dt.files.length; j++){
-                if(dt.files[j].name !== fname) newDt.items.add(dt.files[j]);
-            }
-            dt = newDt;
+            var idx = parseInt(this.dataset.index || '-1', 10);
+            if(idx >= 0) selectedFiles.splice(idx, 1);
+            syncFileInputFromSelectedFiles();
             updateFileList();
         });
     });
 }
-
-fileInput.addEventListener('change', function(){
-    for(var i=0; i<this.files.length; i++) dt.items.add(this.files[i]);
-    updateFileList();
-});
-
-dropZone.addEventListener('click', function(){ fileInput.click(); });
-dropZone.addEventListener('dragover', function(e){ e.preventDefault(); this.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', function(e){ this.classList.remove('drag-over'); });
-dropZone.addEventListener('drop', function(e){
-    e.preventDefault(); this.classList.remove('drag-over');
-    for(var i=0; i<e.dataTransfer.files.length; i++) dt.items.add(e.dataTransfer.files[i]);
-    updateFileList();
-});
 
 (function setupApiHistoryToggle(){
     var btn = document.getElementById('api-history-toggle-btn');
@@ -924,27 +919,82 @@ dropZone.addEventListener('drop', function(e){
 })();
 
 document.getElementById('upload-form').addEventListener('submit', function(e){
-    var inputs = document.querySelectorAll('.supplier-input');
-    for(var i=0; i<inputs.length; i++){
-        var inp = inputs[i];
-        var hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.name = 'supplier_' + encodeURIComponent(inp.dataset.fname);
-        hidden.value = inp.value;
-        this.appendChild(hidden);
+    if(selectedFiles.length === 0){
+        e.preventDefault();
+        alert('Выберите хотя бы один Excel-файл');
+        return;
     }
-    
-    fileInput.files = dt.files;
-    
-    document.getElementById('submit-btn').disabled = true;
-document.getElementById('spinner').classList.add('active');
-    startBusyStageRotation('Обрабатываем прайсы', [
-        'Загружаем файлы и проверяем структуру...',
+    var synced = syncFileInputFromSelectedFiles();
+    if(!synced && (!fileInput.files || fileInput.files.length === 0)){
+        e.preventDefault();
+        alert('Браузер не смог подготовить файлы к отправке. Обновите страницу и попробуйте снова.');
+        return;
+    }
+
+    if(!window.FormData || !window.XMLHttpRequest){
+        setManualSubmitDisabled(true);
+        document.getElementById('spinner').classList.add('active');
+        startBusyStageRotation('Обрабатываем прайсы', [
+            'Загружаем файлы и проверяем структуру...',
+            'Парсим Excel и определяем рабочие колонки...',
+            'Сводим товары и подставляем найденные ID...',
+            'Применяем категории и наценки...',
+            'Подготавливаем результат к открытию...'
+        ], 1800);
+        return;
+    }
+
+    e.preventDefault();
+    setManualSubmitDisabled(true);
+    document.getElementById('spinner').classList.add('active');
+    startBusyStageRotation('Загружаем прайсы', [
+        'Отправляем файлы на сервер...',
+        'Проверяем структуру Excel...',
         'Парсим Excel и определяем рабочие колонки...',
         'Сводим товары и подставляем найденные ID...',
-        'Применяем категории и наценки...',
         'Подготавливаем результат к открытию...'
     ], 1800);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', this.action || '/upload', true);
+    xhr.withCredentials = true;
+    xhr.timeout = 300000;
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.upload.onprogress = function(evt){
+        if(evt.lengthComputable){
+            var pct = Math.max(1, Math.min(100, Math.round((evt.loaded / evt.total) * 100)));
+            updateBusyOverlay('Загружаем прайсы', 'Отправляем файлы на сервер: ' + pct + '%.');
+            if(pct >= 100){
+                updateBusyOverlay('Обрабатываем прайсы', 'Файлы загружены. Парсим Excel и собираем результат...');
+            }
+        }
+    };
+    xhr.onload = function(){
+        var data = null;
+        try {
+            data = JSON.parse(xhr.responseText || '{}');
+        } catch (parseErr) {}
+        if(xhr.status >= 200 && xhr.status < 300 && data && data.status === 'ok' && data.redirect_url){
+            updateBusyOverlay('Открываем результат', 'Прайс обработан, загружаем рабочее окно...');
+            window.location.href = data.redirect_url;
+            return;
+        }
+        hideBusyOverlay();
+        setManualSubmitDisabled(false);
+        var message = (data && (data.message || data.error)) || ('Не удалось обработать прайс. HTTP ' + xhr.status);
+        alert(message);
+    };
+    xhr.onerror = function(){
+        hideBusyOverlay();
+        setManualSubmitDisabled(false);
+        alert('Не удалось отправить прайс на сервер. Проверьте соединение и попробуйте снова.');
+    };
+    xhr.ontimeout = function(){
+        hideBusyOverlay();
+        setManualSubmitDisabled(false);
+        alert('Обработка заняла слишком много времени. Сервер мог продолжить работу, обновите страницу и проверьте последний результат.');
+    };
+    xhr.send(buildManualUploadFormData());
 });
 </script>
 </body></html>

@@ -1,5 +1,7 @@
 """Unit tests for HTTP Basic Auth."""
 
+import base64
+
 import pytest
 
 from app import app
@@ -7,9 +9,21 @@ from app import app
 
 @pytest.fixture
 def client():
+    old_username = app.config.get("ADMIN_USERNAME")
+    old_password = app.config.get("ADMIN_PASSWORD")
     app.config["TESTING"] = True
+    app.config["ADMIN_USERNAME"] = "admin"
+    app.config["ADMIN_PASSWORD"] = "test-password"
     with app.test_client() as client:
         yield client
+    if old_username is None:
+        app.config.pop("ADMIN_USERNAME", None)
+    else:
+        app.config["ADMIN_USERNAME"] = old_username
+    if old_password is None:
+        app.config.pop("ADMIN_PASSWORD", None)
+    else:
+        app.config["ADMIN_PASSWORD"] = old_password
 
 
 def test_health_no_auth(client):
@@ -34,8 +48,8 @@ def test_index_requires_auth(client):
 
 def test_index_with_valid_auth(client):
     """Index should be accessible with valid credentials."""
-    from config import cfg
+    token = base64.b64encode(b"admin:test-password").decode()
     resp = client.get("/", headers={
-        "Authorization": "Basic " + __import__("base64").b64encode(f"{cfg.admin_username}:{cfg.admin_password}".encode()).decode()
+        "Authorization": "Basic " + token
     })
     assert resp.status_code in (200, 302)  # 302 redirect if no active session

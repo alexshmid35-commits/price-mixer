@@ -1,0 +1,24 @@
+[Unit]
+Description=Price Mixer verified daily backup
+After=price-mixer.service
+
+[Service]
+Type=oneshot
+User=price-mixer
+Group=price-mixer
+WorkingDirectory=/opt/price-mixer/current
+EnvironmentFile=/etc/price-mixer/price-mixer.env
+ExecStart=/opt/price-mixer/current/.venv/bin/python deploy/scheduled_backup.py
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/price-mixer/current
+ReadWritePaths=/srv/price-mixer-backups
+
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=price-mixer-backup

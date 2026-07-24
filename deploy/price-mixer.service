@@ -1,0 +1,38 @@
+[Unit]
+Description=Price Mixer WSGI service
+After=network-online.target price-mixer-worker.service
+Wants=network-online.target
+Wants=price-mixer-worker.service
+
+[Service]
+Type=simple
+User=price-mixer
+Group=price-mixer
+WorkingDirectory=/opt/price-mixer/current
+EnvironmentFile=/etc/price-mixer/price-mixer.env
+ExecStartPre=/opt/price-mixer/current/.venv/bin/python deploy/check_production.py
+ExecStart=/opt/price-mixer/current/.venv/bin/gunicorn --config deploy/gunicorn.conf.py wsgi:application
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+TimeoutStopSec=180
+KillSignal=SIGTERM
+SuccessExitStatus=0 143
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/price-mixer/current
+ReadWritePaths=/var/lib/price-mixer/state
+ReadWritePaths=/var/lib/price-mixer/data
+ReadWritePaths=/var/lib/price-mixer/uploads
+ReadWritePaths=/var/cache/price-mixer
+ReadWritePaths=/var/log/price-mixer
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=price-mixer
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,7 @@
 """Thread-safe JSON cache with optional TTL."""
 
+from __future__ import annotations
+
 import json
 import threading
 import time

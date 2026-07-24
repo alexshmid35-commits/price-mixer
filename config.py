@@ -17,10 +17,14 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).parent.resolve()
 
+from price_mixer.runtime_paths import get_runtime_paths  # noqa: E402
+
+RUNTIME_PATHS = get_runtime_paths()
+
 # File paths
-APP_SETTINGS_PATH = PROJECT_ROOT / "app_settings.json"
-ONLINER_API_SETTINGS_PATH = PROJECT_ROOT / "onliner_api_settings.json"
-ONLINER_DB_PATH = PROJECT_ROOT / "onliner_products.db"
+APP_SETTINGS_PATH = RUNTIME_PATHS.state_file("app_settings.json")
+ONLINER_API_SETTINGS_PATH = RUNTIME_PATHS.state_file("onliner_api_settings.json")
+ONLINER_DB_PATH = RUNTIME_PATHS.data_file("onliner_products.db")
 
 
 def _env_str(key: str, default: str = "") -> str:
@@ -43,12 +47,19 @@ def _env_int(key: str, default: int = 0) -> int:
         return default
 
 
+def _env_float(key: str, default: float = 0.0) -> float:
+    try:
+        return float(os.getenv(key, str(default)))
+    except ValueError:
+        return default
+
+
 class Config:
     """Centralized configuration."""
 
     # Paths
     project_root = PROJECT_ROOT
-    uploads_dir = PROJECT_ROOT / "uploads"
+    uploads_dir = RUNTIME_PATHS.uploads_dir
 
     # Google Sheets
     google_sheets_sa_json = _env_str(
@@ -63,11 +74,6 @@ class Config:
     onliner_db_sheet_name = _env_str(
         "ONLINER_DB_SHEET_NAME", "All_Catalog"
     )
-    # original line replaced below
-    google_sheets_spreadsheet_id = _env_str(
-        "GOOGLE_SHEETS_SPREADSHEET_ID", "11zEGNWLqcOxhlm6SubOlW2xFvjQSrJAJJaUm-ga8iHM"
-    )
-
     # Onliner B2B
     onliner_b2b_client_id = _env_str("ONLINER_B2B_CLIENT_ID", "")
     onliner_b2b_client_secret = _env_str("ONLINER_B2B_CLIENT_SECRET", "")
@@ -92,13 +98,30 @@ class Config:
     # Onliner API caching / proxy settings
     onliner_api_allow_direct = _env_bool("ONLINER_API_ALLOW_DIRECT", True)
     onliner_api_retry_attempts = _env_int("ONLINER_API_RETRY_ATTEMPTS", 3)
-    onliner_api_backoff_sec = float(os.getenv("ONLINER_API_BACKOFF_SEC", "0.6"))
+    onliner_api_backoff_sec = _env_float("ONLINER_API_BACKOFF_SEC", 0.6)
     onliner_api_proxy_cooldown_sec = _env_int("ONLINER_API_PROXY_COOLDOWN_SEC", 180)
     onliner_api_max_parallel_workers = _env_int("ONLINER_API_MAX_PARALLEL_WORKERS", 10)
 
     # Admin auth
     admin_username = _env_str("ADMIN_USERNAME", "admin")
     admin_password = _env_str("ADMIN_PASSWORD", "")
+    flask_secret_key = _env_str("FLASK_SECRET_KEY", "")
+
+    @classmethod
+    def require_admin_password(cls) -> str:
+        """Return the configured admin password or fail closed."""
+        if not cls.admin_password:
+            raise RuntimeError("ADMIN_PASSWORD must be set in .env or the environment")
+        return cls.admin_password
+
+    @classmethod
+    def get_flask_secret_key(cls) -> str:
+        """Return a stable Flask signing key.
+
+        A random fallback is acceptable for local ad-hoc runs, but production
+        should always set FLASK_SECRET_KEY so sessions survive restarts.
+        """
+        return cls.flask_secret_key or os.urandom(32).hex()
 
     @classmethod
     def load_app_settings(cls) -> dict:

@@ -1,7 +1,15 @@
 const { defineConfig } = require('@playwright/test');
+const {
+  adminPassword,
+  adminUsername,
+  baseURL,
+} = require('./tests/e2e/server-utils.cjs');
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
+  globalSetup: './tests/e2e/global-setup.cjs',
+  globalTeardown: './tests/e2e/global-teardown.cjs',
+  outputDir: './test-results/playwright',
   timeout: 120000,
   expect: {
     timeout: 15000,
@@ -12,16 +20,14 @@ module.exports = defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:5001',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     headless: true,
-  },
-  webServer: {
-    command: 'python app.py',
-    url: 'http://127.0.0.1:5001',
-    reuseExistingServer: true,
-    timeout: 120000,
+    httpCredentials: {
+      username: adminUsername,
+      password: adminPassword,
+    },
   },
 });

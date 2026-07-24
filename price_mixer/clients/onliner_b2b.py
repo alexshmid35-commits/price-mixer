@@ -1,5 +1,7 @@
 """Onliner B2B API client (OAuth2 + price/catalog endpoints)."""
 
+from __future__ import annotations
+
 import threading
 import time
 from typing import Any

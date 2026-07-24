@@ -76,14 +76,14 @@ fi
 
 # --- [5/6] Start server in background ---
 echo "[5/6] Starting server..."
-"$PYTHON" app.py > server_stdout.log 2>&1 &
+nohup "$PYTHON" app.py > server_stdout.log 2>&1 </dev/null &
 SERVER_PID=$!
 echo "$SERVER_PID" > "$PID_FILE"
 echo "      PID: $SERVER_PID  (saved to server.pid)"
 
 # --- [6/6] Wait and open browser ---
 echo "[6/6] Waiting for server to start..."
-DEADLINE=$(($(date +%s) + 20))
+DEADLINE=$(($(date +%s) + 90))
 while [ $(date +%s) -lt $DEADLINE ]; do
     if curl -s --max-time 1 "http://127.0.0.1:$PORT" > /dev/null 2>&1; then
         echo "      Server is up!"
@@ -91,7 +91,7 @@ while [ $(date +%s) -lt $DEADLINE ]; do
         echo ""
         echo "Price Mixer v4 REFACTORED running at http://127.0.0.1:$PORT"
         echo "Logs: server_stdout.log"
-        echo "Auth: admin / impulse2024 (or check .env)"
+        echo "Auth: credentials are loaded from .env"
         echo "To stop: ./stop_server.sh"
         exit 0
     fi
@@ -106,7 +106,7 @@ while [ $(date +%s) -lt $DEADLINE ]; do
 done
 
 echo ""
-echo "Server did not respond on http://127.0.0.1:$PORT within 20 seconds."
+echo "Server did not respond on http://127.0.0.1:$PORT within 90 seconds."
 echo "Check server_stdout.log for errors."
 echo ""
 exit 1

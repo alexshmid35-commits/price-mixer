@@ -1,39 +1,51 @@
-# Python
-__pycache__/
-*.py[cod]
-
-# Environment / Secrets
+.DS_Store
+.claude/
 .env
-.env.local
-*.json.key
-ai2025-*.json
+.env.*
+.venv/
+.venv-win/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+node_modules/
 
-# Runtime/logs
-app.log
-*.log
-
-# Local data artifacts
 uploads/
-*.xls
-*.xlsx
-consolidated_price.xlsx
+backups/
+*.backup*
+*.before_*
+logs/
+*.pid
+*.log
+playwright-report/
+test-results/
 
-# Local caches/state
+ai2025-*.json
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.xlsx
+*.xls
+*.xlsb
+*.xlsm
+*.csv
+!tests/fixtures/
+!tests/fixtures/*.csv
+
+app_settings.json
+auto_refresh_settings.json
+onliner_api_settings.json
+manual_id_bindings.json
+id_change_journal.json
+id_review_queue.json
+category_markups.json
+category_overrides.json
+manual_category_overrides.json
+category_visibility.json
+supplier_snapshots.json
+api_fetch_history.json
 onliner_cache.json
-onliner_id_cache.json
-onliner_id_cache.backup.json
+onliner_id_cache*.json
 onliner_market_cache.json
 onliner_product_cache.json
-id_mismatch_report.json
-id_mismatch_report_sample.json
-manual_id_bindings.json
-category_overrides.json
-category_markups.json
-category_visibility.json
-
-# macOS
-.DS_Store
-*.db
-ai2025-*.json
-*.db-*
-server.pid
+id_mismatch_report*.json

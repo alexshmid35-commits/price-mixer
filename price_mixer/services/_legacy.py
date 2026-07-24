@@ -20,13 +20,18 @@ from urllib.parse import quote
 import numpy as np
 import pandas as pd
 
+from price_mixer.logging_config import get_logger
+from price_mixer.runtime_paths import get_runtime_paths
+
 # ============================================================
 # КОНФИГУРАЦИЯ ПОСТАВЩИКОВ
 # Редактируйте этот раздел при изменении форматов или добавлении новых поставщиков
 # ============================================================
 
 SCRIPT_DIR = Path(__file__).parent.parent.resolve()
+RUNTIME_PATHS = get_runtime_paths()
 OUTPUT_FILE = SCRIPT_DIR / "consolidated_price.xlsx"
+LOGGER = get_logger("price_mixer.legacy")
 
 SUPPLIERS = {
     "BN-1030Z": {
@@ -110,7 +115,7 @@ SUPPLIERS = {
 # ONLINER URL CACHE
 # ============================================================
 
-CACHE_FILE = SCRIPT_DIR / "onliner_cache.json"
+CACHE_FILE = RUNTIME_PATHS.cache_file("onliner_cache.json")
 
 
 def load_url_cache():
@@ -127,7 +132,7 @@ def save_url_cache(cache):
         json.dump(cache, f, ensure_ascii=False, indent=1)
 
 
-ONLINER_ID_CACHE = SCRIPT_DIR / "onliner_id_cache.json"
+ONLINER_ID_CACHE = RUNTIME_PATHS.cache_file("onliner_id_cache.json")
 
 QUERY_CACHE = {}
 QUERY_CACHE_LOCK = threading.Lock()
@@ -154,13 +159,16 @@ def load_id_cache():
         try:
             with open(ONLINER_ID_CACHE, encoding="utf-8") as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception:
             try:
                 backup = ONLINER_ID_CACHE.with_suffix(".broken.json")
                 ONLINER_ID_CACHE.replace(backup)
-                print(f"[id_cache] Файл кэша поврежден, перенесен в {backup.name}: {e}", flush=True)
+                LOGGER.exception(
+                    "ID cache was corrupt and moved aside backup=%s",
+                    backup.name,
+                )
             except Exception:
-                print(f"[id_cache] Файл кэша поврежден: {e}", flush=True)
+                LOGGER.exception("ID cache was corrupt")
             return {}
     return {}
 
@@ -369,14 +377,14 @@ def _load_catalog_sheet_index(force_reload=False, light=False):
         last_good = target if isinstance(target, dict) and target.get("by_id") else None
 
         if not os.path.exists(CATALOG_KEY_FILE):
-            print(f"[catalog-index] key file not found: {CATALOG_KEY_FILE}")
+            LOGGER.warning("catalog index credential file is missing")
             return last_good or {}
 
         try:
             import gspread
             from oauth2client.service_account import ServiceAccountCredentials
-        except Exception as e:
-            print(f"[catalog-index] gspread import error: {e}")
+        except Exception:
+            LOGGER.exception("catalog index dependencies could not be imported")
             return last_good or {}
 
         try:
@@ -389,8 +397,8 @@ def _load_catalog_sheet_index(force_reload=False, light=False):
             client = gspread.authorize(creds)
             ws = client.open_by_key(CATALOG_SPREADSHEET_ID).worksheet(CATALOG_SHEET_NAME)
             rows = ws.get_all_values()
-        except Exception as e:
-            print(f"[catalog-index] sheet load error: {e}")
+        except Exception:
+            LOGGER.exception("catalog index sheet load failed")
             return last_good or {}
 
         by_id = {}
@@ -914,9 +922,12 @@ def find_missing_onliner_ids(
             )
 
     save_id_cache(id_cache)
-    print(
-        f"ID matching summary: sheet={found_from_sheet}, api={found_from_api}, "
-        f"not_found={not_found}, cached={already_found}"
+    LOGGER.info(
+        "ID matching completed sheet=%s api=%s not_found=%s cached=%s",
+        found_from_sheet,
+        found_from_api,
+        not_found,
+        already_found,
     )
     return id_cache, found + already_found
 
@@ -1272,7 +1283,21 @@ def consolidate(all_data, url_cache=None):
 
 def parse_generic_excel(filepath, supplier_name):
     """Универсальный парсер Excel - пытается найти колонки автоматически."""
-    df_raw = pd.read_excel(filepath, header=None)
+    source_path = Path(filepath)
+
+    def read_table(*, header, nrows=None):
+        if source_path.suffix.casefold() == ".csv":
+            return pd.read_csv(
+                source_path,
+                header=header,
+                nrows=nrows,
+                sep=None,
+                engine="python",
+                encoding="utf-8-sig",
+            )
+        return pd.read_excel(source_path, header=header, nrows=nrows)
+
+    df_raw = read_table(header=None, nrows=20)
 
     header_row = 0
     for i in range(min(20, len(df_raw))):
@@ -1282,7 +1307,7 @@ def parse_generic_excel(filepath, supplier_name):
             header_row = i
             break
 
-    df = pd.read_excel(filepath, header=header_row)
+    df = read_table(header=header_row)
     col_map = {}
     supplier_norm = str(supplier_name or "").strip().lower()
     has_it_distribution_header = False
@@ -1359,8 +1384,52 @@ def parse_generic_excel(filepath, supplier_name):
                 col_map["product_name"] = col
                 break
 
+    # Some N-Tech price lists use a dated heading such as "ПРАЙС 22.07.2026"
+    # for the product-name column, while an adjacent unnamed column contains
+    # only section labels. Prefer the text column populated on actual price
+    # rows instead of trusting the first long-text column from the preamble.
+    if "price_byn" in col_map:
+        numeric_price = pd.to_numeric(df[col_map["price_byn"]], errors="coerce")
+        valid_price_rows = numeric_price.notna() & numeric_price.gt(0)
+        if valid_price_rows.any():
+            best_product_col = None
+            best_product_count = 0
+            for col in df.columns:
+                if col == col_map["price_byn"] or pd.api.types.is_numeric_dtype(df[col]):
+                    continue
+                raw = df[col]
+                text = raw.fillna("").astype(str).str.strip()
+                meaningful = (
+                    raw.notna()
+                    & text.ne("")
+                    & text.str.lower().ne("nan")
+                    & text.str.len().ge(3)
+                )
+                populated_price_rows = int((meaningful & valid_price_rows).sum())
+                if populated_price_rows > best_product_count:
+                    best_product_col = col
+                    best_product_count = populated_price_rows
+
+            current_product_count = 0
+            current_product_col = col_map.get("product_name")
+            if current_product_col in df.columns:
+                current_raw = df[current_product_col]
+                current_text = current_raw.fillna("").astype(str).str.strip()
+                current_product_count = int((
+                    current_raw.notna()
+                    & current_text.ne("")
+                    & current_text.str.lower().ne("nan")
+                    & current_text.str.len().ge(3)
+                    & valid_price_rows
+                ).sum())
+            if best_product_col is not None and best_product_count > current_product_count:
+                col_map["product_name"] = best_product_col
+
     if "price_byn" not in col_map or "product_name" not in col_map:
-        print(f"Не найдены колонки: {list(df.columns)}")
+        LOGGER.warning(
+            "supplier columns not detected column_count=%s",
+            len(df.columns),
+        )
         return pd.DataFrame()
 
     result = pd.DataFrame()
@@ -1372,7 +1441,6 @@ def parse_generic_excel(filepath, supplier_name):
     result = result[result["price_byn"].notna() & (result["price_byn"] > 0)]
 
     result = result[result["product_name"].notna()]
-    result = result[~result["product_name"].astype(str).str.match(r'^[A-Za-zА-Яа-я\s]+$')]
 
     if "onliner_id" in result.columns:
         result["onliner_id"] = result["onliner_id"].astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
@@ -1382,8 +1450,13 @@ def parse_generic_excel(filepath, supplier_name):
         result["rrc"] = pd.to_numeric(result["rrc"], errors="coerce")
         result.loc[result["rrc"].isna(), "rrc"] = np.nan
 
-    print(f"  Найдено колонок: {col_map}")
-    print(f"  С OnlinerID: {result['onliner_id'].notna().sum() if 'onliner_id' in result.columns else 0}")
+    LOGGER.info(
+        "supplier columns detected count=%s onliner_id_rows=%s",
+        len(col_map),
+        int(result["onliner_id"].notna().sum())
+        if "onliner_id" in result.columns
+        else 0,
+    )
 
     return result
 
@@ -1478,76 +1551,145 @@ def _is_groupable_article(article):
 
 
 def consolidate_simple(all_data):
-    """Консолидатор: группирует по OnlinerID и артикулу, но не теряет строки без артикула."""
+    """Консолидатор: группирует по OnlinerID и сохраняет позиции без ID."""
     if "onliner_id" not in all_data.columns:
         all_data["onliner_id"] = np.nan
 
     all_data = all_data.copy()
-    all_data["_article"] = all_data["product_name"].apply(extract_article)
 
-    rows = []
-    id_to_article = {}
+    def _text_series(frame, column):
+        if column not in frame.columns:
+            return pd.Series("", index=frame.index, dtype="object")
+        return frame[column].fillna("").astype(str).str.strip()
 
-    def _append_group_best_row(group, onliner_id=""):
-        if group is None or group.empty:
-            return
-        best_row = group.loc[group["price_byn"].idxmin()]
-        rows.append({
-            "OnlinerID": onliner_id,
-            "Название": str(best_row.get("product_name", "")).strip(),
-            "Цена": best_row.get("price_byn"),
-            "Поставщик": best_row.get("supplier", ""),
-            "Гарантия": _pick_warranty(group),
-            "\u0414\u043d\u0435\u0439 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438": _pick_order_term(group),
-            "РРЦ": _pick_rrc(best_row),
-        })
+    def _row_keys(frame, *, include_supplier):
+        supplier = _text_series(frame, "supplier")
+        supplier_code = _text_series(frame, "supplier_code")
+        product_name = _text_series(frame, "product_name")
+        row_id = pd.Series((str(idx) for idx in frame.index), index=frame.index, dtype="object")
+        has_code = supplier_code.ne("") & supplier_code.str.lower().ne("nan")
+        has_name = product_name.ne("")
+        code_key = "code:" + supplier_code
+        name_key = "name:" + product_name
+        row_key = "row:" + row_id
+        key = code_key.where(has_code, name_key.where(has_name, row_key))
+        if include_supplier:
+            key = "supplier:" + supplier + ":" + key
+        return key
 
-    has_id = all_data[all_data["onliner_id"].notna()]
-    # Keep one best offer per (OnlinerID, supplier) so cross-supplier
-    # price comparison remains visible in the main table.
-    for (onliner_id, supplier_name), group in has_id.groupby(["onliner_id", "supplier"], dropna=False):
-        if pd.isna(onliner_id) or str(onliner_id).strip() == "":
-            continue
-        best_row = group.loc[group["price_byn"].idxmin()]
-        article = str(best_row.get("_article", "") or "").strip()
-        if _is_groupable_article(article):
-            id_to_article[str(onliner_id).strip()] = article
-        _append_group_best_row(group, onliner_id=onliner_id)
+    def _single_warranty_values(frame):
+        if "warranty" not in frame.columns:
+            return pd.Series("", index=frame.index, dtype="object")
+        raw = frame["warranty"]
+        numeric = pd.to_numeric(raw, errors="coerce")
+        values = raw.fillna("").astype("object")
+        values.loc[numeric.notna()] = numeric.loc[numeric.notna()]
+        integer_mask = numeric.notna() & numeric.mod(1).eq(0)
+        values.loc[integer_mask] = numeric.loc[integer_mask].astype("int64")
+        text_mask = numeric.isna()
+        values.loc[text_mask] = raw.loc[text_mask].fillna("").astype(str).str.strip()
+        return values
 
-    article_to_id = {v: k for k, v in id_to_article.items() if v}
+    def _single_delivery_values(frame):
+        values = pd.Series("2", index=frame.index, dtype="object")
+        assigned = pd.Series(False, index=frame.index)
+        delivery_columns = (
+            "order_term",
+            "delivery_days",
+            "delivery_date",
+            "days",
+            "дней",
+            "дата поставки",
+        )
+        for column in delivery_columns:
+            if column not in frame.columns:
+                continue
+            raw = frame[column].fillna("").astype(str).str.strip()
+            usable = raw.ne("") & raw.str.lower().ne("nan") & ~assigned
+            if not usable.any():
+                continue
+            digits = raw.str.extract(r"(\d+)", expand=False)
+            values.loc[usable] = digits.where(digits.notna(), raw).loc[usable]
+            assigned.loc[usable] = True
+        return values
+
+    def _rrc_values(frame):
+        values = pd.Series("", index=frame.index, dtype="object")
+        assigned = pd.Series(False, index=frame.index)
+        for column in ("rrc", "mrc", "РРЦ", "МРЦ", "RRC", "MRC"):
+            if column not in frame.columns:
+                continue
+            raw = frame[column]
+            text = raw.fillna("").astype(str).str.strip()
+            usable = raw.notna() & text.ne("") & text.str.lower().ne("nan") & ~assigned
+            values.loc[usable] = raw.loc[usable]
+            assigned.loc[usable] = True
+        return values
+
+    def _collapse_groups(frame, group_columns, *, use_onliner_id):
+        if frame.empty:
+            return pd.DataFrame()
+        best_indices = (
+            frame.groupby(group_columns, dropna=False, sort=False)["price_byn"]
+            .idxmin()
+            .tolist()
+        )
+        best = frame.loc[best_indices]
+        result = pd.DataFrame(index=best.index)
+        if use_onliner_id:
+            result["OnlinerID"] = best["onliner_id"]
+        else:
+            result["OnlinerID"] = ""
+        result["Название"] = _text_series(best, "product_name")
+        result["Цена"] = best["price_byn"]
+        result["Поставщик"] = best["supplier"] if "supplier" in best.columns else ""
+        result["Гарантия"] = _single_warranty_values(best)
+        result["Дней доставки"] = _single_delivery_values(best)
+        result["РРЦ"] = _rrc_values(best)
+
+        # Almost all source keys are unique. Run the richer aggregation helpers
+        # only for actual duplicate groups instead of once per source row.
+        duplicate_rows = frame[frame.duplicated(group_columns, keep=False)]
+        if not duplicate_rows.empty:
+            for _, group in duplicate_rows.groupby(group_columns, dropna=False, sort=False):
+                best_idx = group["price_byn"].idxmin()
+                result.at[best_idx, "Гарантия"] = _pick_warranty(group)
+                result.at[best_idx, "Дней доставки"] = _pick_order_term(group)
+        return result.reset_index(drop=True)
+
+    has_id = all_data[all_data["onliner_id"].notna()].copy()
+    if not has_id.empty:
+        has_id["_source_group_key"] = _row_keys(has_id, include_supplier=False)
+
+    # Keep distinct supplier rows visible even when a supplier maps several
+    # source codes to the same OnlinerID. Exact repeated source codes still
+    # collapse to the cheapest row.
+    has_id_for_output = has_id[_text_series(has_id, "onliner_id").ne("")]
+    with_id_result = _collapse_groups(
+        has_id_for_output,
+        ["onliner_id", "supplier", "_source_group_key"],
+        use_onliner_id=True,
+    )
 
     no_id = all_data[all_data["onliner_id"].isna()].copy()
-    no_id["_article"] = no_id["_article"].fillna("").astype(str).str.strip()
+    if not no_id.empty:
+        no_id["_fallback_group_key"] = _row_keys(no_id, include_supplier=True)
+    without_id_result = _collapse_groups(
+        no_id,
+        ["_fallback_group_key"],
+        use_onliner_id=False,
+    )
 
-    no_id_with_article = no_id[no_id["_article"].apply(_is_groupable_article)]
-    no_id_without_article = no_id[~no_id["_article"].apply(_is_groupable_article)]
-
-    for article, group in no_id_with_article.groupby("_article"):
-        # Never auto-inherit OnlinerID across suppliers from article only.
-        # This keeps supplier source IDs intact (notably IVEN) and prevents
-        # synthetic duplicate IDs from being introduced by consolidation.
-        _append_group_best_row(group, onliner_id="")
-
-    if not no_id_without_article.empty:
-        fallback_keys = []
-        for idx, row in no_id_without_article.iterrows():
-            supplier_code = str(row.get("supplier_code", "") or "").strip()
-            if supplier_code and supplier_code.lower() != "nan":
-                fallback_keys.append(f"code:{supplier_code}")
-                continue
-
-            product_name = str(row.get("product_name", "") or "").strip()
-            if product_name:
-                fallback_keys.append(f"name:{product_name}")
-                continue
-
-            fallback_keys.append(f"row:{idx}")
-
-        no_id_without_article["_fallback_group_key"] = fallback_keys
-        for _, group in no_id_without_article.groupby("_fallback_group_key", dropna=False):
-            _append_group_best_row(group, onliner_id="")
-
-    result = pd.DataFrame(rows)
+    result = pd.concat([with_id_result, without_id_result], ignore_index=True)
+    if len(result) != len(all_data):
+        LOGGER.info(
+            "consolidation rows input=%s with_id=%s no_id=%s output=%s collapsed=%s",
+            len(all_data),
+            len(has_id),
+            len(no_id),
+            len(result),
+            len(all_data) - len(result),
+        )
     if not result.empty:
         result = result.sort_values("Название").reset_index(drop=True)
     return result

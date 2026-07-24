@@ -5,30 +5,41 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title Price Mixer - Start
 
-echo [1/5] Check Python 3.11...
+set "VENV_DIR=%~dp0.venv-win"
+set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
+
+echo [1/5] Check Python 3.11 and Windows virtual environment...
 py -3.11 --version >nul 2>&1
 if errorlevel 1 goto no_python
 
+if not exist "%PYTHON_EXE%" (
+    echo Creating Windows virtual environment: .venv-win
+    py -3.11 -m venv "%VENV_DIR%"
+    if errorlevel 1 goto venv_failed
+)
+
 echo [2/5] Check if server is already running...
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5001 -TimeoutSec 2; if($r.StatusCode -eq 200){ exit 0 } else { exit 1 } } catch { exit 1 }"
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5001/api/health -TimeoutSec 2; if($r.StatusCode -eq 200){ exit 0 } else { exit 1 } } catch { exit 1 }"
 if not errorlevel 1 goto already_running
 
 echo [3/5] Check dependencies...
-py -3.11 -c "import flask, pandas, numpy, requests, openpyxl, xlrd, gspread, oauth2client" >nul 2>&1
+"%PYTHON_EXE%" -c "import dotenv, flask, pandas, numpy, requests, openpyxl, xlrd, gspread, oauth2client" >nul 2>&1
 if errorlevel 1 goto install_deps
 goto start_server
 
 :install_deps
 echo Installing requirements from requirements.txt...
-py -3.11 -m pip install -r requirements.txt
+"%PYTHON_EXE%" -m pip install --upgrade pip
+if errorlevel 1 goto deps_failed
+"%PYTHON_EXE%" -m pip install -r requirements.txt
 if errorlevel 1 goto deps_failed
 
 :start_server
 echo [4/5] Start server...
-start "Price Mixer Server" cmd /k "cd /d ""%~dp0"" && py -3.11 app.py"
+start "Price Mixer Server" /D "%~dp0" cmd /k ""%PYTHON_EXE%" app.py"
 
 echo [5/5] Wait for server and open browser...
-powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(20); do { try { $r=Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5001 -TimeoutSec 2; if($r.StatusCode -eq 200){ Start-Process 'http://127.0.0.1:5001'; exit 0 } } catch {}; Start-Sleep -Milliseconds 700 } while((Get-Date) -lt $deadline); exit 1"
+powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(60); do { try { $r=Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5001/api/health -TimeoutSec 2; if($r.StatusCode -eq 200){ Start-Process 'http://127.0.0.1:5001'; exit 0 } } catch {}; Start-Sleep -Milliseconds 700 } while((Get-Date) -lt $deadline); exit 1"
 if errorlevel 1 goto start_failed
 
 echo Done.
@@ -44,6 +55,13 @@ echo.
 echo Python 3.11 was not found.
 echo Install it with:
 echo     py install 3.11
+echo.
+pause
+exit /b 1
+
+:venv_failed
+echo.
+echo Failed to create .venv-win.
 echo.
 pause
 exit /b 1

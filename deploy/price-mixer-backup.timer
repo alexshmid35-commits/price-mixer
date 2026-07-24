@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Price Mixer verified backup every day
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=price-mixer-backup.service
+
+[Install]
+WantedBy=timers.target
