@@ -29,8 +29,10 @@ def test_duplicate_id_counter_visible_for_multiple_suppliers():
     assert 'id="run-all-id-checks-btn"' not in html
     assert 'id="open-all-id-checks-report-btn"' not in html
     assert 'id="all-id-checks-report-modal"' not in html
-    assert 'id="autofill-ntech-pc-btn"' not in html
-    assert 'id="autofill-iven-pc-btn"' not in html
+    assert 'id="run-all-pevm-checks-btn"' in html
+    assert 'id="autofill-ntech-pc-btn"' in html
+    assert 'id="autofill-iven-pc-btn"' in html
+    assert 'src="/static/js/result-pevm.js"' in html
     assert 'data-generic-review-key=' not in html
     assert 'id="cpu-review-btn"' not in html
     assert 'id="experimental-noid-start-btn"' in html
@@ -47,6 +49,12 @@ def test_duplicate_id_counter_visible_for_multiple_suppliers():
     assert "ivenLaptopReviewBtn.addEventListener('click', startIvenLaptopReviewQueue)" in actions_text
     assert "ivenZakazLaptopReviewBtn.addEventListener('click', startIvenZakazLaptopReviewQueue)" in actions_text
     assert "tradexLaptopReviewBtn.addEventListener('click', startTradexLaptopReviewQueue)" in actions_text
+
+    pevm_js = Path(__file__).resolve().parents[2] / "static" / "js" / "result-pevm.js"
+    pevm_text = pevm_js.read_text(encoding="utf-8")
+    assert "'/api/autofill-ntech-pc-ids'" in pevm_text
+    assert "'/api/autofill-iven-pc-ids'" in pevm_text
+    assert "['ntech', 'iven'].reduce" in pevm_text
 
 
 def test_gsheet_import_button_forces_fresh_download():

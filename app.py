@@ -53,6 +53,7 @@ from mixer import (
     save_id_cache,
 )
 from price_mixer.api.routes import bp as api_bp
+from price_mixer.api.autofill_routes import create_autofill_bp
 from price_mixer.api.bulk_id_routes import create_bulk_id_bp
 from price_mixer.api.category_management_routes import create_category_management_bp
 from price_mixer.api.category_reference_routes import create_category_reference_bp
@@ -76,6 +77,12 @@ from price_mixer.runtime_paths import ensure_runtime_directories, get_runtime_pa
 from price_mixer.services.api_sources import (
     fetch_api_source_worker as _api_source_fetch_worker,
     get_source_runtime as _api_sources_get_runtime,
+)
+from price_mixer.services.autofill_workers import (
+    make_pc_autofill_status as _autofill_make_pc_status,
+    run_tgpc_pc_worker as _autofill_run_tgpc_pc,
+    start_autofill_payload as _autofill_start_payload,
+    status_payload as _autofill_status_payload,
 )
 from price_mixer.services.manual_id_actions import reject_iven_match_payload as _reject_iven_match
 from price_mixer.services.background_xlsx import create_background_xlsx_worker
@@ -467,6 +474,28 @@ validate_clean_ids_status = {
 VALIDATE_CLEAN_IDS_LOCK = threading.RLock()
 VALIDATE_CLEAN_ANALYSIS_RUNNER = ValidateCleanAnalysisRunner()
 VALIDATE_CLEAN_CANCEL_EVENT = threading.Event()
+autofill_ntech_pc_status = {
+    "running": False,
+    "total": 0,
+    "done": 0,
+    "applied": 0,
+    "skipped": 0,
+    "percent": 0,
+    "items": [],
+    "message": "",
+}
+AUTOFILL_NTECH_PC_LOCK = threading.RLock()
+autofill_iven_pc_status = {
+    "running": False,
+    "total": 0,
+    "done": 0,
+    "applied": 0,
+    "skipped": 0,
+    "percent": 0,
+    "items": [],
+    "message": "",
+}
+AUTOFILL_IVEN_PC_LOCK = threading.RLock()
 id_review_status = {
     "running": False,
     "total": 0,
@@ -3398,6 +3427,156 @@ def _manual_id_reject_match_payload(session_dir, payload):
         save_manual_id_bindings=save_manual_id_bindings,
         blank_id_value=np.nan,
     )
+
+
+@_serialized_price_mutation
+def _autofill_ntech_pc_worker(session_dir, max_items=0):
+    return _autofill_run_tgpc_pc(
+        session_dir,
+        max_items=max_items,
+        status=autofill_ntech_pc_status,
+        lock=AUTOFILL_NTECH_PC_LOCK,
+        read_consolidated_df=read_consolidated_json_fast_df,
+        load_app_settings=load_app_settings,
+        row_category=row_category,
+        is_tgpc_pc_name=_is_tgpc_pc_name,
+        db_search_tgpc_pc_candidates=db_search_tgpc_pc_candidates,
+        get_id_cache_key_for_name=_get_id_cache_key_for_name,
+        normalize_name_key=_normalize_name_key,
+        load_id_cache=load_id_cache,
+        save_id_cache=save_id_cache,
+        load_manual_id_bindings=load_manual_id_bindings,
+        save_manual_id_bindings=save_manual_id_bindings,
+        append_id_change_journal=append_id_change_journal,
+        write_consolidated_df=lambda target, df: write_consolidated_df_background(
+            target,
+            df,
+            label="autofill-ntech-pc",
+        ),
+        write_consolidated_json=write_consolidated_json,
+        target_supplier_names=["N-Tech"],
+        pc_label="N-Tech ПЭВМ",
+        action_name="autofill_ntech_pc_ids",
+        source_name="db_autofill_ntech_pc_ids",
+        get_match_identity_for_name=_extract_tgpc_pc_code,
+    )
+
+
+@_serialized_price_mutation
+def _autofill_iven_pc_worker(session_dir, max_items=0):
+    return _autofill_run_tgpc_pc(
+        session_dir,
+        max_items=max_items,
+        status=autofill_iven_pc_status,
+        lock=AUTOFILL_IVEN_PC_LOCK,
+        read_consolidated_df=read_consolidated_json_fast_df,
+        load_app_settings=load_app_settings,
+        row_category=row_category,
+        is_tgpc_pc_name=_is_iven_pc_name,
+        db_search_tgpc_pc_candidates=db_search_iven_pc_candidates,
+        get_id_cache_key_for_name=_get_id_cache_key_for_name,
+        normalize_name_key=_normalize_name_key,
+        load_id_cache=load_id_cache,
+        save_id_cache=save_id_cache,
+        load_manual_id_bindings=load_manual_id_bindings,
+        save_manual_id_bindings=save_manual_id_bindings,
+        append_id_change_journal=append_id_change_journal,
+        write_consolidated_df=lambda target, df: write_consolidated_df_background(
+            target,
+            df,
+            label="autofill-iven-pc",
+        ),
+        write_consolidated_json=write_consolidated_json,
+        target_supplier_names=["IVEN"],
+        pc_label="IVEN ПЭВМ",
+        action_name="autofill_iven_pc_ids",
+        source_name="db_autofill_iven_pc_ids",
+        get_id_cache_keys_for_name=_id_cache_keys_for_iven_pc_name,
+        get_manual_binding_keys_for_name=_manual_binding_keys_for_name,
+        get_match_identity_for_name=_extract_iven_pc_code,
+        clear_duplicate_ids_for_suppliers=lambda df: _clear_duplicate_onliner_ids_for_suppliers(
+            df,
+            ["IVEN"],
+        ),
+    )
+
+
+def _start_pevm_autofill(status, lock, status_label, worker):
+    session_dir = get_active_session_dir()
+    payload = request.get_json(silent=True) or {}
+    try:
+        max_items = int(payload.get("limit", 0) or 0)
+    except (TypeError, ValueError):
+        max_items = 0
+    max_items = max(0, min(max_items, 200))
+    return _autofill_start_payload(
+        session_dir,
+        cons_exists=bool(
+            session_dir and _has_consolidated_session_file(session_dir)
+        ),
+        status=status,
+        lock=lock,
+        start_worker=lambda: threading.Thread(
+            target=worker,
+            args=(str(session_dir), max_items),
+            daemon=True,
+        ).start(),
+        status_factory=lambda: _autofill_make_pc_status(status_label),
+    )
+
+
+def api_autofill_ntech_pc_ids():
+    return _start_pevm_autofill(
+        autofill_ntech_pc_status,
+        AUTOFILL_NTECH_PC_LOCK,
+        "N-Tech ПЭВМ",
+        _autofill_ntech_pc_worker,
+    )
+
+
+def api_autofill_ntech_pc_status():
+    return _autofill_status_payload(
+        autofill_ntech_pc_status,
+        AUTOFILL_NTECH_PC_LOCK,
+    )
+
+
+def api_autofill_iven_pc_ids():
+    return _start_pevm_autofill(
+        autofill_iven_pc_status,
+        AUTOFILL_IVEN_PC_LOCK,
+        "IVEN ПЭВМ",
+        _autofill_iven_pc_worker,
+    )
+
+
+def api_autofill_iven_pc_status():
+    return _autofill_status_payload(
+        autofill_iven_pc_status,
+        AUTOFILL_IVEN_PC_LOCK,
+    )
+
+
+app.register_blueprint(create_autofill_bp(
+    handlers={
+        "/api/autofill-ntech-pc-ids": (
+            api_autofill_ntech_pc_ids,
+            ("POST",),
+        ),
+        "/api/autofill-ntech-pc-status": (
+            api_autofill_ntech_pc_status,
+            ("GET",),
+        ),
+        "/api/autofill-iven-pc-ids": (
+            api_autofill_iven_pc_ids,
+            ("POST",),
+        ),
+        "/api/autofill-iven-pc-status": (
+            api_autofill_iven_pc_status,
+            ("GET",),
+        ),
+    },
+))
 
 
 def _onliner_db_stats_payload():
