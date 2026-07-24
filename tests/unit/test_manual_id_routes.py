@@ -10,6 +10,7 @@ def _make_app(
     get_session=lambda: "/tmp/session",
     confirm_batch=None,
     clear=None,
+    reject_match=None,
     rollback_last=None,
 ):
     app = Flask(__name__)
@@ -17,6 +18,7 @@ def _make_app(
         get_active_session_dir=get_session,
         confirm_batch=confirm_batch or (lambda session_dir, payload: {"status": "ok", "session_dir": session_dir, "payload": payload}),
         clear=clear or (lambda session_dir, payload: {"status": "ok", "session_dir": session_dir, "payload": payload}),
+        reject_match=reject_match or (lambda session_dir, payload: {"status": "ok", "session_dir": session_dir, "payload": payload}),
         rollback_last=rollback_last or (lambda session_dir: {"status": "ok", "session_dir": session_dir}),
     ))
     return app
@@ -64,6 +66,16 @@ def test_manual_id_clear_uses_empty_payload_for_invalid_json():
 
     assert resp.status_code == 200
     assert resp.get_json()["payload"] == {}
+
+
+def test_manual_id_reject_match_propagates_callback_status():
+    app = _make_app(reject_match=lambda session_dir, payload: ({"status": "error"}, 400))
+
+    with app.test_client() as client:
+        resp = client.post("/api/iven-reject-match", json={"name": "SSD"})
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {"status": "error"}
 
 
 def test_manual_id_rollback_last_passes_session():

@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 import re
 
+from price_mixer.services.manual_id_store import supplier_scoped_binding_key
 from price_mixer.services.product_normalization import normalize_name_key, normalize_onliner_id
 
 
@@ -584,17 +585,23 @@ def _strong_model_tokens(text):
     raw = str(text or "")
     tokens = set()
     for part in re.findall(r"\(([^)]{3,80})\)", raw):
-        tokens.update(_model_tokens_from_part(part))
+        tokens.update(_model_tokens_from_part(part, include_compact=True))
     tokens.update(_model_tokens_from_part(raw))
     return tokens
 
 
-def _model_tokens_from_part(text):
+def _model_tokens_from_part(text, *, include_compact=False):
+    raw = str(text or "")
     out = set()
-    for token in re.findall(r"\b[A-Za-zА-Яа-я0-9]+(?:[-_/][A-Za-zА-Яа-я0-9]+)+\b", str(text or "")):
+    for token in re.findall(r"\b[A-Za-zА-Яа-я0-9]+(?:[-_/][A-Za-zА-Яа-я0-9]+)+\b", raw):
         compact = _compact_model_token(token)
         if _is_strong_model_token(compact):
             out.add(compact)
+    if include_compact:
+        for token in re.findall(r"\b[A-Za-zА-Яа-я0-9]{6,}\b", raw):
+            compact = _compact_model_token(token)
+            if _is_strong_compact_model_token(compact):
+                out.add(compact)
     return out
 
 
@@ -607,6 +614,15 @@ def _is_strong_model_token(token):
     if len(token) < 4:
         return False
     return bool(re.search(r"[a-zа-яё]", token) and re.search(r"\d", token))
+
+
+def _is_strong_compact_model_token(token):
+    token = str(token or "")
+    if len(token) < 6:
+        return False
+    letters = re.findall(r"[a-zа-яё]", token)
+    digits = re.findall(r"\d", token)
+    return len(letters) >= 2 and len(digits) >= 2
 
 
 def _supplier_key_token(supplier_name):
@@ -626,6 +642,72 @@ def _manual_binding_storage_key(name_key, supplier_names):
         if supplier_token:
             return f"supplier:{supplier_token}:{base_key}"
     return base_key
+
+
+def reject_iven_match_payload(
+    session_dir,
+    payload,
+    *,
+    read_consolidated_df,
+    write_consolidated_df,
+    write_consolidated_json,
+    normalize_name_key,
+    load_manual_id_bindings,
+    save_manual_id_bindings,
+    blank_id_value="",
+):
+    """Clear a rejected laptop match and its durable manual binding."""
+    if not session_dir:
+        return {"status": "error", "message": "Нет активной сессии"}, 400
+    payload = payload if isinstance(payload, dict) else {}
+    item_name = str(payload.get("name", "")).strip()
+    supplier = str(payload.get("supplier", "") or "").strip()
+    row_idx = payload.get("row_idx")
+    if not item_name:
+        return {"status": "error", "message": "name required"}, 400
+    try:
+        df = read_consolidated_df(session_dir)
+        df["OnlinerID"] = df["OnlinerID"].astype("object")
+        if "Ссылка" in df.columns:
+            df["Ссылка"] = df["Ссылка"].astype("object")
+        cleared = 0
+        if row_idx is not None:
+            try:
+                row_int = int(row_idx)
+                if row_int in df.index:
+                    row = df.loc[row_int]
+                    same_name = normalize_name_key(str(row.get("Название", ""))) == normalize_name_key(item_name)
+                    same_supplier = not supplier or str(row.get("Поставщик", "") or "").strip().upper() == supplier.upper()
+                    if same_name and same_supplier:
+                        df.at[row_int, "OnlinerID"] = blank_id_value
+                        if "Ссылка" in df.columns:
+                            df.at[row_int, "Ссылка"] = ""
+                        cleared = 1
+            except Exception:
+                pass
+        if cleared == 0 and item_name:
+            name_key = normalize_name_key(item_name)
+            if "Название" in df.columns:
+                for idx, row in df.iterrows():
+                    if normalize_name_key(str(row.get("Название", ""))) == name_key:
+                        if supplier and str(row.get("Поставщик", "") or "").strip().upper() != supplier.upper():
+                            continue
+                        df.at[idx, "OnlinerID"] = blank_id_value
+                        if "Ссылка" in df.columns:
+                            df.at[idx, "Ссылка"] = ""
+                        cleared += 1
+                        break
+        name_key = normalize_name_key(item_name)
+        manual_bindings = load_manual_id_bindings()
+        binding_key = supplier_scoped_binding_key(name_key, supplier)
+        if binding_key and binding_key in manual_bindings:
+            del manual_bindings[binding_key]
+            save_manual_id_bindings(manual_bindings)
+        write_consolidated_df(session_dir, df)
+        write_consolidated_json(df, Path(session_dir) / "consolidated.json")
+        return {"status": "ok", "cleared": cleared}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}, 500
 
 
 def _existing_id_name_keys(df, normalize_name_key_func, supplier_names=None):

@@ -605,9 +605,6 @@ a:hover { text-decoration: underline; }
     .ntech-checks-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .55); display: none; align-items: center; justify-content: center; z-index: 1410; }
     .ntech-checks-modal.active { display: flex; }
     .ntech-checks-sheet { width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); border: 1px solid #dbeafe; }
-    .ntech-checks-grid { margin-top: 10px; display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .ntech-checks-grid .btn { width: 100%; justify-content: center; }
-    .checks-hidden-legacy { display: none !important; }
     .ntech-check-badge { display:none; margin-left:8px; padding:1px 7px; border-radius:999px; background:#16a34a; color:#fff; font-size:11px; font-weight:700; line-height:1.4; }
     .ntech-check-badge.active { display:inline-block; }
     .btn-with-badge { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
@@ -620,7 +617,6 @@ a:hover { text-decoration: underline; }
     .action-count-badge.active { display:inline-block; }
     .action-count-badge.warn { background:#d97706; }
     .action-count-badge.info { background:#4f46e5; }
-    @media (max-width: 760px){ .ntech-checks-grid { grid-template-columns: 1fr; } }
     .btn.is-loading { opacity: .95; cursor: wait; }
 		@media (max-width: 1100px){
 			.markup-split { grid-template-columns: 1fr; }
@@ -1025,28 +1021,6 @@ a:hover { text-decoration: underline; }
       <button class="pricing-close" id="close-ntech-checks-modal-btn">Закрыть</button>
     </div>
     <div class="markup-note">Все проверки и служебные действия собраны в одном окне.</div>
-    <div style="margin-top:10px;padding:10px;border:1px solid #bfdbfe;border-radius:10px;background:#f8fbff;">
-      <div style="display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;">
-        <button class="btn" id="run-all-id-checks-btn" style="padding:9px 18px;font-size:13px;background:#2563eb;">Запустить все проверки</button>
-      </div>
-      <div class="markup-note" id="run-all-id-checks-note" style="margin-top:8px;text-align:center;">Запустит ПЭВМ и все категории со счётчиками по очереди. Отчёты соберутся во вкладках.</div>
-    </div>
-    <div style="margin-top:10px;padding:10px;border:1px solid #fde68a;border-radius:10px;background:#fffbeb;">
-      <div style="font-size:12px;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:.04em;text-align:center;">ПЭВМ поставщиков</div>
-      <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-        <button class="btn btn-outline checks-hidden-legacy" id="autofill-tgpc-pc-btn" style="padding:8px 16px;font-size:13px;">Авто TGPC ПЭВМ</button>
-        <button class="btn btn-outline" id="autofill-ntech-pc-btn" style="padding:8px 16px;font-size:13px;border-color:#b45309;color:#b45309;">Авто N-Tech ПЭВМ <span class="ntech-check-badge" id="ntech-pc-review-badge"></span></button>
-        <button class="btn btn-outline" id="autofill-iven-pc-btn" style="padding:8px 16px;font-size:13px;border-color:#2563eb;color:#2563eb;">Авто IVEN ПЭВМ <span class="ntech-check-badge" id="iven-pc-review-badge"></span></button>
-      </div>
-      <div id="autofill-tgpc-progress-wrap" style="display:none;margin-top:12px;padding:0 2px;">
-        <div style="height:6px;background:#f0dfb1;border-radius:4px;overflow:hidden;">
-          <div id="autofill-tgpc-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#f59e0b,#d56e0c);border-radius:4px;transition:width 0.5s ease;"></div>
-        </div>
-      </div>
-      <div id="autofill-tgpc-chips" style="display:none;margin-top:10px;gap:6px;justify-content:center;flex-wrap:wrap;"></div>
-      <div class="markup-note" id="autofill-tgpc-pc-note" style="margin-top:8px;">Подбор N-Tech и IVEN ПЭВМ без OnlinerID только по локальной SQLite-базе (без Onliner API).</div>
-      <div id="autofill-tgpc-pc-report"></div>
-    </div>
     <div style="margin-top:10px;padding:10px;border:1px solid #e9d5ff;border-radius:10px;background:#faf5ff;">
       <div style="font-size:12px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.04em;text-align:center;">Проверка ID через API</div>
       <div style="margin-top:4px;font-size:12px;color:#6b7280;text-align:center;">Два режима: быстрая локальная сверка по базе 150k и полная проверка через Onliner API. Неверные ID очищаются, ПЭВМ TGPC пропускаются.</div>
@@ -1078,29 +1052,6 @@ a:hover { text-decoration: underline; }
         <div class="experimental-noid-progress-bar"><span id="experimental-noid-progress-value"></span></div>
       </div>
       <div class="experimental-noid-summary" id="experimental-noid-summary"></div>
-    </div>
-    <div class="checks-hidden-legacy" style="margin-top:10px;font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:.04em;text-align:center;">Проверки N-Tech</div>
-    <div class="ntech-checks-grid checks-hidden-legacy">
-      <button class="btn btn-outline" id="cpu-review-btn" data-check-key="cpu" style="padding:8px 16px;font-size:13px;border-color:#7c3aed;color:#7c3aed;">Процессоры N-Tech <span class="ntech-check-badge" id="cpu-review-badge"></span></button>
-      <button class="btn btn-outline" id="board-review-btn" data-check-key="board" style="padding:8px 16px;font-size:13px;border-color:#0f766e;color:#0f766e;">Материнки N-Tech <span class="ntech-check-badge" id="board-review-badge"></span></button>
-      <button class="btn btn-outline" id="monitor-review-btn" data-check-key="monitor" style="padding:8px 16px;font-size:13px;border-color:#c2410c;color:#c2410c;">Мониторы N-Tech <span class="ntech-check-badge" id="monitor-review-badge"></span></button>
-      <button class="btn btn-outline" id="gpu-review-btn" data-check-key="gpu" style="padding:8px 16px;font-size:13px;border-color:#be185d;color:#be185d;">Видеокарты N-Tech <span class="ntech-check-badge" id="gpu-review-badge"></span></button>
-      <button class="btn btn-outline" id="ram-review-btn" data-check-key="ram" style="padding:8px 16px;font-size:13px;border-color:#0369a1;color:#0369a1;">Оперативка N-Tech <span class="ntech-check-badge" id="ram-review-badge"></span></button>
-      <button class="btn btn-outline" id="ssd-review-btn" data-check-key="ssd" style="padding:8px 16px;font-size:13px;border-color:#0f766e;color:#0f766e;">SSD N-Tech <span class="ntech-check-badge" id="ssd-review-badge"></span></button>
-      <button class="btn btn-outline" id="psu-review-btn" data-check-key="psu" style="padding:8px 16px;font-size:13px;border-color:#047857;color:#047857;">Блоки питания N-Tech <span class="ntech-check-badge" id="psu-review-badge"></span></button>
-      <button class="btn btn-outline" id="case-review-btn" data-check-key="case" style="padding:8px 16px;font-size:13px;border-color:#b45309;color:#b45309;">Корпуса N-Tech <span class="ntech-check-badge" id="case-review-badge"></span></button>
-      <button class="btn btn-outline" id="hdd-review-btn" data-check-key="hdd" style="padding:8px 16px;font-size:13px;border-color:#0e7490;color:#0e7490;">HDD N-Tech <span class="ntech-check-badge" id="hdd-review-badge"></span></button>
-      <button class="btn btn-outline" id="cooler-review-btn" data-check-key="cooler" style="padding:8px 16px;font-size:13px;border-color:#7c2d12;color:#7c2d12;">Охлаждение N-Tech <span class="ntech-check-badge" id="cooler-review-badge"></span></button>
-      <button class="btn btn-outline" id="printer-review-btn" data-check-key="printer" style="padding:8px 16px;font-size:13px;border-color:#6b21a8;color:#6b21a8;">Принтеры / МФУ N-Tech <span class="ntech-check-badge" id="printer-review-badge"></span></button>
-      <button class="btn btn-outline" id="peripheral-review-btn" data-check-key="peripheral" style="padding:8px 16px;font-size:13px;border-color:#0f766e;color:#0f766e;">Периферия N-Tech <span class="ntech-check-badge" id="peripheral-review-badge"></span></button>
-      <button class="btn btn-outline" id="usb-review-btn" data-check-key="usb" data-generic-review-key="usb" data-review-label="Накопители USB N-Tech" style="padding:8px 16px;font-size:13px;border-color:#0891b2;color:#0891b2;">Накопители USB N-Tech <span class="ntech-check-badge" id="usb-review-badge"></span></button>
-      <button class="btn btn-outline" id="network-review-btn" data-check-key="network" data-generic-review-key="network" data-review-label="Сеть N-Tech" style="padding:8px 16px;font-size:13px;border-color:#0284c7;color:#0284c7;">Сеть N-Tech <span class="ntech-check-badge" id="network-review-badge"></span></button>
-      <button class="btn btn-outline" id="ups-review-btn" data-check-key="ups" data-generic-review-key="ups" data-review-label="ИБП N-Tech" style="padding:8px 16px;font-size:13px;border-color:#854d0e;color:#854d0e;">ИБП N-Tech <span class="ntech-check-badge" id="ups-review-badge"></span></button>
-      <button class="btn btn-outline" id="keyboard-review-btn" data-check-key="keyboard" data-generic-review-key="keyboard" data-review-label="Клавиатуры N-Tech" style="padding:8px 16px;font-size:13px;border-color:#4338ca;color:#4338ca;">Клавиатуры N-Tech <span class="ntech-check-badge" id="keyboard-review-badge"></span></button>
-      <button class="btn btn-outline" id="mouse-review-btn" data-check-key="mouse" data-generic-review-key="mouse" data-review-label="Мыши N-Tech" style="padding:8px 16px;font-size:13px;border-color:#4338ca;color:#4338ca;">Мыши N-Tech <span class="ntech-check-badge" id="mouse-review-badge"></span></button>
-      <button class="btn btn-outline" id="headphones-review-btn" data-check-key="headphones" data-generic-review-key="headphones" data-review-label="Наушники / микрофоны N-Tech" style="padding:8px 16px;font-size:13px;border-color:#be123c;color:#be123c;">Наушники / микрофоны N-Tech <span class="ntech-check-badge" id="headphones-review-badge"></span></button>
-      <button class="btn btn-outline" id="audio-review-btn" data-check-key="audio" data-generic-review-key="audio" data-review-label="Акустика N-Tech" style="padding:8px 16px;font-size:13px;border-color:#be123c;color:#be123c;">Акустика N-Tech <span class="ntech-check-badge" id="audio-review-badge"></span></button>
-      <button class="btn btn-outline" id="misc-review-btn" data-check-key="misc" data-generic-review-key="misc" data-review-label="Прочее N-Tech" style="padding:8px 16px;font-size:13px;border-color:#64748b;color:#64748b;">Прочее N-Tech <span class="ntech-check-badge" id="misc-review-badge"></span></button>
     </div>
     <div style="margin-top:10px;font-size:12px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.04em;text-align:center;">Проверки IVEN</div>
     <div style="margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">

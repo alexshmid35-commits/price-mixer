@@ -53,7 +53,6 @@ from mixer import (
     save_id_cache,
 )
 from price_mixer.api.routes import bp as api_bp
-from price_mixer.api.autofill_routes import create_autofill_bp
 from price_mixer.api.bulk_id_routes import create_bulk_id_bp
 from price_mixer.api.category_management_routes import create_category_management_bp
 from price_mixer.api.category_reference_routes import create_category_reference_bp
@@ -78,18 +77,7 @@ from price_mixer.services.api_sources import (
     fetch_api_source_worker as _api_source_fetch_worker,
     get_source_runtime as _api_sources_get_runtime,
 )
-from price_mixer.services.autofill_workers import (
-    build_iven_id_index as _autofill_build_iven_id_index,
-    lookup_iven_match as _autofill_lookup_iven_match,
-    make_iven_bridge_status as _autofill_make_iven_status,
-    make_pc_autofill_status as _autofill_make_pc_status,
-    make_tgpc_pc_status as _autofill_make_tgpc_status,
-    reject_iven_match_payload as _autofill_reject_iven_match,
-    run_iven_bridge_worker as _autofill_run_iven_bridge,
-    run_tgpc_pc_worker as _autofill_run_tgpc_pc,
-    start_autofill_payload as _autofill_start_payload,
-    status_payload as _autofill_status_payload,
-)
+from price_mixer.services.manual_id_actions import reject_iven_match_payload as _reject_iven_match
 from price_mixer.services.background_xlsx import create_background_xlsx_worker
 from price_mixer.services.category_config import (
     apply_markup_to_df as _category_apply_markup_to_df,
@@ -479,42 +467,7 @@ validate_clean_ids_status = {
 VALIDATE_CLEAN_IDS_LOCK = threading.RLock()
 VALIDATE_CLEAN_ANALYSIS_RUNNER = ValidateCleanAnalysisRunner()
 VALIDATE_CLEAN_CANCEL_EVENT = threading.Event()
-autofill_tgpc_pc_status = {
-    "running": False,
-    "total": 0,
-    "done": 0,
-    "applied": 0,
-    "skipped": 0,
-    "percent": 0,
-    "items": [],
-    "started_at": 0,
-    "finished_at": 0,
-    "message": "",
-}
-AUTOFILL_TGPC_PC_LOCK = threading.RLock()
-autofill_ntech_pc_status = {
-    "running": False,
-    "total": 0,
-    "done": 0,
-    "applied": 0,
-    "skipped": 0,
-    "percent": 0,
-    "items": [],
-    "message": "",
-}
-AUTOFILL_NTECH_PC_LOCK = threading.RLock()
-autofill_iven_pc_status = {
-    "running": False,
-    "total": 0,
-    "done": 0,
-    "applied": 0,
-    "skipped": 0,
-    "percent": 0,
-    "items": [],
-    "message": "",
-}
-AUTOFILL_IVEN_PC_LOCK = threading.RLock()
-autofill_iven_status = {
+id_review_status = {
     "running": False,
     "total": 0,
     "done": 0,
@@ -527,10 +480,10 @@ autofill_iven_status = {
     "matches": [],   # [{name, matched_name, score, id, url, source}]
     "no_match": [],  # [{name}] — не нашли
     "report_mode": "iven",
-    "report_title": "Отчёт подбора IVEN-бридж",
-    "report_subtitle": "Сопоставление N-Tech товаров с базой Onliner ID",
+    "report_title": "Отчёт проверки ID",
+    "report_subtitle": "Кандидаты для ручного подтверждения",
 }
-AUTOFILL_IVEN_LOCK = threading.RLock()
+ID_REVIEW_STATUS_LOCK = threading.RLock()
 AUTO_REFRESH_MAX_IDS = 1200
 
 app = Flask(__name__)
@@ -3432,250 +3385,11 @@ def _manual_id_clear_payload(session_dir, payload):
     return _get_manual_id_runtime().clear(session_dir, payload)
 
 
-def build_iven_id_index(df):
-    return _autofill_build_iven_id_index(df, normalize_name_key=_normalize_name_key)
-
-
-def lookup_iven_match(product_name, iven_index, threshold=0.85):
-    return _autofill_lookup_iven_match(
-        product_name,
-        iven_index,
-        calc_name_match=calc_name_match,
-        threshold=threshold,
-    )
-
-
 @_serialized_price_mutation
-def _autofill_iven_bridge_worker(session_dir, ignore_manual_cache=False, prefer_b2b=False):
-    return _autofill_run_iven_bridge(
+def _manual_id_reject_match_payload(session_dir, payload):
+    return _reject_iven_match(
         session_dir,
-        ignore_manual_cache=ignore_manual_cache,
-        prefer_b2b=prefer_b2b,
-        status=autofill_iven_status,
-        lock=AUTOFILL_IVEN_LOCK,
-        db_stats=db_stats,
-        read_consolidated_df=read_consolidated_df,
-        db_populate_from_df=db_populate_from_df,
-        db_find_id_for_name=db_find_id_for_name,
-        db_find_top_candidates=db_find_top_candidates,
-        is_tgpc_pc_name=_is_tgpc_pc_name,
-        normalize_name_key=_normalize_name_key,
-        get_id_cache_key_for_name=_get_id_cache_key_for_name,
-        load_manual_id_bindings=load_manual_id_bindings,
-        save_manual_id_bindings=save_manual_id_bindings,
-        load_id_cache=load_id_cache,
-        save_id_cache=save_id_cache,
-        append_id_change_journal=append_id_change_journal,
-        write_consolidated_df=write_consolidated_df,
-        write_consolidated_json=write_consolidated_json,
-    )
-
-
-@_serialized_price_mutation
-def _autofill_tgpc_pc_worker(session_dir, max_items=0):
-    return _autofill_run_tgpc_pc(
-        session_dir,
-        max_items=max_items,
-        status=autofill_tgpc_pc_status,
-        lock=AUTOFILL_TGPC_PC_LOCK,
-        read_consolidated_df=read_consolidated_json_fast_df,
-        load_app_settings=load_app_settings,
-        row_category=row_category,
-        is_tgpc_pc_name=_is_tgpc_pc_name,
-        db_search_tgpc_pc_candidates=db_search_tgpc_pc_candidates,
-        get_id_cache_key_for_name=_get_id_cache_key_for_name,
-        normalize_name_key=_normalize_name_key,
-        load_id_cache=load_id_cache,
-        save_id_cache=save_id_cache,
-        load_manual_id_bindings=load_manual_id_bindings,
-        save_manual_id_bindings=save_manual_id_bindings,
-        append_id_change_journal=append_id_change_journal,
-        write_consolidated_df=lambda session_dir, df: write_consolidated_df_background(session_dir, df, label="autofill-tgpc-pc"),
-        write_consolidated_json=write_consolidated_json,
-    )
-
-
-@_serialized_price_mutation
-def _autofill_ntech_pc_worker(session_dir, max_items=0):
-    return _autofill_run_tgpc_pc(
-        session_dir,
-        max_items=max_items,
-        status=autofill_ntech_pc_status,
-        lock=AUTOFILL_NTECH_PC_LOCK,
-        read_consolidated_df=read_consolidated_json_fast_df,
-        load_app_settings=load_app_settings,
-        row_category=row_category,
-        is_tgpc_pc_name=_is_tgpc_pc_name,
-        db_search_tgpc_pc_candidates=db_search_tgpc_pc_candidates,
-        get_id_cache_key_for_name=_get_id_cache_key_for_name,
-        normalize_name_key=_normalize_name_key,
-        load_id_cache=load_id_cache,
-        save_id_cache=save_id_cache,
-        load_manual_id_bindings=load_manual_id_bindings,
-        save_manual_id_bindings=save_manual_id_bindings,
-        append_id_change_journal=append_id_change_journal,
-        write_consolidated_df=lambda session_dir, df: write_consolidated_df_background(session_dir, df, label="autofill-ntech-pc"),
-        write_consolidated_json=write_consolidated_json,
-        target_supplier_names=["N-Tech"],
-        pc_label="N-Tech ПЭВМ",
-        action_name="autofill_ntech_pc_ids",
-        source_name="db_autofill_ntech_pc_ids",
-        get_match_identity_for_name=_extract_tgpc_pc_code,
-    )
-
-
-@_serialized_price_mutation
-def _autofill_iven_pc_worker(session_dir, max_items=0):
-    return _autofill_run_tgpc_pc(
-        session_dir,
-        max_items=max_items,
-        status=autofill_iven_pc_status,
-        lock=AUTOFILL_IVEN_PC_LOCK,
-        read_consolidated_df=read_consolidated_json_fast_df,
-        load_app_settings=load_app_settings,
-        row_category=row_category,
-        is_tgpc_pc_name=_is_iven_pc_name,
-        db_search_tgpc_pc_candidates=db_search_iven_pc_candidates,
-        get_id_cache_key_for_name=_get_id_cache_key_for_name,
-        normalize_name_key=_normalize_name_key,
-        load_id_cache=load_id_cache,
-        save_id_cache=save_id_cache,
-        load_manual_id_bindings=load_manual_id_bindings,
-        save_manual_id_bindings=save_manual_id_bindings,
-        append_id_change_journal=append_id_change_journal,
-        write_consolidated_df=lambda session_dir, df: write_consolidated_df_background(session_dir, df, label="autofill-iven-pc"),
-        write_consolidated_json=write_consolidated_json,
-        target_supplier_names=["IVEN"],
-        pc_label="IVEN ПЭВМ",
-        action_name="autofill_iven_pc_ids",
-        source_name="db_autofill_iven_pc_ids",
-        get_id_cache_keys_for_name=_id_cache_keys_for_iven_pc_name,
-        get_manual_binding_keys_for_name=_manual_binding_keys_for_name,
-        get_match_identity_for_name=_extract_iven_pc_code,
-        clear_duplicate_ids_for_suppliers=lambda df: _clear_duplicate_onliner_ids_for_suppliers(df, ["IVEN"]),
-    )
-
-
-def api_autofill_tgpc_pc_ids():
-    session_dir = get_active_session_dir()
-    payload = request.get_json(silent=True) or {}
-    try:
-        max_items = int(payload.get("limit", 0) or 0)
-    except Exception:
-        max_items = 0
-    max_items = max(0, min(max_items, 200))
-    return _autofill_start_payload(
-        session_dir,
-        cons_exists=bool(session_dir and _has_consolidated_session_file(session_dir)),
-        status=autofill_tgpc_pc_status,
-        lock=AUTOFILL_TGPC_PC_LOCK,
-        start_worker=lambda: threading.Thread(
-            target=_autofill_tgpc_pc_worker,
-            args=(str(session_dir), max_items),
-            daemon=True,
-        ).start(),
-        status_factory=_autofill_make_tgpc_status,
-    )
-
-
-def api_autofill_tgpc_pc_status():
-    response = jsonify(_autofill_status_payload(autofill_tgpc_pc_status, AUTOFILL_TGPC_PC_LOCK))
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
-def api_autofill_ntech_pc_ids():
-    session_dir = get_active_session_dir()
-    payload = request.get_json(silent=True) or {}
-    try:
-        max_items = int(payload.get("limit", 0) or 0)
-    except Exception:
-        max_items = 0
-    max_items = max(0, min(max_items, 200))
-    return _autofill_start_payload(
-        session_dir,
-        cons_exists=bool(session_dir and _has_consolidated_session_file(session_dir)),
-        status=autofill_ntech_pc_status,
-        lock=AUTOFILL_NTECH_PC_LOCK,
-        start_worker=lambda: threading.Thread(
-            target=_autofill_ntech_pc_worker,
-            args=(str(session_dir), max_items),
-            daemon=True,
-        ).start(),
-        status_factory=lambda: _autofill_make_pc_status("N-Tech ПЭВМ"),
-    )
-
-
-def api_autofill_ntech_pc_status():
-    response = jsonify(_autofill_status_payload(autofill_ntech_pc_status, AUTOFILL_NTECH_PC_LOCK))
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
-def api_autofill_iven_pc_ids():
-    session_dir = get_active_session_dir()
-    payload = request.get_json(silent=True) or {}
-    try:
-        max_items = int(payload.get("limit", 0) or 0)
-    except Exception:
-        max_items = 0
-    max_items = max(0, min(max_items, 200))
-    return _autofill_start_payload(
-        session_dir,
-        cons_exists=bool(session_dir and _has_consolidated_session_file(session_dir)),
-        status=autofill_iven_pc_status,
-        lock=AUTOFILL_IVEN_PC_LOCK,
-        start_worker=lambda: threading.Thread(
-            target=_autofill_iven_pc_worker,
-            args=(str(session_dir), max_items),
-            daemon=True,
-        ).start(),
-        status_factory=lambda: _autofill_make_pc_status("IVEN ПЭВМ"),
-    )
-
-
-def api_autofill_iven_pc_status():
-    response = jsonify(_autofill_status_payload(autofill_iven_pc_status, AUTOFILL_IVEN_PC_LOCK))
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
-def api_autofill_iven_bridge():
-    session_dir = get_active_session_dir()
-    payload = request.get_json(silent=True) or {}
-    ignore_manual_cache = _coerce_bool(payload.get("ignore_manual_cache", False), default=False)
-    prefer_b2b = _coerce_bool(payload.get("prefer_b2b", False), default=False)
-    return _autofill_start_payload(
-        session_dir,
-        cons_exists=bool(session_dir and _has_consolidated_session_file(session_dir)),
-        status=autofill_iven_status,
-        lock=AUTOFILL_IVEN_LOCK,
-        start_worker=lambda: threading.Thread(
-            target=_autofill_iven_bridge_worker,
-            args=(str(session_dir), ignore_manual_cache, prefer_b2b),
-            daemon=True,
-        ).start(),
-        status_factory=lambda: _autofill_make_iven_status(prefer_b2b=prefer_b2b),
-    )
-
-
-def api_autofill_iven_status():
-    resp = jsonify(_autofill_status_payload(autofill_iven_status, AUTOFILL_IVEN_LOCK, include_items=False))
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    return resp
-
-
-def api_iven_reject_match():
-    return _autofill_reject_iven_match(
-        get_active_session_dir(),
-        request.get_json(silent=True) or {},
+        payload,
         read_consolidated_df=read_consolidated_df,
         write_consolidated_df=write_consolidated_df,
         write_consolidated_json=write_consolidated_json,
@@ -3684,21 +3398,6 @@ def api_iven_reject_match():
         save_manual_id_bindings=save_manual_id_bindings,
         blank_id_value=np.nan,
     )
-
-
-app.register_blueprint(create_autofill_bp(
-    handlers={
-        "/api/autofill-tgpc-pc-ids": (api_autofill_tgpc_pc_ids, ("POST",)),
-        "/api/autofill-tgpc-pc-status": (api_autofill_tgpc_pc_status, ("GET",)),
-        "/api/autofill-ntech-pc-ids": (api_autofill_ntech_pc_ids, ("POST",)),
-        "/api/autofill-ntech-pc-status": (api_autofill_ntech_pc_status, ("GET",)),
-        "/api/autofill-iven-pc-ids": (api_autofill_iven_pc_ids, ("POST",)),
-        "/api/autofill-iven-pc-status": (api_autofill_iven_pc_status, ("GET",)),
-        "/api/autofill-iven-bridge": (api_autofill_iven_bridge, ("POST",)),
-        "/api/autofill-iven-status": (api_autofill_iven_status, ("GET",)),
-        "/api/iven-reject-match": (api_iven_reject_match, ("POST",)),
-    }
-))
 
 
 def _onliner_db_stats_payload():
@@ -3757,6 +3456,7 @@ app.register_blueprint(create_manual_id_bp(
     get_active_session_dir=get_active_session_dir,
     confirm_batch=_manual_id_confirm_batch_payload,
     clear=_manual_id_clear_payload,
+    reject_match=_manual_id_reject_match_payload,
     rollback_last=_manual_id_rollback_last_payload,
 ))
 
@@ -3977,8 +3677,8 @@ def _get_ntech_review_runtime():
         save_review_queue=save_review_queue,
         normalize_catalog_category_name=normalize_catalog_category_name,
         normalize_onliner_id=normalize_onliner_id,
-        status=autofill_iven_status,
-        status_lock=AUTOFILL_IVEN_LOCK,
+        status=id_review_status,
+        status_lock=ID_REVIEW_STATUS_LOCK,
         clock=time.time,
     )
 

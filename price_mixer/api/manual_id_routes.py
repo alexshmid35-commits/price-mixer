@@ -13,6 +13,7 @@ def create_manual_id_bp(
     get_active_session_dir: Callable[[], str | None],
     confirm_batch: Callable[[str | None, dict], dict | tuple[dict, int]],
     clear: Callable[[str | None, dict], dict | tuple[dict, int]],
+    reject_match: Callable[[str | None, dict], dict | tuple[dict, int]],
     rollback_last: Callable[[str | None], dict | tuple[dict, int]],
 ) -> Blueprint:
     bp = Blueprint("manual_id_api", __name__)
@@ -27,6 +28,13 @@ def create_manual_id_bp(
     @bp.route("/api/manual-id-clear", methods=["POST"])
     def api_manual_id_clear():
         return _as_response(clear(
+            get_active_session_dir(),
+            request.get_json(silent=True) or {},
+        ))
+
+    @bp.route("/api/iven-reject-match", methods=["POST"])
+    def api_iven_reject_match():
+        return _as_response(reject_match(
             get_active_session_dir(),
             request.get_json(silent=True) or {},
         ))

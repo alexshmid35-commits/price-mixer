@@ -253,6 +253,88 @@ def test_confirm_manual_id_batch_allows_duplicate_id_for_same_strong_model(tmp_p
     assert state["written_df"].at[0, "OnlinerID"] == "998213"
 
 
+def test_confirm_manual_id_batch_allows_durable_binding_for_same_compact_parenthesized_model(tmp_path):
+    current_name = "Видеокарта AMD Radeon OCPC RX 550 (OCVARX550G4SE) 4GB GDDR5 DVI+HDMI+DP"
+    old_name = "видеокарта amd radeon ocpc rx550 se (ocvarx550g4se) 4gb gddr5 dvi+hdmi+dp"
+    df = pd.DataFrame({
+        "Поставщик": ["N-Tech"],
+        "Название": [current_name],
+        "OnlinerID": [""],
+        "Ссылка": [""],
+    })
+    binding_key = "supplier:n_tech:" + normalize_name_key(old_name)
+    state, read_df, write_df, write_json = memory_callbacks(df, {
+        "manual_bindings": {
+            binding_key: {"id": "5050403", "url": "", "suppliers": ["N-Tech"]},
+        },
+    })
+
+    result = svc.confirm_manual_id_batch(
+        tmp_path,
+        {"source": "inline_noid_picker", "items": [{
+            "name": current_name,
+            "supplier": "N-Tech",
+            "onliner_id": "5050403",
+            "row_idx": 0,
+        }]},
+        read_consolidated_df=read_df,
+        write_consolidated_df=write_df,
+        write_consolidated_json=write_json,
+        load_id_cache=lambda: state["id_cache"],
+        save_id_cache=lambda payload: state.update(id_cache=payload.copy()),
+        sanitize_id_cache=sanitize,
+        load_manual_id_bindings=lambda: state["manual_bindings"],
+        save_manual_id_bindings=lambda payload: state.update(manual_bindings=payload.copy()),
+        load_review_queue=lambda: state["review_queue"],
+        save_review_queue=lambda payload: state.update(review_queue=payload.copy()),
+        append_id_change_journal=lambda entry: state["journals"].append(entry),
+        normalize_name_key_func=normalize_name_key,
+    )
+
+    assert result == {"status": "ok", "updated": 1}
+    assert state["written_df"].at[0, "OnlinerID"] == "5050403"
+
+
+def test_compact_parenthesized_models_do_not_match_when_code_differs():
+    assert svc._same_strong_model(
+        "Видеокарта OCPC RX 550 (OCVARX550G4SE)",
+        "Видеокарта OCPC RX 550 (OCVARX550G8SE)",
+    ) is False
+
+
+def test_reject_iven_match_clears_row_and_manual_binding(tmp_path):
+    df = pd.DataFrame([{
+        "Поставщик": "IVEN",
+        "Название": "Kingston NV2",
+        "OnlinerID": "123",
+        "Ссылка": "u",
+    }])
+    name_key = normalize_name_key("Kingston NV2")
+    binding_key = "supplier:iven:" + name_key
+    state, read_df, write_df, write_json = memory_callbacks(df, {
+        "manual_bindings": {
+            binding_key: {"id": "123", "url": "u", "suppliers": ["IVEN"]},
+        },
+    })
+
+    result = svc.reject_iven_match_payload(
+        tmp_path,
+        {"name": "Kingston NV2", "supplier": "IVEN", "row_idx": 0},
+        read_consolidated_df=read_df,
+        write_consolidated_df=write_df,
+        write_consolidated_json=write_json,
+        normalize_name_key=normalize_name_key,
+        load_manual_id_bindings=lambda: state["manual_bindings"],
+        save_manual_id_bindings=lambda payload: state.update(manual_bindings=payload.copy()),
+        blank_id_value="",
+    )
+
+    assert result == {"status": "ok", "cleared": 1}
+    assert state["written_df"].at[0, "OnlinerID"] == ""
+    assert state["written_df"].at[0, "Ссылка"] == ""
+    assert state["manual_bindings"] == {}
+
+
 def test_confirm_manual_id_batch_still_blocks_duplicate_id_for_different_model(tmp_path):
     df = pd.DataFrame({
         "Поставщик": ["IVEN", "IVEN"],

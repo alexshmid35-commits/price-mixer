@@ -26,9 +26,27 @@ def test_duplicate_id_counter_visible_for_multiple_suppliers():
     assert 'id="export-category-analytics-toggle" aria-label="Показать категории выгрузки в Google">▾</button>' in html
     assert 'id="export-category-analytics-btn" style="padding:8px 16px;font-size:13px;">Показать</button>' in html
     assert 'id="hidden-category-analytics-btn" aria-label="Показать скрытые категории">▾</button>' in html
-    assert 'id="run-all-id-checks-btn"' in html
-    assert 'id="autofill-ntech-pc-btn"' in html
-    assert 'id="ntech-pc-review-badge"' in html
+    assert 'id="run-all-id-checks-btn"' not in html
+    assert 'id="open-all-id-checks-report-btn"' not in html
+    assert 'id="all-id-checks-report-modal"' not in html
+    assert 'id="autofill-ntech-pc-btn"' not in html
+    assert 'id="autofill-iven-pc-btn"' not in html
+    assert 'data-generic-review-key=' not in html
+    assert 'id="cpu-review-btn"' not in html
+    assert 'id="experimental-noid-start-btn"' in html
+    assert 'id="experimental-noid-open-btn"' in html
+    assert 'id="iven-laptop-review-btn"' in html
+    assert 'id="iven-zakaz-laptop-review-btn"' in html
+    assert 'id="tradex-laptop-review-btn"' in html
+
+    actions_js = Path(__file__).resolve().parents[2] / "static" / "js" / "result-actions.js"
+    actions_text = actions_js.read_text(encoding="utf-8")
+    assert "autoNtechPcBtn.addEventListener" not in actions_text
+    assert "autoIvenPcBtn.addEventListener" not in actions_text
+    assert "runAllChecksBtn.addEventListener" not in actions_text
+    assert "ivenLaptopReviewBtn.addEventListener('click', startIvenLaptopReviewQueue)" in actions_text
+    assert "ivenZakazLaptopReviewBtn.addEventListener('click', startIvenZakazLaptopReviewQueue)" in actions_text
+    assert "tradexLaptopReviewBtn.addEventListener('click', startTradexLaptopReviewQueue)" in actions_text
 
 
 def test_gsheet_import_button_forces_fresh_download():
