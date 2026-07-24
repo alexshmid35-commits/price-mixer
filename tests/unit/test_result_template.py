@@ -198,6 +198,10 @@ def test_result_template_uses_static_bootstrap_script():
     assert "function getSelectedValues" in pricing_text
     assert "function initMarkupUI" in pricing_text
     assert "function loadCategories" in pricing_text
+    assert "function syncSortingReparseQueueUi" in pricing_text
+    assert "sortingReparseQueueCount = totalSorting" in pricing_text
+    assert "pendingSortingOption.dataset.idMode = 'without_id'" in pricing_text
+    assert "sortingOption.dataset.idMode = 'sorting'" in pricing_text
     assert "function movePreviewItemsToCategory" not in pricing_text
 
     preview_js = Path(__file__).resolve().parents[2] / "static" / "js" / "result-preview.js"

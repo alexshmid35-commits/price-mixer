@@ -620,6 +620,18 @@ function applyStoredPercentForPreviewSelection(){
 
 var sortingReparseTimer = null;
 var sortingReparseMode = 'queue';
+var sortingReparseQueueCount = 0;
+var sortingReparseRunning = false;
+
+function syncSortingReparseQueueUi(){
+    var note = document.getElementById('sorting-reparse-note');
+    var button = document.getElementById('sorting-reparse-btn');
+    if(!note || !button){ return; }
+    button.disabled = sortingReparseRunning || sortingReparseQueueCount <= 0;
+    if(!sortingReparseRunning && sortingReparseQueueCount <= 0){
+        note.textContent = 'Очередь «Требует сортировки» пуста. Товары без OnlinerID находятся во вкладке «Товары без ID».';
+    }
+}
 
 function renderSortingReparseStatus(status){
     var note = document.getElementById('sorting-reparse-note');
@@ -636,9 +648,10 @@ function renderSortingReparseStatus(status){
     var totalCategories = Number(status.total_categories || 0);
     var percent = Math.max(0, Math.min(100, Number(status.percent || 0)));
     var running = !!status.is_running;
+    sortingReparseRunning = running;
     var activeButton = sortingReparseMode === 'all' ? allButton : button;
     [button, allButton].forEach(function(btn){
-        btn.disabled = running;
+        btn.disabled = running || (btn === button && sortingReparseQueueCount <= 0);
         btn.classList.toggle('is-running', running && btn === activeButton);
         btn.style.setProperty('--sorting-progress', (running && btn === activeButton ? percent : 0) + '%');
     });
@@ -668,7 +681,8 @@ function pollSortingReparseStatus(){
         }
     }).catch(function(err){
         document.getElementById('sorting-reparse-note').textContent = err.message;
-        document.getElementById('sorting-reparse-btn').disabled = false;
+        sortingReparseRunning = false;
+        document.getElementById('sorting-reparse-btn').disabled = sortingReparseQueueCount <= 0;
         var allButton = document.getElementById('sorting-reparse-all-btn');
         if(allButton){ allButton.disabled = false; }
         sortingReparseTimer = null;
@@ -676,6 +690,10 @@ function pollSortingReparseStatus(){
 }
 
 function startSortingReparse(allIds){
+    if(!allIds && sortingReparseQueueCount <= 0){
+        syncSortingReparseQueueUi();
+        return;
+    }
     sortingReparseMode = allIds ? 'all' : 'queue';
     document.getElementById('sorting-reparse-btn').disabled = true;
     document.getElementById('sorting-reparse-all-btn').disabled = true;
@@ -687,7 +705,8 @@ function startSortingReparse(allIds){
         sortingReparseTimer = setTimeout(pollSortingReparseStatus, 900);
     }).catch(function(err){
         document.getElementById('sorting-reparse-note').textContent = err.message;
-        document.getElementById('sorting-reparse-btn').disabled = false;
+        sortingReparseRunning = false;
+        document.getElementById('sorting-reparse-btn').disabled = sortingReparseQueueCount <= 0;
         document.getElementById('sorting-reparse-all-btn').disabled = false;
     });
 }
@@ -712,15 +731,29 @@ function loadCategories(preselected){
             var sortingPrefix = 'Требует сортировки · родитель: ';
             var categoryName = String((c && c.name) || '');
             if(categoryName.indexOf(sortingPrefix) === 0){
-                var sortingOption = document.createElement('option');
-                sortingOption.value = categoryName;
-                sortingOption.textContent = categoryName.slice(sortingPrefix.length) + ' (' + String(count) + ')';
-                sortingOption.dataset.count = String(count);
-                sortingOption.dataset.withoutId = '0';
-                sortingOption.dataset.idMode = 'with_id';
-                sortingOption.title = categoryName + ': OnlinerID есть, но родная категория не найдена в локальной базе';
-                sortingGroup.appendChild(sortingOption);
-                totalSorting += count;
+                var parentCategoryName = categoryName.slice(sortingPrefix.length);
+                if(withId > 0){
+                    var sortingOption = document.createElement('option');
+                    sortingOption.value = categoryName;
+                    sortingOption.textContent = parentCategoryName + ' (' + String(withId) + ')';
+                    sortingOption.dataset.count = String(withId);
+                    sortingOption.dataset.withoutId = '0';
+                    sortingOption.dataset.idMode = 'sorting';
+                    sortingOption.title = categoryName + ': OnlinerID есть, но родная категория не найдена в локальной базе';
+                    sortingGroup.appendChild(sortingOption);
+                    totalSorting += withId;
+                }
+                if(withoutId > 0){
+                    var pendingSortingOption = document.createElement('option');
+                    pendingSortingOption.value = categoryName;
+                    pendingSortingOption.textContent = parentCategoryName + ' (' + String(withoutId) + ')';
+                    pendingSortingOption.dataset.count = String(withoutId);
+                    pendingSortingOption.dataset.withoutId = String(withoutId);
+                    pendingSortingOption.dataset.idMode = 'without_id';
+                    pendingSortingOption.title = parentCategoryName + ': без OnlinerID ' + String(withoutId);
+                    pendingGroup.appendChild(pendingSortingOption);
+                    totalWithoutId += withoutId;
+                }
                 return;
             }
             if(!looksLikeRawMarkupCategoryName(categoryName)){
@@ -754,6 +787,8 @@ function loadCategories(preselected){
         if(onlinerGroup.children.length){ sel.appendChild(onlinerGroup); }
         if(pendingGroup.children.length){ sel.appendChild(pendingGroup); }
         if(sortingGroup.children.length){ sel.appendChild(sortingGroup); }
+        sortingReparseQueueCount = totalSorting;
+        syncSortingReparseQueueUi();
         renderCategoryMarkupTable();
         var available = new Set(categories.map(function(c){ return c.name; }));
         var desired = (preselected && preselected.length) ? preselected : (loadUiState().categories || []);
@@ -800,11 +835,11 @@ function formatMarkupCategoryOptionTitle(category){
 function classifyMarkupCategoryOption(option){
     var mode = String((option && option.dataset && option.dataset.idMode) || '');
     var value = String((option && option.value) || '');
-    if(value.indexOf('Требует сортировки · родитель: ') === 0 || mode === 'sorting'){
-        return 'sorting';
-    }
     if(mode === 'without_id' || Number((option && option.dataset && option.dataset.withoutId) || 0) > 0){
         return 'without_id';
+    }
+    if(mode === 'sorting' || value.indexOf('Требует сортировки · родитель: ') === 0){
+        return 'sorting';
     }
     return 'onliner';
 }
