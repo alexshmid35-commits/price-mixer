@@ -98,6 +98,24 @@ class SessionDataRuntime:
         if self.store.canonical:
             self.snapshot_writer.flush(session_dir)
 
+    def revision_token(self, session_dir, *, dependency_paths=(), extra=()):
+        session_path = Path(session_dir).resolve()
+        metadata = self.store.metadata(session_path) if self.store.canonical else None
+        if metadata and bool(metadata.get("complete")):
+            source = (
+                "sql",
+                int(metadata.get("revision", 0) or 0),
+                int(metadata.get("row_count", 0) or 0),
+            )
+        else:
+            source = (
+                "compatibility",
+                self._file_signature(session_path / "consolidated.json"),
+                self._file_signature(session_path / "consolidated_price.xlsx"),
+            )
+        dependencies = tuple((str(Path(path).resolve()), self._file_signature(path)) for path in dependency_paths)
+        return (str(session_path), source, dependencies, tuple(extra or ()))
+
     @staticmethod
     def _deferred_xlsx_payload(*, label=None):
         payload = {
@@ -109,3 +127,11 @@ class SessionDataRuntime:
             payload["label"] = str(label)
             payload["message"] = "XLSX будет сформирован из актуальной SQL-сессии при экспорте."
         return payload
+
+    @staticmethod
+    def _file_signature(path):
+        try:
+            stat = Path(path).stat()
+            return int(stat.st_mtime_ns), int(stat.st_size)
+        except OSError:
+            return 0, 0

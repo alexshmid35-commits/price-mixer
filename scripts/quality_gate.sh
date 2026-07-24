@@ -11,8 +11,10 @@ find static/js -type f -name '*.js' -print0 | xargs -0 -n1 node --check
 "$PYTHON" -m ruff check \
   price_mixer/product_schema.py \
   price_mixer/api/operations_routes.py \
+  price_mixer/services/export_runtime.py \
   price_mixer/services/session_data_runtime.py \
   price_mixer/services/session_products.py \
+  price_mixer/services/session_read_model.py \
   price_mixer/services/session_page_runtime.py \
   price_mixer/services/session_snapshots.py \
   price_mixer/services/durable_jobs.py \
@@ -23,14 +25,18 @@ find static/js -type f -name '*.js' -print0 | xargs -0 -n1 node --check
   tests/unit/test_operations_routes.py \
   tests/unit/test_product_schema.py \
   tests/unit/test_review_matching_engine.py \
+  tests/unit/test_export_runtime.py \
   tests/unit/test_session_data_runtime.py \
   tests/unit/test_session_products.py \
+  tests/unit/test_session_read_model.py \
   tests/unit/test_session_snapshots.py
 "$PYTHON" -m ruff format --check \
   price_mixer/product_schema.py \
   price_mixer/api/operations_routes.py \
+  price_mixer/services/export_runtime.py \
   price_mixer/services/session_data_runtime.py \
   price_mixer/services/session_products.py \
+  price_mixer/services/session_read_model.py \
   price_mixer/services/session_page_runtime.py \
   price_mixer/services/session_snapshots.py \
   price_mixer/services/durable_jobs.py \
@@ -41,8 +47,10 @@ find static/js -type f -name '*.js' -print0 | xargs -0 -n1 node --check
 "$PYTHON" -m mypy \
   price_mixer/product_schema.py \
   price_mixer/api/operations_routes.py \
+  price_mixer/services/export_runtime.py \
   price_mixer/services/session_data_runtime.py \
   price_mixer/services/session_products.py \
+  price_mixer/services/session_read_model.py \
   price_mixer/services/session_page_runtime.py \
   price_mixer/services/session_snapshots.py \
   price_mixer/services/durable_jobs.py \

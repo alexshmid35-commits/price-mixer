@@ -16,6 +16,41 @@ def test_app_has_no_direct_http_route_decorators():
     )
 
 
+def test_result_and_stats_projection_stay_in_session_read_model():
+    app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+    read_model = (
+        ROOT / "price_mixer" / "services" / "session_read_model.py"
+    ).read_text(encoding="utf-8")
+    result_handler = app_py.split("def result_page", 1)[1].split(
+        "@app.before_request",
+        1,
+    )[0]
+    stats_handler = app_py.split("def api_stats", 1)[1].split(
+        "def api_export_row_indexes",
+        1,
+    )[0]
+
+    assert "class SessionReadModel" in read_model
+    assert "def build_dashboard_payload" in read_model
+    assert "_session_dashboard_for_session(session_dir)" in result_handler
+    assert "read_consolidated_json_fast_df" not in result_handler
+    assert "_session_dashboard_for_session(session_dir)" in stats_handler
+    assert "for row in" not in stats_handler
+    assert "read_consolidated_df" not in stats_handler
+
+
+def test_xlsx_and_google_exports_share_export_runtime():
+    app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+    runtime = (
+        ROOT / "price_mixer" / "services" / "export_runtime.py"
+    ).read_text(encoding="utf-8")
+
+    assert "class ExportRuntime" in runtime
+    assert "def _get_export_runtime" in app_py
+    assert "return _prepare_consolidated_for_export(session_dir)" in app_py
+    assert "GOOGLE_EXPORT_DF_CACHE" not in app_py
+
+
 def test_review_matching_is_split_into_category_plugins():
     facade = (
         ROOT / "price_mixer" / "services" / "review_candidates.py"

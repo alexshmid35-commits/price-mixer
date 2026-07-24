@@ -152,6 +152,12 @@ from price_mixer.services.consolidated_paging import (
 from price_mixer.services.session_data_runtime import SessionDataRuntime
 from price_mixer.services.session_page_runtime import SessionPageRuntime
 from price_mixer.services.session_products import SessionProductStore
+from price_mixer.services.session_read_model import (
+    SessionReadModel,
+    build_dashboard_payload as _session_build_dashboard_payload,
+    result_context as _session_result_context,
+    stats_context as _session_stats_context,
+)
 from price_mixer.services.session_snapshots import CompatibilitySnapshotWriter
 from price_mixer.services.export_pipeline import (
     build_preexport_quality_payload as _export_build_preexport_quality_payload,
@@ -160,12 +166,10 @@ from price_mixer.services.export_pipeline import (
     prepare_consolidated_for_export as _export_prepare_consolidated,
     resolve_service_account_json_path as _export_resolve_service_account_json_path,
 )
+from price_mixer.services.export_runtime import ExportRuntime
 from price_mixer.services.export_stats import (
-    export_category_counts_from_json_rows as _export_stats_category_counts_from_json_rows,
-    export_row_count_from_json_rows as _export_stats_row_count_from_json_rows,
+    export_rows_from_json_rows as _export_stats_rows_from_json_rows,
     format_category_counts as _export_stats_format_category_counts,
-    without_id_category_counts_from_df as _export_stats_without_id_category_counts_from_df,
-    without_id_category_counts_from_json_rows as _export_stats_without_id_category_counts_from_json_rows,
 )
 from price_mixer.services.experimental_noid import (
     ExperimentalNoIdRuntime,
@@ -243,7 +247,6 @@ from price_mixer.services.review_queue import (
 from price_mixer.services.review_queue_runtime import ReviewQueueRuntime
 from price_mixer.services.main_payloads import (
     build_consolidated_table_rows as _main_build_consolidated_rows,
-    build_stats_payload as _main_build_stats_payload,
     empty_stats_payload as _main_empty_stats_payload,
 )
 from price_mixer.services.ntech_review_queue import (
@@ -561,7 +564,8 @@ EXPERIMENTAL_NOID_RUNTIME = None
 EXPERIMENTAL_NOID_RUNTIME_LOCK = threading.Lock()
 LAST_ACTIVE_SESSION_DIR = None
 QUALITY_STATS_CACHE = {}
-GOOGLE_EXPORT_DF_CACHE = {}
+SESSION_READ_MODEL = SessionReadModel(store=SESSION_PRODUCT_STORE)
+EXPORT_RUNTIME = None
 LAST_UPLOAD_CLEANUP_TS = 0
 
 
@@ -672,32 +676,17 @@ def result_page():
         return redirect(url_for("main_api.index", error="Нет активного прайса"))
     if not _has_consolidated_session_file(session_dir):
         return redirect(url_for("main_api.index", error="Файл результата не найден"))
-    df = read_consolidated_json_fast_df(session_dir)
-    total_suppliers = len(set(str(v).strip() for v in df.get("Поставщик", pd.Series(dtype=str)).tolist() if str(v).strip()))
-    without_id = _count_rows_without_onliner_id(df)
-    duplicate_id_rows = _count_rows_with_duplicate_onliner_id(df)
-    export_rows = _export_row_count_for_session(session_dir)
-    export_category_counts = _export_category_counts_for_session(session_dir)
-    without_id_category_counts = _without_id_category_counts_from_df(df)
-    hidden_category_counts = _hidden_category_counts_for_session(session_dir)
-    hidden_rows = int(sum(int(item.get("count", 0) or 0) for item in hidden_category_counts))
-    with_id = len(df) - without_id
-    stats = {
-        "total": len(df),
-        "suppliers": total_suppliers,
-        "consolidated": len(df),
-        "matched": with_id,
-        "with_id": with_id,
-        "without_id": without_id,
-        "duplicate_id_rows": duplicate_id_rows,
-        "export_rows": export_rows,
-        "export_category_counts": export_category_counts,
-        "without_id_category_counts": without_id_category_counts,
-        "hidden_rows": hidden_rows,
-        "hidden_category_counts": hidden_category_counts,
-        "show_checks_block": _coerce_bool((((app_settings or {}).get("ui") or {}).get("show_checks_block", True)), default=True),
-        "snapshot_diff": load_session_supplier_diff(session_dir),
-    }
+    dashboard = _session_dashboard_for_session(session_dir)
+    if dashboard is None:
+        return redirect(url_for("main_api.index", error="Не удалось прочитать данные сессии"))
+    stats = _session_result_context(
+        dashboard,
+        show_checks_block=_coerce_bool(
+            (((app_settings or {}).get("ui") or {}).get("show_checks_block", True)),
+            default=True,
+        ),
+        snapshot_diff=load_session_supplier_diff(session_dir),
+    )
     return render_template("result.html", stats=stats)
 
 
@@ -1487,6 +1476,11 @@ def _clear_corrected_json_rows_cache():
     with CORRECTED_JSON_ROWS_CACHE_LOCK:
         CORRECTED_JSON_ROWS_CACHE.clear()
     CONSOLIDATED_PAGING_CACHE.clear()
+    QUALITY_STATS_CACHE.clear()
+    SESSION_READ_MODEL.invalidate()
+    export_runtime = globals().get("EXPORT_RUNTIME")
+    if export_runtime is not None:
+        export_runtime.invalidate()
 
 
 def _normalize_visibility_map(visibility_map):
@@ -3435,50 +3429,11 @@ def api_stats():
         return jsonify(_main_empty_stats_payload())
     if not _has_consolidated_session_file(session_dir):
         return jsonify(_main_empty_stats_payload())
-    json_rows = _correct_consolidated_json_rows(session_dir, apply_visibility=True)
-    if json_rows is not None:
-        without_id = 0
-        id_counts = {}
-        for row in json_rows:
-            oid = normalize_onliner_id(row[0] if len(row) > 0 else "")
-            if oid:
-                id_counts[oid] = int(id_counts.get(oid, 0)) + 1
-            else:
-                without_id += 1
-        quality_payload = _preexport_quality_payload_for_session(session_dir) or {}
-        snapshot_diff = load_session_supplier_diff(session_dir)
-        new_without_id_count = int((snapshot_diff or {}).get("new_without_id_count", 0) or 0)
-        hidden_category_counts = _hidden_category_counts_for_session(session_dir)
-        hidden_rows = int(sum(int(item.get("count", 0) or 0) for item in hidden_category_counts))
-        return jsonify({
-            "without_id": int(without_id),
-            "without_id_category_counts": _without_id_category_counts_from_json_rows(json_rows),
-            "duplicate_id_rows": int(sum(count for count in id_counts.values() if count > 1)),
-            "export_rows": _export_row_count_for_session(session_dir),
-            "export_category_counts": _export_category_counts_for_session(session_dir),
-            "hidden_rows": hidden_rows,
-            "hidden_category_counts": hidden_category_counts,
-            "quality_suspicious_price_count": int(quality_payload.get("suspicious_price_count", 0) or 0),
-            "new_without_id_count": new_without_id_count,
-            "id_pick_badge_count": new_without_id_count if new_without_id_count > 0 else int(without_id),
-        })
-    df = read_consolidated_df(session_dir)
-    payload = _main_build_stats_payload(
-        df,
-        count_without_onliner_id=_count_rows_without_onliner_id,
-        count_duplicate_onliner_id=_count_rows_with_duplicate_onliner_id,
-        export_row_count=_export_row_count_for_session(session_dir),
-    )
-    payload["export_category_counts"] = _export_category_counts_for_session(session_dir)
-    payload["without_id_category_counts"] = _without_id_category_counts_from_df(df)
-    hidden_category_counts = _hidden_category_counts_for_session(session_dir)
-    payload["hidden_rows"] = int(sum(int(item.get("count", 0) or 0) for item in hidden_category_counts))
-    payload["hidden_category_counts"] = hidden_category_counts
+    dashboard = _session_dashboard_for_session(session_dir)
+    if dashboard is None:
+        return jsonify(_main_empty_stats_payload())
     snapshot_diff = load_session_supplier_diff(session_dir)
-    new_without_id_count = int((snapshot_diff or {}).get("new_without_id_count", 0) or 0)
-    payload["new_without_id_count"] = new_without_id_count
-    payload["id_pick_badge_count"] = new_without_id_count if new_without_id_count > 0 else int(payload.get("without_id", 0) or 0)
-    return jsonify(payload)
+    return jsonify(_session_stats_context(dashboard, snapshot_diff=snapshot_diff))
 
 
 def api_export_row_indexes():
@@ -5238,23 +5193,70 @@ def _filter_df_by_export_name_exclusions(df):
     return df[mask].copy()
 
 
-def _quality_stats_cache_key(session_dir):
-    base_dir = Path(__file__).resolve().parent
+def _session_revision_token(session_dir):
     session_path = Path(session_dir)
-    paths = [
-        session_path / "consolidated.json",
-        session_path / "consolidated_price.xlsx",
-        base_dir / "manual_id_bindings.json",
-        base_dir / "onliner_market_cache.json",
-        base_dir / "app_settings.json",
-    ]
-    mtimes = []
-    for path in paths:
-        try:
-            mtimes.append(int(path.stat().st_mtime_ns))
-        except OSError:
-            mtimes.append(0)
-    return (str(session_path.resolve()), *mtimes, _category_state_signature())
+    return SESSION_DATA_RUNTIME.revision_token(
+        session_path,
+        dependency_paths=(
+            RUNTIME_PATHS.state_file("app_settings.json"),
+            RUNTIME_PATHS.state_file("manual_id_bindings.json"),
+            RUNTIME_PATHS.cache_file("onliner_market_cache.json"),
+            session_path / "supplier_diff.json",
+        ),
+        extra=(_category_state_signature(),),
+    )
+
+
+def _session_hidden_categories(session_dir):
+    visibility_map = load_visibility_map(session_dir) if session_dir else {}
+    return {
+        _canonical_ui_category_name(normalize_catalog_category_name(category))
+        for categories in visibility_map.values()
+        for category in categories or []
+        if _canonical_ui_category_name(normalize_catalog_category_name(category))
+    }
+
+
+def _session_dashboard_for_session(session_dir):
+    if not session_dir:
+        return None
+    revision_token = _session_revision_token(session_dir)
+
+    def build():
+        full_rows = _correct_consolidated_json_rows(session_dir, apply_visibility=False)
+        visible_rows = _correct_consolidated_json_rows(session_dir, apply_visibility=True)
+        if full_rows is None or visible_rows is None:
+            return {}
+        export_rows = _export_stats_rows_from_json_rows(
+            visible_rows,
+            _export_settings_with_onliner_structure(),
+            normalize_onliner_id=normalize_onliner_id,
+            normalize_name_key=_normalize_name_key,
+            normalize_supplier_name_list=_export_normalize_supplier_name_list,
+            is_pc_export_row=_is_pc_export_row,
+        )
+        return _session_build_dashboard_payload(
+            full_rows=full_rows,
+            visible_rows=visible_rows,
+            export_rows=export_rows,
+            hidden_categories=_session_hidden_categories(session_dir),
+            normalize_onliner_id=normalize_onliner_id,
+            normalize_category=lambda value: _canonical_ui_category_name(
+                normalize_catalog_category_name(value)
+            ),
+            category_sort_key=_category_sort_key,
+        )
+
+    payload = SESSION_READ_MODEL.get_or_build(
+        session_dir,
+        revision_token,
+        build,
+    )
+    return payload or None
+
+
+def _quality_stats_cache_key(session_dir):
+    return _session_revision_token(session_dir)
 
 
 def _preexport_quality_payload_for_session(session_dir):
@@ -5276,131 +5278,31 @@ def _preexport_quality_payload_for_session(session_dir):
 
 def _prepare_consolidated_for_export(session_dir):
     """Тот же набор фильтров, что и для /download. Возвращает (DataFrame|None, имя_файла.xlsx)."""
-    return _export_prepare_consolidated(
+    return _get_export_runtime().prepare(
         session_dir,
         _export_settings_with_onliner_structure(),
-        read_consolidated_df=read_consolidated_export_df,
-        apply_visibility_filter=apply_visibility_filter,
-        apply_keep_lowest_price_per_onliner_id=apply_export_keep_lowest_price_per_onliner_id,
-        apply_duplicate_id_filter=apply_export_duplicate_id_filter,
-        apply_only_pc_filter=apply_export_only_pc_filter,
-        has_consolidated_data=_has_consolidated_session_file,
+        revision_token=_session_revision_token(session_dir),
     )
 
 
 def _prepare_consolidated_for_google_export(session_dir):
-    """Prepare only the fixed Google export columns from the fast JSON snapshot."""
-    key = _quality_stats_cache_key(session_dir)
-    cached = GOOGLE_EXPORT_DF_CACHE.get(key)
-    if cached is not None:
-        cached_df, cached_name = cached
-        return cached_df.copy(), cached_name
-
-    prepared = _export_prepare_consolidated(
-        session_dir,
-        _export_settings_with_onliner_structure(),
-        read_consolidated_df=read_consolidated_export_df,
-        apply_visibility_filter=apply_visibility_filter,
-        apply_keep_lowest_price_per_onliner_id=apply_export_keep_lowest_price_per_onliner_id,
-        apply_duplicate_id_filter=apply_export_duplicate_id_filter,
-        apply_only_pc_filter=apply_export_only_pc_filter,
-        has_consolidated_data=_has_consolidated_session_file,
-    )
-    prepared_df, prepared_name = prepared
-    if prepared_df is not None:
-        if len(GOOGLE_EXPORT_DF_CACHE) > 4:
-            GOOGLE_EXPORT_DF_CACHE.clear()
-        current_key = _quality_stats_cache_key(session_dir)
-        GOOGLE_EXPORT_DF_CACHE[current_key] = (prepared_df.copy(), prepared_name)
-    return prepared
+    """Use the same revision-cached frame as XLSX export."""
+    return _prepare_consolidated_for_export(session_dir)
 
 
-def _export_row_count_for_session(session_dir):
-    """Return the row count that the current export/Google Sheets pipeline will emit."""
-    if not session_dir:
-        return 0
-    try:
-        rows = _correct_consolidated_json_rows(session_dir, apply_visibility=True)
-        if rows is not None:
-            return _export_row_count_from_json_rows(rows, _export_settings_with_onliner_structure())
-    except Exception as exc:
-        APP_LOGGER.warning("export row count from JSON failed: %s", exc)
-    try:
-        filtered, _ = _prepare_consolidated_for_google_export(session_dir)
-        return int(len(filtered)) if filtered is not None else 0
-    except Exception as exc:
-        APP_LOGGER.warning("export row count dataframe fallback failed: %s", exc)
-    return 0
-
-
-def _export_category_counts_for_session(session_dir):
-    """Return category counts for the rows that the export/Google Sheets pipeline will emit."""
-    if not session_dir:
-        return []
-    try:
-        rows = _correct_consolidated_json_rows(session_dir, apply_visibility=True)
-        if rows is not None:
-            return _export_category_counts_from_json_rows(rows, _export_settings_with_onliner_structure())
-    except Exception as exc:
-        APP_LOGGER.warning("export category counts from JSON failed: %s", exc)
-    try:
-        filtered, _ = _prepare_consolidated_for_google_export(session_dir)
-        if filtered is None or filtered.empty:
-            return []
-        counts = {}
-        for category in filtered.get("Категория", pd.Series(dtype=str)).fillna("").astype(str):
-            name = normalize_catalog_category_name(str(category or "").strip()) or "Без категории"
-            counts[name] = int(counts.get(name, 0)) + 1
-        return _format_export_category_counts(counts)
-    except Exception as exc:
-        APP_LOGGER.warning(
-            "export category counts dataframe fallback failed: %s", exc
+def _get_export_runtime():
+    global EXPORT_RUNTIME
+    if EXPORT_RUNTIME is None:
+        EXPORT_RUNTIME = ExportRuntime(
+            prepare_export=_export_prepare_consolidated,
+            read_consolidated_df=read_consolidated_export_df,
+            apply_visibility_filter=apply_visibility_filter,
+            apply_keep_lowest_price_per_onliner_id=apply_export_keep_lowest_price_per_onliner_id,
+            apply_duplicate_id_filter=apply_export_duplicate_id_filter,
+            apply_only_pc_filter=apply_export_only_pc_filter,
+            has_consolidated_data=_has_consolidated_session_file,
         )
-    return []
-
-
-def _export_row_count_from_json_rows(json_rows, settings):
-    """Fast count for the same rows that /download and Google Sheets export will keep."""
-    return _export_stats_row_count_from_json_rows(
-        json_rows,
-        settings,
-        normalize_onliner_id=normalize_onliner_id,
-        normalize_name_key=_normalize_name_key,
-        normalize_supplier_name_list=_export_normalize_supplier_name_list,
-        is_pc_export_row=_is_pc_export_row,
-    )
-
-
-def _export_category_counts_from_json_rows(json_rows, settings):
-    return _export_stats_category_counts_from_json_rows(
-        json_rows,
-        settings,
-        normalize_onliner_id=normalize_onliner_id,
-        normalize_name_key=_normalize_name_key,
-        normalize_supplier_name_list=_export_normalize_supplier_name_list,
-        is_pc_export_row=_is_pc_export_row,
-        category_sort_key=_category_sort_key,
-    )
-
-
-def _without_id_category_counts_from_json_rows(json_rows):
-    return _export_stats_without_id_category_counts_from_json_rows(
-        json_rows,
-        normalize_onliner_id=normalize_onliner_id,
-        category_sort_key=_category_sort_key,
-    )
-
-
-def _without_id_category_counts_from_df(df):
-    return _export_stats_without_id_category_counts_from_df(
-        df,
-        normalize_onliner_id=normalize_onliner_id,
-        category_sort_key=_category_sort_key,
-    )
-
-
-def _format_without_id_category_counts(counts):
-    return _export_stats_format_category_counts(counts, category_sort_key=_category_sort_key)
+    return EXPORT_RUNTIME
 
 
 def _format_export_category_counts(counts):

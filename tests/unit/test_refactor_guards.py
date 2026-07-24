@@ -9,6 +9,10 @@ from flask import session
 
 import app as app_module
 from price_mixer.services import processing_pipeline
+from price_mixer.services.export_stats import (
+    export_category_counts_from_json_rows,
+    export_row_count_from_json_rows,
+)
 from price_mixer.web_helpers import active_session_dir, basic_auth_matches, resolve_session_dir
 
 
@@ -158,7 +162,14 @@ def test_export_row_count_from_json_rows_matches_export_rules():
         }
     }
 
-    assert app_module._export_row_count_from_json_rows(rows, settings) == 3
+    assert export_row_count_from_json_rows(
+        rows,
+        settings,
+        normalize_onliner_id=app_module.normalize_onliner_id,
+        normalize_name_key=app_module._normalize_name_key,
+        normalize_supplier_name_list=app_module._export_normalize_supplier_name_list,
+        is_pc_export_row=app_module._is_pc_export_row,
+    ) == 3
 
 
 def test_export_category_counts_from_json_rows_match_export_rules():
@@ -179,7 +190,15 @@ def test_export_category_counts_from_json_rows_match_export_rules():
         }
     }
 
-    assert app_module._export_category_counts_from_json_rows(rows, settings) == [
+    assert export_category_counts_from_json_rows(
+        rows,
+        settings,
+        normalize_onliner_id=app_module.normalize_onliner_id,
+        normalize_name_key=app_module._normalize_name_key,
+        normalize_supplier_name_list=app_module._export_normalize_supplier_name_list,
+        is_pc_export_row=app_module._is_pc_export_row,
+        category_sort_key=app_module._category_sort_key,
+    ) == [
         {"category": "SSD", "count": 1},
         {"category": "Монитор", "count": 1},
         {"category": "Системный блок", "count": 1},
@@ -684,8 +703,7 @@ def test_expand_iven_pc_manual_aliases_preserves_supplier_scope(monkeypatch):
     assert "iven_pc:office:201993" not in expanded
 
 
-def test_google_export_dataframe_is_cached_by_source_state(monkeypatch):
-    app_module.GOOGLE_EXPORT_DF_CACHE.clear()
+def test_google_and_xlsx_export_share_revision_cached_runtime(monkeypatch):
     calls = 0
 
     def prepare(*args, **kwargs):
@@ -693,12 +711,13 @@ def test_google_export_dataframe_is_cached_by_source_state(monkeypatch):
         calls += 1
         return pd.DataFrame({"value": [1]}), "price.xlsx"
 
-    monkeypatch.setattr(app_module, "_quality_stats_cache_key", lambda session_dir: (session_dir, 1))
+    monkeypatch.setattr(app_module, "EXPORT_RUNTIME", None)
+    monkeypatch.setattr(app_module, "_session_revision_token", lambda session_dir: (session_dir, 1))
     monkeypatch.setattr(app_module, "_export_prepare_consolidated", prepare)
 
     first, first_name = app_module._prepare_consolidated_for_google_export("session")
     first.at[0, "value"] = 99
-    second, second_name = app_module._prepare_consolidated_for_google_export("session")
+    second, second_name = app_module._prepare_consolidated_for_export("session")
 
     assert calls == 1
     assert first_name == second_name == "price.xlsx"

@@ -201,3 +201,25 @@ def test_query_page_applies_export_name_exclusions_without_deleting_rows(tmp_pat
     assert payload["recordsTotal"] == 3
     assert all("Mouse" not in row[1] for row in payload["data"])
     assert len(store.read_rows(session)) == 5
+
+
+def test_dashboard_projection_is_persistent_and_revision_scoped(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="r1")
+    revision_one = ("sql", 1, ("visibility", 2))
+
+    assert store.read_dashboard_projection(session, revision_one) is None
+    assert store.write_dashboard_projection(
+        session,
+        revision_one,
+        {"total": 5, "without_id": 2},
+    )
+    assert store.read_dashboard_projection(session, revision_one) == {
+        "total": 5,
+        "without_id": 2,
+    }
+    assert store.read_dashboard_projection(
+        session,
+        ("sql", 2, ("visibility", 2)),
+    ) is None

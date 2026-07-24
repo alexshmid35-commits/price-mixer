@@ -173,6 +173,34 @@ def test_canonical_xlsx_is_deferred_and_snapshot_can_be_flushed(tmp_path):
     assert runtime.snapshot_writer.flushed == [session]
 
 
+def test_revision_token_tracks_sql_revision_files_and_extra_state(tmp_path):
+    runtime = _runtime(tmp_path)
+    session = tmp_path / "abc"
+    dependency = tmp_path / "settings.json"
+    dependency.write_text("{}", encoding="utf-8")
+    runtime.store.replace_rows(session, ROWS, source_revision="seed")
+
+    first = runtime.revision_token(
+        session,
+        dependency_paths=[dependency],
+        extra=(("visibility", 1),),
+    )
+    runtime.store.reconcile_rows(
+        session,
+        [*ROWS, ["2", "Keyboard", 30, "IVEN", "6", "2", 35, 40, 6, "Клавиатура"]],
+        source_revision="mutation",
+    )
+    second = runtime.revision_token(
+        session,
+        dependency_paths=[dependency],
+        extra=(("visibility", 1),),
+    )
+
+    assert first != second
+    assert first[1][0] == "sql"
+    assert second[1][1] == first[1][1] + 1
+
+
 def test_legacy_xlsx_uses_worker_and_reports_enqueue_errors(tmp_path):
     worker = XlsxWorkerSpy()
     runtime = _runtime(tmp_path, mode="off", xlsx_worker=worker)

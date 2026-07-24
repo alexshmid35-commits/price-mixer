@@ -13,7 +13,7 @@ from pathlib import Path
 
 from price_mixer.product_schema import ProductWireIndex
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 PAGE_COLUMNS = {
     0: "onliner_id",
     1: "name_key",
@@ -80,6 +80,8 @@ class SessionProductStore:
                         rows_sha256 TEXT NOT NULL,
                         badge_counts_json TEXT NOT NULL DEFAULT '{}',
                         page_meta_json TEXT NOT NULL DEFAULT '{}',
+                        dashboard_key TEXT NOT NULL DEFAULT '',
+                        dashboard_json TEXT NOT NULL DEFAULT '{}',
                         complete INTEGER NOT NULL DEFAULT 0,
                         updated_at INTEGER NOT NULL
                     );
@@ -155,6 +157,18 @@ class SessionProductStore:
                     "session_product_meta",
                     "complete",
                     "INTEGER NOT NULL DEFAULT 0",
+                )
+                _ensure_column(
+                    connection,
+                    "session_product_meta",
+                    "dashboard_key",
+                    "TEXT NOT NULL DEFAULT ''",
+                )
+                _ensure_column(
+                    connection,
+                    "session_product_meta",
+                    "dashboard_json",
+                    "TEXT NOT NULL DEFAULT '{}'",
                 )
                 if row is None:
                     connection.execute(
@@ -365,6 +379,45 @@ class SessionProductStore:
             if isinstance(decoded, list):
                 result.append(decoded)
         return result
+
+    def read_dashboard_projection(self, session_dir, revision_token):
+        if not self.enabled:
+            return None
+        expected_key = _projection_key(revision_token)
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT dashboard_key,dashboard_json,complete FROM session_product_meta WHERE session_id=?",
+                (self.session_id(session_dir),),
+            ).fetchone()
+        if row is None or not bool(row["complete"]) or str(row["dashboard_key"] or "") != expected_key:
+            return None
+        try:
+            payload = json.loads(str(row["dashboard_json"] or "{}"))
+        except json.JSONDecodeError:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def write_dashboard_projection(self, session_dir, revision_token, payload):
+        if not self.enabled:
+            return False
+        projection_key = _projection_key(revision_token)
+        serialized = json.dumps(
+            dict(payload or {}),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        with self.connection() as connection:
+            cursor = connection.execute(
+                "UPDATE session_product_meta SET dashboard_key=?,dashboard_json=? WHERE session_id=? AND complete=1",
+                (
+                    projection_key,
+                    serialized,
+                    self.session_id(session_dir),
+                ),
+            )
+            connection.commit()
+        return bool(cursor.rowcount)
 
     def reconcile_rows(
         self,
@@ -760,6 +813,17 @@ def rows_digest(normalized_rows):
         )
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def _projection_key(revision_token):
+    serialized = json.dumps(
+        revision_token,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _normalize_row(row, position):
