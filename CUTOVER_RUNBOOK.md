@@ -39,3 +39,16 @@ Stopping the candidate does not touch the legacy process, source directory, or
 runtime. Rollback is therefore immediate: continue using port 5001. Keep the
 verified baseline backup until final acceptance and a fresh post-cutover
 backup are complete.
+
+## Primary local launcher
+
+After acceptance, the candidate runtime can own the normal ports:
+
+```bash
+scripts/start_primary_local.sh /absolute/runtime /absolute/onliner-parser
+```
+
+This starts the mixer on 5001, its external worker, and the parser on 5055.
+`scripts/stop_primary_local.sh /absolute/runtime` stops only these managed
+components. The legacy source/runtime and its original launcher remain
+unchanged for rollback.
