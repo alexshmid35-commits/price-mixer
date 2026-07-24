@@ -5,3 +5,15 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+  - repo: local
+    hooks:
+      - id: architecture-boundaries
+        name: architecture boundaries
+        entry: python3 scripts/check_architecture.py
+        language: system
+        pass_filenames: false
+      - id: javascript-syntax
+        name: JavaScript syntax
+        entry: bash -c "find static/js -type f -name '*.js' -print0 | xargs -0 -n1 node --check"
+        language: system
+        pass_filenames: false

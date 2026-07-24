@@ -38,7 +38,7 @@ def test_runtime_falls_back_when_sql_sync_fails(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         store,
-        "replace_rows",
+        "reconcile_rows",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("broken")),
     )
 
@@ -52,3 +52,30 @@ def test_runtime_falls_back_when_sql_sync_fails(tmp_path, monkeypatch):
 
     assert payload["recordsTotal"] == 2
     assert payload["meta"]["storage"] == "compatibility"
+
+
+def test_runtime_stores_full_rows_but_pages_only_visible_rows(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    runtime = SessionPageRuntime(
+        store=store,
+        compatibility_cache=ConsolidatedPagingCache(),
+    )
+
+    payload = runtime.build_page(
+        tmp_path / "abc",
+        ROWS[:1],
+        canonical_rows=ROWS,
+        canonical_source_revision=("all", "r1"),
+        source_revision=("visible", "r1"),
+        page_arguments={
+            "filter_mode": "all",
+            "search": "",
+            "order_specs": [],
+            "hidden_categories": {"Мышь"},
+        },
+        badge_counts_builder=lambda _rows: {},
+    )
+
+    assert payload["recordsTotal"] == 1
+    assert [row[1] for row in payload["data"]] == ["Monitor A"]
+    assert len(store.read_rows(tmp_path / "abc")) == 2

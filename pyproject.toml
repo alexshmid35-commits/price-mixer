@@ -8,3 +8,14 @@ ignore = ["E501"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"price_mixer/services/review_matching/*.py" = ["SIM", "B034"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+follow_imports = "skip"
+check_untyped_defs = true
+warn_unused_ignores = true
+no_implicit_optional = true

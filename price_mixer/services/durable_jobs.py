@@ -11,7 +11,6 @@ from pathlib import Path
 
 from price_mixer.runtime_paths import get_runtime_paths
 
-
 DEFAULT_JOB_DB = get_runtime_paths().data_file("jobs.db")
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 
@@ -63,6 +62,7 @@ class DurableJobQueue:
         dedupe_key="",
         max_attempts=2,
         job_id=None,
+        reuse_active=False,
     ):
         self.initialize()
         now = float(self.clock())
@@ -74,9 +74,21 @@ class DurableJobQueue:
         superseded = []
         with self._connection(immediate=True) as connection:
             if dedupe_key:
+                if reuse_active:
+                    active = connection.execute(
+                        "SELECT * FROM durable_jobs WHERE kind=? AND dedupe_key=? "
+                        "AND state IN ('queued','running') "
+                        "ORDER BY created_at DESC,rowid DESC LIMIT 1",
+                        (kind, str(dedupe_key)),
+                    ).fetchone()
+                    if active is not None:
+                        return {
+                            "job_id": active["job_id"],
+                            "superseded": [],
+                            "reused": True,
+                        }
                 rows = connection.execute(
-                    "SELECT job_id,payload_json FROM durable_jobs "
-                    "WHERE kind=? AND dedupe_key=? AND state='queued'",
+                    "SELECT job_id,payload_json FROM durable_jobs WHERE kind=? AND dedupe_key=? AND state='queued'",
                     (kind, str(dedupe_key)),
                 ).fetchall()
                 superseded = [
@@ -109,7 +121,7 @@ class DurableJobQueue:
                     now,
                 ),
             )
-        return {"job_id": job_id, "superseded": superseded}
+        return {"job_id": job_id, "superseded": superseded, "reused": False}
 
     def claim(self, worker_id, *, kinds=None, lease_seconds=900):
         self.initialize()
@@ -131,11 +143,9 @@ class DurableJobQueue:
                 "WHERE state='running' AND lease_until<? AND attempts>=max_attempts",
                 (now, now, now),
             )
-            params = [now]
+            params: list[object] = [now]
             kind_clause = ""
-            normalized_kinds = [
-                str(kind).strip() for kind in (kinds or []) if str(kind).strip()
-            ]
+            normalized_kinds = [str(kind).strip() for kind in (kinds or []) if str(kind).strip()]
             if normalized_kinds:
                 placeholders = ",".join("?" for _ in normalized_kinds)
                 kind_clause = f" AND kind IN ({placeholders})"
@@ -169,26 +179,58 @@ class DurableJobQueue:
             ).fetchone()
         return _row_payload(claimed)
 
-    def complete(self, job_id, *, message="completed"):
-        return self._finish(job_id, "succeeded", message=message)
+    def complete(self, job_id, *, message="completed", worker_id=None):
+        return self._finish(
+            job_id,
+            "succeeded",
+            message=message,
+            worker_id=worker_id,
+        )
 
-    def fail(self, job_id, error, *, retry_delay=5):
+    def cancel(self, job_id, *, message="cancelled"):
+        self.initialize()
+        now = float(self.clock())
+        with self._connection(immediate=True) as connection:
+            connection.execute(
+                "UPDATE durable_jobs SET state='cancelled',message=?,lease_until=0,"
+                "worker_id='',finished_at=?,updated_at=? "
+                "WHERE job_id=? AND state IN ('queued','running')",
+                (str(message), now, now, str(job_id)),
+            )
+        return self.get(job_id)
+
+    def resume(self, job_id):
+        self.initialize()
+        now = float(self.clock())
+        with self._connection(immediate=True) as connection:
+            connection.execute(
+                "UPDATE durable_jobs SET state='queued',attempts=0,available_at=?,"
+                "lease_until=0,worker_id='',message='resumed',error_type='',"
+                "started_at=0,finished_at=0,updated_at=? "
+                "WHERE job_id=? AND state IN ('failed','cancelled')",
+                (now, now, str(job_id)),
+            )
+        return self.get(job_id)
+
+    def fail(self, job_id, error, *, retry_delay=5, worker_id=None):
         self.initialize()
         now = float(self.clock())
         error_type = type(error).__name__
         with self._connection(immediate=True) as connection:
-            row = connection.execute(
-                "SELECT attempts,max_attempts FROM durable_jobs WHERE job_id=?",
+            current = connection.execute(
+                "SELECT attempts,max_attempts,state,worker_id FROM durable_jobs WHERE job_id=?",
                 (str(job_id),),
             ).fetchone()
-            if row is None:
+            if current is None:
                 return None
-            retry = int(row["attempts"]) < int(row["max_attempts"])
+            if current["state"] != "running" or (worker_id is not None and str(current["worker_id"]) != str(worker_id)):
+                return self.get(job_id)
+            retry = int(current["attempts"]) < int(current["max_attempts"])
             state = "queued" if retry else "failed"
             connection.execute(
                 "UPDATE durable_jobs SET state=?,available_at=?,lease_until=0,"
                 "worker_id='',error_type=?,message=?,finished_at=?,updated_at=? "
-                "WHERE job_id=?",
+                "WHERE job_id=? AND state='running'",
                 (
                     state,
                     now + max(0, float(retry_delay)) if retry else now,
@@ -214,8 +256,7 @@ class DurableJobQueue:
         self.initialize()
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT * FROM durable_jobs WHERE kind=? AND dedupe_key=? "
-                "ORDER BY created_at DESC,rowid DESC LIMIT 1",
+                "SELECT * FROM durable_jobs WHERE kind=? AND dedupe_key=? ORDER BY created_at DESC,rowid DESC LIMIT 1",
                 (str(kind), str(dedupe_key)),
             ).fetchone()
         return _row_payload(row) if row is not None else None
@@ -227,9 +268,7 @@ class DurableJobQueue:
     def counts(self):
         self.initialize()
         with self._connection() as connection:
-            rows = connection.execute(
-                "SELECT state,COUNT(*) AS count FROM durable_jobs GROUP BY state"
-            ).fetchall()
+            rows = connection.execute("SELECT state,COUNT(*) AS count FROM durable_jobs GROUP BY state").fetchall()
         return {row["state"]: int(row["count"]) for row in rows}
 
     def heartbeat(self, worker_id):
@@ -259,9 +298,7 @@ class DurableJobQueue:
         return {
             "status": "ok" if active else "unavailable",
             "active_workers": active,
-            "latest_heartbeat_age_sec": (
-                max(0.0, round(now - latest, 3)) if latest else None
-            ),
+            "latest_heartbeat_age_sec": (max(0.0, round(now - latest, 3)) if latest else None),
         }
 
     def prune_completed(self, *, max_age=7 * 24 * 3600, limit=500):
@@ -286,16 +323,22 @@ class DurableJobQueue:
                 )
         return len(job_ids)
 
-    def _finish(self, job_id, state, *, message):
+    def _finish(self, job_id, state, *, message, worker_id=None):
         if state not in TERMINAL_STATES:
             raise ValueError("invalid terminal job state")
         self.initialize()
         now = float(self.clock())
         with self._connection(immediate=True) as connection:
+            params = [state, str(message), now, now, str(job_id)]
+            worker_clause = ""
+            if worker_id is not None:
+                worker_clause = " AND worker_id=?"
+                params.append(str(worker_id))
             connection.execute(
                 "UPDATE durable_jobs SET state=?,message=?,lease_until=0,"
-                "worker_id='',finished_at=?,updated_at=? WHERE job_id=?",
-                (state, str(message), now, now, str(job_id)),
+                "worker_id='',finished_at=?,updated_at=? "
+                f"WHERE job_id=? AND state='running'{worker_clause}",
+                params,
             )
         return self.get(job_id)
 

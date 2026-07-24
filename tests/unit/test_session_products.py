@@ -2,7 +2,6 @@
 
 from price_mixer.services.session_products import SessionProductStore
 
-
 ROWS = [
     ["10", "Monitor Z", 120, "IVEN", "12", "2", 140, 150, 5, "Монитор"],
     ["10", "Monitor A", 100, "Tradex", "24", "1", 130, 145, 6, "Монитор"],
@@ -118,3 +117,71 @@ def test_noncanonical_mode_does_not_take_over_page_queries(tmp_path):
     store.replace_rows(session, ROWS, source_revision="r1")
 
     assert store.query_page(session) is None
+
+
+def test_reconcile_rows_updates_only_changed_rows_and_preserves_order(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="r1")
+    changed = [list(row) for row in ROWS]
+    changed[2][0] = "998213"
+    changed[2][9] = "Кулеры"
+
+    result = store.reconcile_rows(session, changed, source_revision="manual:1")
+
+    assert result["changed"] is True
+    assert result["updated_rows"] == 1
+    assert result["deleted_rows"] == 0
+    assert result["revision"] == 2
+    assert store.read_rows(session) == changed
+    assert store.metadata(session)["source_revision"] == "manual:1"
+    assert store.query_page(session, search="mouse one")["data"][0][0] == "998213"
+
+
+def test_reconcile_rows_deletes_missing_rows_and_is_idempotent(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="r1")
+
+    changed = ROWS[:-1]
+    first = store.reconcile_rows(session, changed, source_revision="mutation:1")
+    second = store.reconcile_rows(session, changed, source_revision="mutation:2")
+
+    assert first["deleted_rows"] == 1
+    assert second["changed"] is False
+    assert store.read_rows(session) == changed
+
+
+def test_incomplete_legacy_store_is_not_canonical_until_reconciled(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="legacy-page", complete=False)
+
+    assert store.read_rows(session) is None
+    assert store.read_rows(session, include_incomplete=True) == ROWS
+    assert store.query_page(session) is None
+
+    migrated = store.reconcile_rows(session, ROWS, source_revision="canonical:1")
+
+    assert migrated["changed"] is True
+    assert migrated["updated_rows"] == 0
+    assert store.metadata(session)["complete"] == 1
+    assert store.read_rows(session) == ROWS
+
+
+def test_query_page_hides_categories_without_deleting_them(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="r1")
+
+    payload = store.query_page(
+        session,
+        hidden_categories={"Мышь"},
+        order_specs=[(1, "asc")],
+    )
+
+    assert payload["recordsTotal"] == 3
+    assert all(row[9] != "Мышь" for row in payload["data"])
+    assert payload["meta"]["without_id_count"] == 0
+    assert payload["meta"]["without_id_category_counts"] == []
+    assert len(store.read_rows(session)) == 5

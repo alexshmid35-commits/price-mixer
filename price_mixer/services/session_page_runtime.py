@@ -19,21 +19,25 @@ class SessionPageRuntime:
         badge_counts_builder,
         export_indexes=None,
         snapshot_names=None,
+        canonical_rows=None,
+        canonical_source_revision=None,
+        use_sql=True,
     ):
         payload = None
-        filter_mode = str(
-            (page_arguments or {}).get("filter_mode", "all") or "all"
-        ).strip().casefold()
-        if self.store.canonical and filter_mode in {"all", "no_id", "duplicate"}:
+        compatibility_arguments = dict(page_arguments or {})
+        compatibility_arguments.pop("hidden_categories", None)
+        filter_mode = str((page_arguments or {}).get("filter_mode", "all") or "all").strip().casefold()
+        if self.store.canonical and use_sql and filter_mode in {"all", "no_id", "duplicate"}:
             try:
-                sync_result = self.store.replace_rows(
+                storage_rows = rows if canonical_rows is None else canonical_rows
+                sync_result = self.store.reconcile_rows(
                     session_dir,
-                    rows,
-                    source_revision=source_revision,
+                    storage_rows,
+                    source_revision=canonical_source_revision or source_revision,
                     badge_counts=lambda: badge_counts_builder(rows),
                 )
                 if sync_result.get("changed"):
-                    parity = self.store.parity(session_dir, rows)
+                    parity = self.store.parity(session_dir, storage_rows)
                     if parity.get("status") != "ok":
                         raise RuntimeError("session_products parity check failed")
                 payload = self.store.query_page(
@@ -47,15 +51,13 @@ class SessionPageRuntime:
                     )
             except Exception:
                 if self.logger is not None:
-                    self.logger.exception(
-                        "session_products SQL page failed; using compatibility path"
-                    )
+                    self.logger.exception("session_products SQL page failed; using compatibility path")
                 payload = None
         if payload is None:
             payload = self.compatibility_cache.build_page(
                 source_revision,
                 rows,
-                **page_arguments,
+                **compatibility_arguments,
                 export_indexes=export_indexes,
                 snapshot_names=snapshot_names,
                 badge_counts_builder=badge_counts_builder,

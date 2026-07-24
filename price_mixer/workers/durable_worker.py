@@ -26,7 +26,6 @@ from price_mixer.services.supplier_snapshots import append_api_fetch_history
 from price_mixer.settings import load_app_settings
 from price_mixer.workers.xlsx_writer import write_snapshot
 
-
 LOGGER = get_logger("price_mixer.worker")
 
 
@@ -42,13 +41,8 @@ class DurableWorker:
         history_appender=append_api_fetch_history,
     ):
         self.queue = queue_backend or DurableJobQueue()
-        self.uploads_dir = Path(
-            uploads_dir or get_runtime_paths().uploads_dir
-        ).resolve()
-        self.worker_id = str(
-            worker_id
-            or f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-        )
+        self.uploads_dir = Path(uploads_dir or get_runtime_paths().uploads_dir).resolve()
+        self.worker_id = str(worker_id or f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:8]}")
         self.retry_delay = max(0, float(retry_delay))
         self.settings_loader = settings_loader
         self.history_appender = history_appender
@@ -71,7 +65,11 @@ class DurableWorker:
                     message = self._run_api_source_fetch(job)
                 else:
                     raise ValueError("unsupported durable job kind")
-                self.queue.complete(job["job_id"], message=message)
+                self.queue.complete(
+                    job["job_id"],
+                    message=message,
+                    worker_id=self.worker_id,
+                )
                 if job["kind"] == "xlsx":
                     self._cleanup_xlsx_snapshot(job)
                 LOGGER.info("durable job completed kind=%s", job["kind"])
@@ -80,6 +78,7 @@ class DurableWorker:
                     job["job_id"],
                     exc,
                     retry_delay=self.retry_delay,
+                    worker_id=self.worker_id,
                 )
                 LOGGER.exception(
                     "durable job failed kind=%s retry=%s",
@@ -164,9 +163,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     configure_price_mixer_logging()
     queue_path = str(args.job_db or "").strip() or None
-    worker = DurableWorker(
-        DurableJobQueue(queue_path) if queue_path else None
-    )
+    worker = DurableWorker(DurableJobQueue(queue_path) if queue_path else None)
     if args.once:
         return 0 if worker.run_once() else 3
 

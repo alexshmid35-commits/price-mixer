@@ -14,6 +14,7 @@ def create_category_reference_bp(
     get_category_catalog: Callable[[], dict | tuple[dict, int]],
     get_suppliers: Callable[[], dict | tuple[dict, int]],
     get_supplier_categories: Callable[[str], dict | tuple[dict, int]],
+    get_onliner_category_preview: Callable[[], dict | tuple[dict, int]] | None = None,
 ) -> Blueprint:
     bp = Blueprint("category_reference_api", __name__)
 
@@ -32,5 +33,10 @@ def create_category_reference_bp(
     @bp.route("/api/supplier-categories")
     def api_supplier_categories():
         return _as_response(get_supplier_categories(str(request.args.get("supplier", "")).strip()))
+
+    if get_onliner_category_preview is not None:
+        @bp.route("/api/onliner-category-preview")
+        def api_onliner_category_preview():
+            return _as_response(get_onliner_category_preview())
 
     return bp

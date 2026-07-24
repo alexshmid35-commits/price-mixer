@@ -1,4 +1,3 @@
-import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -7,7 +6,6 @@ from price_mixer.services import api_sources
 from price_mixer.services.background_xlsx import ExternalBackgroundXlsxWorker
 from price_mixer.services.durable_jobs import DurableJobQueue
 from price_mixer.workers.durable_worker import DurableWorker
-
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -55,6 +53,58 @@ def test_durable_queue_cancels_older_queued_dedupe_job(tmp_path):
         }
     ]
     assert queue.latest("xlsx", "session")["job_id"] == second["job_id"]
+
+
+def test_durable_queue_can_reuse_active_idempotent_job(tmp_path):
+    queue = DurableJobQueue(tmp_path / "jobs.db")
+    first = queue.enqueue(
+        "review",
+        {"batch": 1},
+        dedupe_key="session",
+        reuse_active=True,
+    )
+    second = queue.enqueue(
+        "review",
+        {"batch": 2},
+        dedupe_key="session",
+        reuse_active=True,
+    )
+
+    assert second["job_id"] == first["job_id"]
+    assert second["reused"] is True
+    assert queue.counts() == {"queued": 1}
+
+
+def test_durable_queue_cancel_resume_and_late_completion_are_safe(tmp_path):
+    queue = DurableJobQueue(tmp_path / "jobs.db")
+    job_id = queue.enqueue("sample", {}, max_attempts=2)["job_id"]
+    queue.claim("worker")
+
+    cancelled = queue.cancel(job_id)
+    late_completion = queue.complete(job_id)
+    resumed = queue.resume(job_id)
+    claimed_again = queue.claim("worker-2")
+
+    assert cancelled["state"] == "cancelled"
+    assert late_completion["state"] == "cancelled"
+    assert resumed["state"] == "queued"
+    assert claimed_again["job_id"] == job_id
+    assert claimed_again["attempts"] == 1
+
+
+def test_resumed_job_rejects_completion_from_previous_worker(tmp_path):
+    queue = DurableJobQueue(tmp_path / "jobs.db")
+    job_id = queue.enqueue("sample", {})["job_id"]
+    queue.claim("old-worker")
+    queue.cancel(job_id)
+    queue.resume(job_id)
+    queue.claim("new-worker")
+
+    stale = queue.complete(job_id, worker_id="old-worker")
+    completed = queue.complete(job_id, worker_id="new-worker")
+
+    assert stale["state"] == "running"
+    assert completed["state"] == "succeeded"
 
 
 def test_worker_heartbeat_reports_liveness_without_exposing_worker_id(tmp_path):
@@ -187,9 +237,7 @@ def test_api_source_fetch_survives_process_boundary_via_persistent_status(
 
 
 def test_durable_worker_systemd_template_is_hardened():
-    service = (
-        ROOT / "deploy" / "price-mixer-worker.service"
-    ).read_text(encoding="utf-8")
+    service = (ROOT / "deploy" / "price-mixer-worker.service").read_text(encoding="utf-8")
 
     assert "price_mixer.workers.durable_worker" in service
     assert "Restart=on-failure" in service

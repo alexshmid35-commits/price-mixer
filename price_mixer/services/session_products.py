@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from contextlib import closing
 import hashlib
 import json
 import math
-from pathlib import Path
 import sqlite3
 import threading
 import time
+from contextlib import closing
+from pathlib import Path
 
-
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 PAGE_COLUMNS = {
     0: "onliner_id",
     1: "name_key",
@@ -79,6 +78,7 @@ class SessionProductStore:
                         rows_sha256 TEXT NOT NULL,
                         badge_counts_json TEXT NOT NULL DEFAULT '{}',
                         page_meta_json TEXT NOT NULL DEFAULT '{}',
+                        complete INTEGER NOT NULL DEFAULT 0,
                         updated_at INTEGER NOT NULL
                     );
                     CREATE TABLE IF NOT EXISTS session_products (
@@ -129,9 +129,7 @@ class SessionProductStore:
                     );
                     """
                 )
-                row = connection.execute(
-                    "SELECT version FROM session_product_schema LIMIT 1"
-                ).fetchone()
+                row = connection.execute("SELECT version FROM session_product_schema LIMIT 1").fetchone()
                 _ensure_column(
                     connection,
                     "session_product_meta",
@@ -148,6 +146,12 @@ class SessionProductStore:
                     connection,
                     "session_products",
                     "source_position",
+                    "INTEGER NOT NULL DEFAULT 0",
+                )
+                _ensure_column(
+                    connection,
+                    "session_product_meta",
+                    "complete",
                     "INTEGER NOT NULL DEFAULT 0",
                 )
                 if row is None:
@@ -176,14 +180,14 @@ class SessionProductStore:
         *,
         source_revision,
         badge_counts=None,
+        complete=True,
     ):
         if not self.enabled:
             return {"status": "disabled", "changed": False}
         session_id = self.session_id(session_dir)
         with self.connection() as connection:
             current = connection.execute(
-                "SELECT source_revision,row_count,rows_sha256,revision "
-                "FROM session_product_meta WHERE session_id=?",
+                "SELECT source_revision,row_count,rows_sha256,revision FROM session_product_meta WHERE session_id=?",
                 (session_id,),
             ).fetchone()
             if current is not None and str(current["source_revision"]) == str(source_revision):
@@ -196,11 +200,7 @@ class SessionProductStore:
                 }
             normalized = [_normalize_row(row, position) for position, row in enumerate(rows or [])]
             digest = rows_digest(normalized)
-            resolved_badge_counts = (
-                badge_counts()
-                if callable(badge_counts)
-                else badge_counts
-            )
+            resolved_badge_counts = badge_counts() if callable(badge_counts) else badge_counts
             page_meta = _build_page_meta(normalized)
             revision = int(current["revision"]) + 1 if current is not None else 1
             connection.execute("BEGIN IMMEDIATE")
@@ -215,13 +215,14 @@ class SessionProductStore:
             connection.execute(
                 "INSERT INTO session_product_meta "
                 "(session_id,source_revision,revision,row_count,rows_sha256,"
-                "badge_counts_json,page_meta_json,updated_at) VALUES (?,?,?,?,?,?,?,?) "
+                "badge_counts_json,page_meta_json,complete,updated_at) VALUES (?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(session_id) DO UPDATE SET "
                 "source_revision=excluded.source_revision,"
                 "revision=excluded.revision,row_count=excluded.row_count,"
                 "rows_sha256=excluded.rows_sha256,"
                 "badge_counts_json=excluded.badge_counts_json,"
                 "page_meta_json=excluded.page_meta_json,"
+                "complete=excluded.complete,"
                 "updated_at=excluded.updated_at",
                 (
                     session_id,
@@ -239,6 +240,7 @@ class SessionProductStore:
                         ensure_ascii=False,
                         sort_keys=True,
                     ),
+                    1 if complete else 0,
                     int(time.time()),
                 ),
             )
@@ -275,8 +277,7 @@ class SessionProductStore:
                 ],
             )
             connection.executemany(
-                "INSERT INTO session_products_fts "
-                "(session_id,row_index,search_text) VALUES (?,?,?)",
+                "INSERT INTO session_products_fts (session_id,row_index,search_text) VALUES (?,?,?)",
                 [
                     (
                         session_id,
@@ -303,16 +304,12 @@ class SessionProductStore:
         expected_digest = rows_digest(normalized)
         with self.connection() as connection:
             meta = connection.execute(
-                "SELECT row_count,rows_sha256,revision FROM session_product_meta "
-                "WHERE session_id=?",
+                "SELECT row_count,rows_sha256,revision FROM session_product_meta WHERE session_id=?",
                 (session_id,),
             ).fetchone()
         if meta is None:
             return {"status": "missing", "expected_rows": len(normalized)}
-        matches = (
-            int(meta["row_count"]) == len(normalized)
-            and str(meta["rows_sha256"]) == expected_digest
-        )
+        matches = int(meta["row_count"]) == len(normalized) and str(meta["rows_sha256"]) == expected_digest
         return {
             "status": "ok" if matches else "mismatch",
             "matches": matches,
@@ -321,6 +318,220 @@ class SessionProductStore:
             "revision": int(meta["revision"]),
             "expected_sha256": expected_digest,
             "stored_sha256": str(meta["rows_sha256"]),
+        }
+
+    def metadata(self, session_dir):
+        if not self.enabled:
+            return None
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT source_revision,revision,row_count,rows_sha256,"
+                "badge_counts_json,page_meta_json,complete,updated_at "
+                "FROM session_product_meta WHERE session_id=?",
+                (self.session_id(session_dir),),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = dict(row)
+        for key in ("badge_counts_json", "page_meta_json"):
+            try:
+                payload[key.removesuffix("_json")] = json.loads(payload.pop(key) or "{}")
+            except json.JSONDecodeError:
+                payload[key.removesuffix("_json")] = {}
+        return payload
+
+    def read_rows(self, session_dir, *, include_incomplete=False):
+        if not self.enabled:
+            return None
+        with self.connection() as connection:
+            meta = connection.execute(
+                "SELECT complete FROM session_product_meta WHERE session_id=?",
+                (self.session_id(session_dir),),
+            ).fetchone()
+            if meta is None or (not include_incomplete and not bool(meta["complete"])):
+                return None
+            rows = connection.execute(
+                "SELECT row_json FROM session_products WHERE session_id=? ORDER BY source_position,row_index",
+                (self.session_id(session_dir),),
+            ).fetchall()
+        result = []
+        for row in rows:
+            try:
+                decoded = json.loads(str(row["row_json"] or "[]"))
+            except json.JSONDecodeError:
+                decoded = []
+            if isinstance(decoded, list):
+                result.append(decoded)
+        return result
+
+    def reconcile_rows(
+        self,
+        session_dir,
+        rows,
+        *,
+        source_revision,
+        badge_counts=None,
+    ):
+        """Synchronize a mutation while writing only changed SQL rows."""
+        if not self.enabled:
+            return {"status": "disabled", "changed": False}
+        session_id = self.session_id(session_dir)
+        normalized = [_normalize_row(row, position) for position, row in enumerate(rows or [])]
+        digest = rows_digest(normalized)
+        resolved_badges = badge_counts() if callable(badge_counts) else badge_counts
+        page_meta = _build_page_meta(normalized)
+        missing = False
+        with self.connection() as connection:
+            current = connection.execute(
+                "SELECT revision,rows_sha256,badge_counts_json,complete FROM session_product_meta WHERE session_id=?",
+                (session_id,),
+            ).fetchone()
+            if current is None:
+                missing = True
+            elif str(current["rows_sha256"]) == digest and bool(current["complete"]):
+                return {
+                    "status": "ok",
+                    "changed": False,
+                    "revision": int(current["revision"]),
+                    "row_count": len(normalized),
+                    "rows_sha256": digest,
+                    "updated_rows": 0,
+                    "deleted_rows": 0,
+                }
+        if missing:
+            return self.replace_rows(
+                session_dir,
+                rows,
+                source_revision=source_revision,
+                badge_counts=resolved_badges,
+                complete=True,
+            )
+        with self.connection() as connection:
+            current = connection.execute(
+                "SELECT revision,rows_sha256,badge_counts_json,complete FROM session_product_meta WHERE session_id=?",
+                (session_id,),
+            ).fetchone()
+            if current is None:
+                return self.replace_rows(
+                    session_dir,
+                    rows,
+                    source_revision=source_revision,
+                    badge_counts=resolved_badges,
+                    complete=True,
+                )
+            revision = int(current["revision"]) + 1
+            existing = {
+                int(row["row_index"]): str(row["row_json"])
+                for row in connection.execute(
+                    "SELECT row_index,row_json FROM session_products WHERE session_id=?",
+                    (session_id,),
+                ).fetchall()
+            }
+            incoming = {item["row_index"]: item for item in normalized}
+            changed = [item for item in normalized if existing.get(item["row_index"]) != item["row_json"]]
+            deleted = sorted(set(existing) - set(incoming))
+            rebuild_fts = len(changed) + len(deleted) > max(1000, len(normalized) // 5)
+            connection.execute("BEGIN IMMEDIATE")
+            if deleted:
+                placeholders = ",".join("?" for _ in deleted)
+                params = [session_id, *deleted]
+                if not rebuild_fts:
+                    connection.execute(
+                        f"DELETE FROM session_products_fts WHERE session_id=? AND row_index IN ({placeholders})",
+                        params,
+                    )
+                connection.execute(
+                    f"DELETE FROM session_products WHERE session_id=? AND row_index IN ({placeholders})",
+                    params,
+                )
+            if rebuild_fts:
+                connection.execute(
+                    "DELETE FROM session_products_fts WHERE session_id=?",
+                    (session_id,),
+                )
+            else:
+                connection.executemany(
+                    "DELETE FROM session_products_fts WHERE session_id=? AND row_index=?",
+                    [(session_id, item["row_index"]) for item in changed],
+                )
+            connection.executemany(
+                "INSERT INTO session_products "
+                "(session_id,row_index,onliner_id,name,price,supplier,warranty,"
+                "delivery_days,rrc,no_discount,category,name_key,supplier_key,"
+                "warranty_key,delivery_key,category_key,search_text,row_json,"
+                "source_position,revision) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(session_id,row_index) DO UPDATE SET "
+                "onliner_id=excluded.onliner_id,name=excluded.name,price=excluded.price,"
+                "supplier=excluded.supplier,warranty=excluded.warranty,"
+                "delivery_days=excluded.delivery_days,rrc=excluded.rrc,"
+                "no_discount=excluded.no_discount,category=excluded.category,"
+                "name_key=excluded.name_key,supplier_key=excluded.supplier_key,"
+                "warranty_key=excluded.warranty_key,delivery_key=excluded.delivery_key,"
+                "category_key=excluded.category_key,search_text=excluded.search_text,"
+                "row_json=excluded.row_json,source_position=excluded.source_position,"
+                "revision=excluded.revision",
+                [
+                    (
+                        session_id,
+                        item["row_index"],
+                        item["onliner_id"],
+                        item["name"],
+                        item["price"],
+                        item["supplier"],
+                        item["warranty"],
+                        item["delivery_days"],
+                        item["rrc"],
+                        item["no_discount"],
+                        item["category"],
+                        item["name_key"],
+                        item["supplier_key"],
+                        item["warranty_key"],
+                        item["delivery_key"],
+                        item["category_key"],
+                        item["search_text"],
+                        item["row_json"],
+                        item["source_position"],
+                        revision,
+                    )
+                    for item in changed
+                ],
+            )
+            connection.executemany(
+                "INSERT INTO session_products_fts(session_id,row_index,search_text) VALUES (?,?,?)",
+                [
+                    (session_id, item["row_index"], item["search_text"])
+                    for item in (normalized if rebuild_fts else changed)
+                ],
+            )
+            badge_json = (
+                json.dumps(resolved_badges, ensure_ascii=False, sort_keys=True)
+                if resolved_badges is not None
+                else str(current["badge_counts_json"] or "{}")
+            )
+            connection.execute(
+                "UPDATE session_product_meta SET source_revision=?,revision=?,"
+                "row_count=?,rows_sha256=?,badge_counts_json=?,page_meta_json=?,"
+                "complete=1,updated_at=? WHERE session_id=?",
+                (
+                    str(source_revision),
+                    revision,
+                    len(normalized),
+                    digest,
+                    badge_json,
+                    json.dumps(page_meta, ensure_ascii=False, sort_keys=True),
+                    int(time.time()),
+                    session_id,
+                ),
+            )
+            connection.commit()
+        return {
+            "status": "ok",
+            "changed": True,
+            "revision": revision,
+            "row_count": len(normalized),
+            "rows_sha256": digest,
+            "updated_rows": len(changed),
+            "deleted_rows": len(deleted),
         }
 
     def query_page(
@@ -334,12 +545,20 @@ class SessionProductStore:
         order_specs=None,
         filter_mode="all",
         no_id_category="",
+        hidden_categories=None,
     ):
         if not self.canonical:
             return None
         session_id = self.session_id(session_dir)
-        where = ["session_id=?"]
-        params = [session_id]
+        base_where = ["session_id=?"]
+        base_params = [session_id]
+        hidden_keys = sorted({_key(value) for value in hidden_categories or [] if _key(value)})
+        if hidden_keys:
+            placeholders = ",".join("?" for _ in hidden_keys)
+            base_where.append(f"category_key NOT IN ({placeholders})")
+            base_params.extend(hidden_keys)
+        where = list(base_where)
+        params = list(base_params)
         mode = str(filter_mode or "all").strip().casefold()
         if mode == "no_id":
             where.append("onliner_id=''")
@@ -351,10 +570,10 @@ class SessionProductStore:
             where.append(
                 "onliner_id<>'' AND onliner_id IN ("
                 "SELECT onliner_id FROM session_products "
-                "WHERE session_id=? AND onliner_id<>'' "
+                f"WHERE {' AND '.join(base_where)} AND onliner_id<>'' "
                 "GROUP BY onliner_id HAVING COUNT(*)>1)"
             )
-            params.append(session_id)
+            params.extend(base_params)
         elif mode != "all":
             return None
         query = _key(search)
@@ -370,23 +589,31 @@ class SessionProductStore:
                 where.append("instr(search_text,?)>0")
                 params.append(query)
         where_sql = " AND ".join(where)
+        base_where_sql = " AND ".join(base_where)
         order_sql = _order_sql(order_specs)
         page_start = max(0, int(start or 0))
         page_length = min(500, max(10, int(length or 100)))
 
         with self.connection() as connection:
             meta = connection.execute(
-                "SELECT row_count,badge_counts_json,page_meta_json "
-                "FROM session_product_meta "
-                "WHERE session_id=?",
+                "SELECT row_count,badge_counts_json,page_meta_json,complete "
+                "FROM session_product_meta WHERE session_id=?",
                 (session_id,),
             ).fetchone()
-            if meta is None:
+            if meta is None or not bool(meta["complete"]):
                 return None
-            filtered_count = int(connection.execute(
-                f"SELECT COUNT(*) FROM session_products WHERE {where_sql}",
-                params,
-            ).fetchone()[0])
+            total_count = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM session_products WHERE {base_where_sql}",
+                    base_params,
+                ).fetchone()[0]
+            )
+            filtered_count = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM session_products WHERE {where_sql}",
+                    params,
+                ).fetchone()[0]
+            )
             page_rows = connection.execute(
                 "SELECT onliner_id,name,price,supplier,warranty,delivery_days,"
                 "rrc,no_discount,row_index,category,row_json "
@@ -394,15 +621,12 @@ class SessionProductStore:
                 f"ORDER BY {order_sql} LIMIT ? OFFSET ?",
                 [*params, page_length, page_start],
             ).fetchall()
-            page_ids = sorted({
-                str(row["onliner_id"] or "")
-                for row in page_rows
-                if str(row["onliner_id"] or "")
-            })
+            page_ids = sorted({str(row["onliner_id"] or "") for row in page_rows if str(row["onliner_id"] or "")})
             duplicate_meta = self._page_duplicate_meta(
                 connection,
                 session_id,
                 page_ids,
+                hidden_keys=hidden_keys,
             )
         try:
             badge_counts = json.loads(str(meta["badge_counts_json"] or "{}"))
@@ -412,10 +636,43 @@ class SessionProductStore:
             page_meta = json.loads(str(meta["page_meta_json"] or "{}"))
         except json.JSONDecodeError:
             page_meta = {}
+        if hidden_keys:
+            with self.connection() as connection:
+                category_rows = connection.execute(
+                    "SELECT category,COUNT(*) AS item_count FROM session_products "
+                    f"WHERE {base_where_sql} AND onliner_id='' "
+                    "GROUP BY category ORDER BY category_key",
+                    base_params,
+                ).fetchall()
+                duplicate_rows = connection.execute(
+                    "SELECT COUNT(*) AS item_count FROM session_products "
+                    f"WHERE {base_where_sql} AND onliner_id<>'' "
+                    "GROUP BY onliner_id HAVING COUNT(*)>1",
+                    base_params,
+                ).fetchall()
+                page_meta = {
+                    **page_meta,
+                    "without_id_category_counts": [
+                        {
+                            "category": str(row["category"] or ""),
+                            "count": int(row["item_count"]),
+                        }
+                        for row in category_rows
+                    ],
+                    "without_id_count": sum(int(row["item_count"]) for row in category_rows),
+                    "duplicate_id_count": len(duplicate_rows),
+                    "duplicate_row_count": sum(int(row["item_count"]) for row in duplicate_rows),
+                    "supplier_count": int(
+                        connection.execute(
+                            f"SELECT COUNT(DISTINCT supplier_key) FROM session_products WHERE {base_where_sql}",
+                            base_params,
+                        ).fetchone()[0]
+                    ),
+                }
         categories = list(page_meta.get("without_id_category_counts", []) or [])
         return {
             "draw": max(0, int(draw or 0)),
-            "recordsTotal": int(meta["row_count"]),
+            "recordsTotal": total_count,
             "recordsFiltered": filtered_count,
             "data": [_db_row_to_page(row) for row in page_rows],
             "meta": {
@@ -431,16 +688,20 @@ class SessionProductStore:
         }
 
     @staticmethod
-    def _page_duplicate_meta(connection, session_id, page_ids):
+    def _page_duplicate_meta(connection, session_id, page_ids, *, hidden_keys=None):
         if not page_ids:
             return {}
         placeholders = ",".join("?" for _ in page_ids)
+        hidden_keys = list(hidden_keys or [])
+        hidden_sql = ""
+        if hidden_keys:
+            hidden_sql = " AND category_key NOT IN (" + ",".join("?" for _ in hidden_keys) + ")"
         rows = connection.execute(
             "SELECT onliner_id,COUNT(*) AS item_count,MIN(price) AS min_price,"
             "MAX(price) AS max_price FROM session_products "
-            f"WHERE session_id=? AND onliner_id IN ({placeholders}) "
+            f"WHERE session_id=? AND onliner_id IN ({placeholders}){hidden_sql} "
             "GROUP BY onliner_id HAVING COUNT(*)>1",
-            [session_id, *page_ids],
+            [session_id, *page_ids, *hidden_keys],
         ).fetchall()
         return {
             str(row["onliner_id"]): [
@@ -495,7 +756,7 @@ def rows_digest(normalized_rows):
 
 
 def _normalize_row(row, position):
-    padded = list(row if isinstance(row, (list, tuple)) else []) + [""] * 10
+    padded = list(row if isinstance(row, list | tuple) else []) + [""] * 10
     try:
         row_index = int(padded[8])
     except (TypeError, ValueError):
@@ -519,13 +780,15 @@ def _normalize_row(row, position):
         separators=(",", ":"),
         allow_nan=False,
     )
-    values.update({
-        "name_key": _key(values["name"]),
-        "supplier_key": _key(values["supplier"]),
-        "warranty_key": _key(values["warranty"]),
-        "delivery_key": _key(values["delivery_days"]),
-        "category_key": _key(values["category"]),
-    })
+    values.update(
+        {
+            "name_key": _key(values["name"]),
+            "supplier_key": _key(values["supplier"]),
+            "warranty_key": _key(values["warranty"]),
+            "delivery_key": _key(values["delivery_days"]),
+            "category_key": _key(values["category"]),
+        }
+    )
     values["search_text"] = "\x1f".join(
         _key(value)
         for value in (
@@ -545,8 +808,8 @@ def _normalize_row(row, position):
 
 
 def _build_page_meta(rows):
-    id_counts = {}
-    category_counts = {}
+    id_counts: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
     suppliers = set()
     for item in rows:
         supplier = item["supplier"]
@@ -625,14 +888,9 @@ def _fts_literal(value):
 
 
 def _ensure_column(connection, table, column, declaration):
-    columns = {
-        str(row[1])
-        for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
-    }
+    columns = {str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in columns:
-        connection.execute(
-            f"ALTER TABLE {table} ADD COLUMN {column} {declaration}"
-        )
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
 
 
 def _text(value):

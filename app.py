@@ -66,6 +66,7 @@ from price_mixer.api.main_routes import create_main_bp
 from price_mixer.api.market_routes import create_market_bp
 from price_mixer.api.onliner_db_routes import create_onliner_db_bp
 from price_mixer.api.onliner_routes import create_onliner_bp
+from price_mixer.api.operations_routes import create_operations_bp
 from price_mixer.api.resolve_routes import create_resolve_bp
 from price_mixer.api.review_queue_routes import create_review_queue_bp
 from price_mixer.api.settings_routes import create_settings_bp
@@ -134,18 +135,22 @@ from price_mixer.services.category_pipeline import (
     update_category_visibility as _category_update_visibility,
 )
 from price_mixer.services.consolidated_io import (
+    consolidated_json_rows as _consolidated_json_rows,
+    dataframe_from_consolidated_json_rows as _consolidated_dataframe_from_rows,
     delivery_days_from_row as _consolidated_delivery_days_from_row,
     read_consolidated_df as _consolidated_read_df,
     read_consolidated_json_rows as _consolidated_read_json_rows,
     safe_json_value as _consolidated_safe_json_value,
     write_consolidated_df as _consolidated_write_df,
     write_consolidated_json as _consolidated_write_json,
+    write_consolidated_json_rows as _consolidated_write_json_rows,
 )
 from price_mixer.services.consolidated_paging import (
     ConsolidatedPagingCache,
 )
 from price_mixer.services.session_products import SessionProductStore
 from price_mixer.services.session_page_runtime import SessionPageRuntime
+from price_mixer.services.session_snapshots import CompatibilitySnapshotWriter
 from price_mixer.services.export_pipeline import (
     build_preexport_quality_payload as _export_build_preexport_quality_payload,
     dataframe_to_export_dataframe as _export_dataframe_to_xlsx,
@@ -380,7 +385,7 @@ from price_mixer.services.sorting_reparse_client import (
     response_json_payload as _sorting_reparse_json_payload,
 )
 from price_mixer.services.source_runtime import SourceRuntime
-from price_mixer.services.review_candidates import (
+from price_mixer.services.review_matching import (
     board_brand_model_key as _review_board_brand_model_key,
     case_brand_model_key as _review_case_brand_model_key,
     cooler_brand_model_key as _review_cooler_brand_model_key,
@@ -532,6 +537,9 @@ RUNTIME_PATHS = ensure_runtime_directories(get_runtime_paths())
 SESSION_PRODUCT_STORE = SessionProductStore(
     RUNTIME_PATHS.data_file("session_products.db"),
     mode=os.getenv("PRICE_MIXER_SESSION_STORE_MODE", "off"),
+)
+COMPATIBILITY_SNAPSHOT_WRITER = CompatibilitySnapshotWriter(
+    _consolidated_write_json_rows,
 )
 PRICE_DATA_MUTATION_LOCK = threading.RLock()
 BACKGROUND_XLSX_WORKER = create_background_xlsx_worker()
@@ -1438,7 +1446,15 @@ def _corrected_json_rows_cache_key(session_dir, cons_json_path, apply_visibility
     return (
         str(Path(session_dir).resolve()),
         bool(apply_visibility),
-        _file_cache_signature(cons_json_path),
+        (
+            "sql",
+            (SESSION_PRODUCT_STORE.metadata(session_dir) or {}).get("revision", 0),
+        )
+        if (
+            SESSION_PRODUCT_STORE.canonical
+            and bool((SESSION_PRODUCT_STORE.metadata(session_dir) or {}).get("complete"))
+        )
+        else _file_cache_signature(cons_json_path),
         _category_state_signature(state_keys),
     )
 
@@ -2607,6 +2623,17 @@ def _delivery_days_from_row(row):
 
 
 def write_consolidated_json(df, json_path):
+    json_path = Path(json_path)
+    rows = _consolidated_json_rows(df)
+    if SESSION_PRODUCT_STORE.canonical:
+        sync = SESSION_PRODUCT_STORE.reconcile_rows(
+            json_path.parent,
+            rows,
+            source_revision=f"mutation:{time.time_ns()}",
+        )
+        COMPATIBILITY_SNAPSHOT_WRITER.schedule(json_path.parent, rows)
+        _clear_corrected_json_rows_cache()
+        return sync
     return _consolidated_write_json(df, json_path)
 
 
@@ -2630,7 +2657,11 @@ def read_market_refresh_df(session_dir):
 
 
 def read_consolidated_json_fast_df(session_dir):
-    """Read the current consolidated session from JSON; fall back to XLSX only if JSON is absent."""
+    """Read current SQL rows first, then compatibility JSON/XLSX."""
+    if SESSION_PRODUCT_STORE.canonical:
+        rows = SESSION_PRODUCT_STORE.read_rows(session_dir)
+        if rows is not None:
+            return _consolidated_dataframe_from_rows(rows)
     try:
         df = _consolidated_json_df(session_dir, apply_visibility=False)
         if df is not None:
@@ -2650,6 +2681,9 @@ def _has_consolidated_session_file(session_dir):
     if not session_dir:
         return False
     session_path = Path(session_dir)
+    sql_meta = SESSION_PRODUCT_STORE.metadata(session_path) if SESSION_PRODUCT_STORE.canonical else None
+    if sql_meta and bool(sql_meta.get("complete")):
+        return True
     return (session_path / "consolidated.json").exists() or (session_path / "consolidated_price.xlsx").exists()
 
 
@@ -2658,6 +2692,13 @@ def write_consolidated_df(session_dir, df):
 
 
 def write_consolidated_df_background(session_dir, df, *, label="consolidated"):
+    if SESSION_PRODUCT_STORE.canonical:
+        return {
+            "state": "deferred",
+            "running": False,
+            "label": str(label),
+            "message": "XLSX будет сформирован из актуальной SQL-сессии при экспорте.",
+        }
     try:
         return BACKGROUND_XLSX_WORKER.enqueue(session_dir, df, label=label)
     except Exception as exc:
@@ -2665,27 +2706,49 @@ def write_consolidated_df_background(session_dir, df, *, label="consolidated"):
         return {"state": "error", "running": False, "message": str(exc)}
 
 
-@app.get("/api/background-xlsx-status")
-def api_background_xlsx_status():
+def _background_xlsx_status_payload():
     session_dir = get_active_session_dir()
-    return jsonify(BACKGROUND_XLSX_WORKER.status(session_dir))
+    if SESSION_PRODUCT_STORE.canonical:
+        return {
+            "state": "deferred",
+            "running": False,
+            "message": "Рабочие данные актуальны в SQL; XLSX создаётся при экспорте.",
+        }
+    return BACKGROUND_XLSX_WORKER.status(session_dir)
 
 
-@app.get("/api/worker-status")
-def api_worker_status():
+def _worker_status_payload():
     if DURABLE_JOB_QUEUE is None:
-        return jsonify({
+        return {
             "mode": "inline",
             "status": "ok",
             "queue": {},
             "active_workers": 0,
-        })
+        }
     health = DURABLE_JOB_QUEUE.worker_health()
-    return jsonify({
+    return ({
         "mode": "external",
         **health,
         "queue": DURABLE_JOB_QUEUE.counts(),
-    }), (200 if health["status"] == "ok" else 503)
+    }, 200 if health["status"] == "ok" else 503)
+
+
+def _job_cancel_payload(job_id):
+    if DURABLE_JOB_QUEUE is None:
+        return {"status": "error", "message": "Внешняя очередь выключена."}, 409
+    job = DURABLE_JOB_QUEUE.cancel(job_id, message="cancelled by user")
+    if job is None:
+        return {"status": "error", "message": "Задание не найдено."}, 404
+    return {"status": "ok", "job": job}
+
+
+def _job_resume_payload(job_id):
+    if DURABLE_JOB_QUEUE is None:
+        return {"status": "error", "message": "Внешняя очередь выключена."}, 409
+    job = DURABLE_JOB_QUEUE.resume(job_id)
+    if job is None:
+        return {"status": "error", "message": "Задание не найдено."}, 404
+    return {"status": "ok", "job": job}
 
 
 def _create_session_dir():
@@ -2796,7 +2859,12 @@ def upload():
 
 def _correct_consolidated_json_rows(session_dir, *, apply_visibility=True):
     cons_json_path = Path(session_dir) / "consolidated.json"
-    if not cons_json_path.exists():
+    sql_rows = (
+        SESSION_PRODUCT_STORE.read_rows(session_dir)
+        if SESSION_PRODUCT_STORE.canonical
+        else None
+    )
+    if sql_rows is None and not cons_json_path.exists():
         return None
     cache_key = _corrected_json_rows_cache_key(session_dir, cons_json_path, apply_visibility)
     cached_rows = _get_corrected_json_rows_cache(cache_key)
@@ -2820,7 +2888,7 @@ def _correct_consolidated_json_rows(session_dir, *, apply_visibility=True):
             ]
         _set_corrected_json_rows_cache(cache_key, corrected_data)
         return corrected_data
-    cons_data = read_consolidated_json_rows(cons_json_path)
+    cons_data = sql_rows if sql_rows is not None else read_consolidated_json_rows(cons_json_path)
     if not cons_data or not all(len(row) >= 10 for row in cons_data):
         return None
 
@@ -3035,49 +3103,57 @@ def _start_sorting_reparse_monitor():
     threading.Thread(target=worker, daemon=True).start()
 
 
-@app.post("/api/sorting-reparse/run")
-def api_sorting_reparse_run():
+def _sorting_reparse_run_payload():
     items = _sorting_reparse_items()
     if not items:
-        return jsonify({"ok": False, "error": "Очередь «Требует сортировки» пуста."}), 400
+        return {"ok": False, "error": "Очередь «Требует сортировки» пуста."}, 400
     try:
         _ensure_sorting_reparse_service()
         response = requests.post(f"{SORTING_REPARSE_URL}/run", json={"items": items}, timeout=15)
         payload = _sorting_reparse_json_payload(response)
         if response.ok and payload.get("ok"):
             _start_sorting_reparse_monitor()
-        return jsonify(payload), response.status_code
+        return payload, response.status_code
     except Exception as exc:
-        return jsonify({"ok": False, "error": _sorting_reparse_error_message(exc)}), 502
+        return {"ok": False, "error": _sorting_reparse_error_message(exc)}, 502
 
 
-@app.post("/api/sorting-reparse/run-all")
-def api_sorting_reparse_run_all():
+def _sorting_reparse_run_all_payload():
     items = _all_onliner_reparse_items()
     if not items:
-        return jsonify({"ok": False, "error": "В текущем прайсе нет товаров с OnlinerID."}), 400
+        return {"ok": False, "error": "В текущем прайсе нет товаров с OnlinerID."}, 400
     try:
         _ensure_sorting_reparse_service()
         response = requests.post(f"{SORTING_REPARSE_URL}/run", json={"items": items}, timeout=15)
         payload = _sorting_reparse_json_payload(response)
         if response.ok and payload.get("ok"):
             _start_sorting_reparse_monitor()
-        return jsonify(payload), response.status_code
+        return payload, response.status_code
     except Exception as exc:
-        return jsonify({"ok": False, "error": _sorting_reparse_error_message(exc)}), 502
+        return {"ok": False, "error": _sorting_reparse_error_message(exc)}, 502
 
 
-@app.get("/api/sorting-reparse/status")
-def api_sorting_reparse_status():
+def _sorting_reparse_status_payload():
     try:
         response = requests.get(f"{SORTING_REPARSE_URL}/status", timeout=15)
         payload = _sorting_reparse_json_payload(response)
     except Exception as exc:
-        return jsonify({"ok": False, "error": _sorting_reparse_error_message(exc)}), 502
+        return {"ok": False, "error": _sorting_reparse_error_message(exc)}, 502
     results = payload.get("results") or []
     payload["written_to_db"] = _write_sorting_reparse_results_to_db(results)
     payload["ok"] = True
-    return jsonify(payload), response.status_code
+    return payload, response.status_code
+
+
+app.register_blueprint(create_operations_bp(
+    background_xlsx_status=_background_xlsx_status_payload,
+    worker_status=_worker_status_payload,
+    sorting_reparse_run=_sorting_reparse_run_payload,
+    sorting_reparse_run_all=_sorting_reparse_run_all_payload,
+    sorting_reparse_status=_sorting_reparse_status_payload,
+    cancel_job=_job_cancel_payload,
+    resume_job=_job_resume_payload,
+))
 
 
 def _json_row_needs_category_repair(name, raw_category, current_category):
@@ -3282,10 +3358,19 @@ def api_consolidated_page():
     session_dir = get_active_session_dir()
     if not session_dir or not _has_consolidated_session_file(session_dir):
         return jsonify(empty)
+    canonical_rows = _correct_consolidated_json_rows(session_dir, apply_visibility=False)
     rows = _correct_consolidated_json_rows(session_dir, apply_visibility=True)
-    if rows is None:
+    if rows is None or canonical_rows is None:
         return jsonify(empty)
+    exclusion_patterns = tuple(_export_name_exclude_patterns())
     rows = _filter_json_rows_by_export_name_exclusions(rows)
+    visibility_map = load_visibility_map(session_dir)
+    hidden_categories = {
+        _canonical_ui_category_name(category)
+        for categories in visibility_map.values()
+        for category in categories
+        if str(category or "").strip()
+    }
 
     filter_mode = str(request.args.get("filter_mode", "all") or "all").strip().lower()
     export_indexes = set()
@@ -3323,6 +3408,7 @@ def api_consolidated_page():
         "order_specs": order_specs,
         "filter_mode": filter_mode,
         "no_id_category": request.args.get("no_id_category", ""),
+        "hidden_categories": hidden_categories,
     }
     payload = SESSION_PAGE_RUNTIME.build_page(
         session_dir,
@@ -3332,6 +3418,13 @@ def api_consolidated_page():
         badge_counts_builder=_main_table_badge_counts,
         export_indexes=export_indexes,
         snapshot_names=snapshot_names,
+        canonical_rows=canonical_rows,
+        canonical_source_revision=_corrected_json_rows_cache_key(
+            session_dir,
+            Path(session_dir) / "consolidated.json",
+            False,
+        ),
+        use_sql=not exclusion_patterns,
     )
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -4716,27 +4809,26 @@ def _supplier_categories_payload(supplier):
     )
 
 
-@app.route("/api/onliner-category-preview")
-def api_onliner_category_preview():
+def _onliner_category_preview_payload_callback():
     session_dir = get_active_session_dir()
     if not session_dir or not _has_consolidated_session_file(session_dir):
-        return jsonify({"status": "error", "message": "Нет активной сессии"}), 400
+        return {"status": "error", "message": "Нет активной сессии"}, 400
 
     df = _consolidated_json_df(session_dir, apply_visibility=False)
     if df is None:
         df = read_consolidated_json_fast_df(session_dir)
     if df is None or df.empty:
-        return jsonify({"status": "ok", "summary": {}, "categories": [], "transitions": []})
+        return {"status": "ok", "summary": {}, "categories": [], "transitions": []}
 
     unique_ids = _onliner_category_preview_collect_ids(df, normalize_onliner_id=normalize_onliner_id)
     catalog_categories = db_get_categories_by_ids(unique_ids)
-    return jsonify(_onliner_category_preview_payload(
+    return _onliner_category_preview_payload(
         df,
         catalog_categories=catalog_categories,
         markups=load_category_markups(),
         normalize_onliner_id=normalize_onliner_id,
         normalize_catalog_category_name=normalize_catalog_category_name,
-    ))
+    )
 
 
 app.register_blueprint(create_category_reference_bp(
@@ -4744,6 +4836,7 @@ app.register_blueprint(create_category_reference_bp(
     get_category_catalog=_category_catalog_payload,
     get_suppliers=_suppliers_payload,
     get_supplier_categories=_supplier_categories_payload,
+    get_onliner_category_preview=_onliner_category_preview_payload_callback,
 ))
 
 
@@ -5193,6 +5286,7 @@ def _prepare_consolidated_for_export(session_dir):
         apply_keep_lowest_price_per_onliner_id=apply_export_keep_lowest_price_per_onliner_id,
         apply_duplicate_id_filter=apply_export_duplicate_id_filter,
         apply_only_pc_filter=apply_export_only_pc_filter,
+        has_consolidated_data=_has_consolidated_session_file,
     )
 
 
@@ -5212,6 +5306,7 @@ def _prepare_consolidated_for_google_export(session_dir):
         apply_keep_lowest_price_per_onliner_id=apply_export_keep_lowest_price_per_onliner_id,
         apply_duplicate_id_filter=apply_export_duplicate_id_filter,
         apply_only_pc_filter=apply_export_only_pc_filter,
+        has_consolidated_data=_has_consolidated_session_file,
     )
     prepared_df, prepared_name = prepared
     if prepared_df is not None:

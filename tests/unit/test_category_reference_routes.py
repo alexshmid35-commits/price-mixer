@@ -11,6 +11,7 @@ def _make_app(
     get_category_catalog=None,
     get_suppliers=None,
     get_supplier_categories=None,
+    get_onliner_category_preview=None,
 ):
     app = Flask(__name__)
     app.register_blueprint(create_category_reference_bp(
@@ -18,6 +19,7 @@ def _make_app(
         get_category_catalog=get_category_catalog or (lambda: {"categories": ["CPU"]}),
         get_suppliers=get_suppliers or (lambda: {"suppliers": ["N-Tech"]}),
         get_supplier_categories=get_supplier_categories or (lambda supplier: {"status": "ok", "supplier": supplier}),
+        get_onliner_category_preview=get_onliner_category_preview,
     ))
     return app
 
@@ -70,3 +72,18 @@ def test_supplier_categories_propagates_callback_status():
 
     assert resp.status_code == 400
     assert resp.get_json() == {"status": "error"}
+
+
+def test_onliner_category_preview_is_optional_and_delegated():
+    app = _make_app(
+        get_onliner_category_preview=lambda: {
+            "status": "ok",
+            "categories": ["SSD"],
+        }
+    )
+
+    with app.test_client() as client:
+        response = client.get("/api/onliner-category-preview")
+
+    assert response.status_code == 200
+    assert response.get_json()["categories"] == ["SSD"]

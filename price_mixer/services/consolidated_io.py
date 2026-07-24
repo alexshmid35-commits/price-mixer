@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from price_mixer.product_schema import ProductField
+
 
 _CONSOLIDATED_IO_LOCK = threading.RLock()
 _CONS_DF_CACHE = {}  # {path_str: (mtime, df)}
@@ -61,23 +63,27 @@ def consolidated_json_rows(df):
     rows = []
     for index, row in df.iterrows():
         rows.append([
-            safe_json_value(row.get("OnlinerID", "")),
-            safe_json_value(row.get("Название", "")),
-            safe_json_value(row.get("Цена", 0)),
-            safe_json_value(row.get("Поставщик", "")),
-            safe_json_value(row.get("Гарантия", "")),
+            safe_json_value(row.get(ProductField.ONLINER_ID, "")),
+            safe_json_value(row.get(ProductField.NAME, "")),
+            safe_json_value(row.get(ProductField.PRICE, 0)),
+            safe_json_value(row.get(ProductField.SUPPLIER, "")),
+            safe_json_value(row.get(ProductField.WARRANTY, "")),
             delivery_days_from_row(row),
-            safe_json_value(row.get("РРЦ", "")),
-            safe_json_value(row.get("Цена без скидки", "")),
+            safe_json_value(row.get(ProductField.RRC, "")),
+            safe_json_value(row.get(ProductField.NO_DISCOUNT, "")),
             int(index),
-            safe_json_value(row.get("Категория", "")),
+            safe_json_value(row.get(ProductField.CATEGORY, "")),
         ])
     return rows
 
 
 def write_consolidated_json(df, json_path):
+    write_consolidated_json_rows(consolidated_json_rows(df), json_path)
+
+
+def write_consolidated_json_rows(rows, json_path):
     json_path = Path(json_path)
-    payload = {"data": consolidated_json_rows(df)}
+    payload = {"data": [list(row) for row in rows or []]}
     tmp_path = None
     with _CONSOLIDATED_IO_LOCK:
         try:
@@ -121,15 +127,15 @@ def dataframe_from_consolidated_json_rows(rows):
             row_index = pos
         index.append(row_index)
         records.append({
-            "OnlinerID": safe_json_value(padded[0]),
-            "Название": safe_json_value(padded[1]),
-            "Цена": safe_json_value(padded[2]),
-            "Поставщик": safe_json_value(padded[3]),
-            "Гарантия": safe_json_value(padded[4]),
-            "Дней доставки": safe_json_value(padded[5]),
-            "РРЦ": safe_json_value(padded[6]),
-            "Цена без скидки": safe_json_value(padded[7]),
-            "Категория": safe_json_value(padded[9]),
+            ProductField.ONLINER_ID: safe_json_value(padded[0]),
+            ProductField.NAME: safe_json_value(padded[1]),
+            ProductField.PRICE: safe_json_value(padded[2]),
+            ProductField.SUPPLIER: safe_json_value(padded[3]),
+            ProductField.WARRANTY: safe_json_value(padded[4]),
+            ProductField.DELIVERY_DAYS: safe_json_value(padded[5]),
+            ProductField.RRC: safe_json_value(padded[6]),
+            ProductField.NO_DISCOUNT: safe_json_value(padded[7]),
+            ProductField.CATEGORY: safe_json_value(padded[9]),
         })
     return pd.DataFrame(records, index=index)
 

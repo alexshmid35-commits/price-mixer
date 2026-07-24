@@ -7,6 +7,43 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_app_has_no_direct_http_route_decorators():
+    app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+    assert not re.search(
+        r"^@app\.(?:route|get|post|put|patch|delete)\b",
+        app_py,
+        flags=re.MULTILINE,
+    )
+
+
+def test_review_matching_is_split_into_category_plugins():
+    facade = (
+        ROOT / "price_mixer" / "services" / "review_candidates.py"
+    ).read_text(encoding="utf-8")
+    matching_dir = ROOT / "price_mixer" / "services" / "review_matching"
+    categories = {
+        path.stem
+        for path in matching_dir.glob("*.py")
+        if path.stem not in {"__init__", "engine", "features"}
+    }
+
+    assert len(facade.splitlines()) <= 50
+    assert categories == {
+        "board",
+        "case",
+        "cooler",
+        "cpu",
+        "gpu",
+        "hdd",
+        "monitor",
+        "peripheral",
+        "printer",
+        "psu",
+        "ram",
+        "ssd",
+    }
+
+
 def test_result_template_stays_template_not_script_monolith():
     html = (ROOT / "templates" / "result.html").read_text(encoding="utf-8")
 

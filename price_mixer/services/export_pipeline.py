@@ -80,6 +80,7 @@ def prepare_consolidated_for_export(
     apply_keep_lowest_price_per_onliner_id=None,
     apply_duplicate_id_filter=None,
     apply_only_pc_filter=None,
+    has_consolidated_data=None,
 ):
     export_cfg = (settings or {}).get("export", {})
     include_without_id = bool(export_cfg.get("include_without_id", True))
@@ -97,7 +98,13 @@ def prepare_consolidated_for_export(
     if not sd:
         return None, download_name
     session_path = Path(sd)
-    if not (session_path / "consolidated_price.xlsx").exists() and not (session_path / "consolidated.json").exists():
+    available = (
+        bool(has_consolidated_data(sd))
+        if callable(has_consolidated_data)
+        else (session_path / "consolidated_price.xlsx").exists()
+        or (session_path / "consolidated.json").exists()
+    )
+    if not available:
         return None, download_name
 
     filtered = read_consolidated_df(sd)
