@@ -144,6 +144,8 @@ from price_mixer.services.consolidated_io import (
 from price_mixer.services.consolidated_paging import (
     ConsolidatedPagingCache,
 )
+from price_mixer.services.session_products import SessionProductStore
+from price_mixer.services.session_page_runtime import SessionPageRuntime
 from price_mixer.services.export_pipeline import (
     build_preexport_quality_payload as _export_build_preexport_quality_payload,
     dataframe_to_export_dataframe as _export_dataframe_to_xlsx,
@@ -280,6 +282,7 @@ from price_mixer.services.onliner_b2b import (
     search_candidates as _b2b_search_candidates,
 )
 from price_mixer.services.onliner_db import (
+    catalog_revision as _onliner_db_catalog_revision,
     catalog_import_worker as _onliner_db_catalog_import_worker,
     db_connection as _onliner_db_connection,
     find_exact_id_for_name as _onliner_db_find_exact_id,
@@ -523,6 +526,10 @@ APP_LOGGER = get_logger("price_mixer.app")
 register_request_logging(app, APP_LOGGER)
 app.register_blueprint(api_bp)
 RUNTIME_PATHS = ensure_runtime_directories(get_runtime_paths())
+SESSION_PRODUCT_STORE = SessionProductStore(
+    RUNTIME_PATHS.data_file("session_products.db"),
+    mode=os.getenv("PRICE_MIXER_SESSION_STORE_MODE", "off"),
+)
 PRICE_DATA_MUTATION_LOCK = threading.RLock()
 BACKGROUND_XLSX_WORKER = create_background_xlsx_worker()
 DURABLE_JOB_QUEUE = getattr(BACKGROUND_XLSX_WORKER, "queue", None)
@@ -1254,6 +1261,11 @@ CORRECTED_JSON_ROWS_CACHE_LIMIT = 8
 CONSOLIDATED_PAGING_CACHE = ConsolidatedPagingCache(
     max_entries=4,
     max_queries_per_entry=12,
+)
+SESSION_PAGE_RUNTIME = SessionPageRuntime(
+    store=SESSION_PRODUCT_STORE,
+    compatibility_cache=CONSOLIDATED_PAGING_CACHE,
+    logger=APP_LOGGER,
 )
 ID_REPLACE_QUERY_CACHE_TTL = 3600
 ID_REPLACE_QUERY_CACHE = {}
@@ -3300,19 +3312,23 @@ def api_consolidated_page():
         ),
         tuple(_export_name_exclude_patterns()),
     )
-    payload = CONSOLIDATED_PAGING_CACHE.build_page(
-        page_cache_key,
+    page_arguments = {
+        "draw": draw,
+        "start": request.args.get("start", 0, type=int) or 0,
+        "length": request.args.get("length", 100, type=int) or 100,
+        "search": request.args.get("search[value]", ""),
+        "order_specs": order_specs,
+        "filter_mode": filter_mode,
+        "no_id_category": request.args.get("no_id_category", ""),
+    }
+    payload = SESSION_PAGE_RUNTIME.build_page(
+        session_dir,
         rows,
-        draw=draw,
-        start=request.args.get("start", 0, type=int) or 0,
-        length=request.args.get("length", 100, type=int) or 100,
-        search=request.args.get("search[value]", ""),
-        order_specs=order_specs,
-        filter_mode=filter_mode,
-        no_id_category=request.args.get("no_id_category", ""),
+        source_revision=page_cache_key,
+        page_arguments=page_arguments,
+        badge_counts_builder=_main_table_badge_counts,
         export_indexes=export_indexes,
         snapshot_names=snapshot_names,
-        badge_counts_builder=_main_table_badge_counts,
     )
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -3680,6 +3696,7 @@ def _get_experimental_noid_runtime():
                 normalize_name_key=_normalize_name_key,
                 find_exact=db_find_exact_id_for_name,
                 find_top_candidates=db_find_top_candidates,
+                catalog_revision=_onliner_db_catalog_revision,
                 confirm_batch=_manual_id_confirm_batch_payload,
                 max_workers=8,
             )

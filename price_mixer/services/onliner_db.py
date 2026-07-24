@@ -92,6 +92,21 @@ def db_connection(db_file=None):
         conn.close()
 
 
+def catalog_revision(db_file=None):
+    """Return a stable revision token for candidate-cache invalidation."""
+    try:
+        with db_connection(db_file) as conn:
+            catalog = conn.execute(
+                "SELECT COUNT(*),COALESCE(MAX(updated_at),0) FROM onliner_catalog"
+            ).fetchone()
+            names = conn.execute(
+                "SELECT COUNT(*),COALESCE(MAX(updated_at),0) FROM name_index"
+            ).fetchone()
+        return ":".join(str(int(value or 0)) for value in (*catalog, *names))
+    except Exception:
+        return "unavailable"
+
+
 def _ensure_catalog_category_column(conn):
     columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(onliner_catalog)").fetchall()}
     if "category" not in columns:

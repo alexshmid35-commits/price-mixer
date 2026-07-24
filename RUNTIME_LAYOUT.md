@@ -51,6 +51,11 @@ in these caches.
 SQLite-backed state. It requires a consistent database backup. SQLite
 `-wal`/`-shm` companions must be handled as part of that backup procedure.
 
+`session_products.db` stores the indexed canonical working rows of active
+supplier-price sessions. JSON and XLSX files remain compatibility snapshots,
+but paging, filtering, and searching can use this database directly. It is
+durable data and is included in verified backups.
+
 Spreadsheet and CSV files outside temporary upload sessions are classified as
 data because they may be user inputs or generated deliverables.
 

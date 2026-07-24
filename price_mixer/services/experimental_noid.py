@@ -51,6 +51,17 @@ def _item_key(supplier, name_key):
     return hashlib.sha1(raw).hexdigest()[:24]
 
 
+def _ensure_column(connection, table, column, declaration):
+    columns = {
+        str(row[1])
+        for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in columns:
+        connection.execute(
+            f"ALTER TABLE {table} ADD COLUMN {column} {declaration}"
+        )
+
+
 class ExperimentalNoIdRuntime:
     def __init__(
         self,
@@ -62,6 +73,7 @@ class ExperimentalNoIdRuntime:
         find_exact,
         find_top_candidates,
         confirm_batch,
+        catalog_revision=None,
         start_thread=None,
         max_workers=8,
     ):
@@ -71,11 +83,14 @@ class ExperimentalNoIdRuntime:
         self.normalize_name_key = normalize_name_key
         self.find_exact = find_exact
         self.find_top_candidates = find_top_candidates
+        self.catalog_revision = catalog_revision or (lambda: "unavailable")
         self.confirm_batch = confirm_batch
         self.start_thread = start_thread or self._default_start_thread
         self.max_workers = max(1, min(int(max_workers or 8), 12))
         self.lock = threading.RLock()
         self.active_threads = {}
+        self._candidate_key_locks = {}
+        self._candidate_key_locks_guard = threading.Lock()
         self._init_schema()
 
     @staticmethod
@@ -96,6 +111,8 @@ class ExperimentalNoIdRuntime:
                     processed INTEGER NOT NULL DEFAULT 0,
                     message TEXT DEFAULT '',
                     error TEXT DEFAULT '',
+                    cache_hits INTEGER NOT NULL DEFAULT 0,
+                    cache_misses INTEGER NOT NULL DEFAULT 0,
                     started_at INTEGER NOT NULL DEFAULT 0,
                     finished_at INTEGER DEFAULT 0
                 );
@@ -133,7 +150,43 @@ class ExperimentalNoIdRuntime:
                     created_at INTEGER NOT NULL DEFAULT 0,
                     PRIMARY KEY(supplier, name_key, candidate_id)
                 );
+                CREATE TABLE IF NOT EXISTS experimental_noid_candidate_cache (
+                    catalog_revision TEXT NOT NULL,
+                    name_key TEXT NOT NULL,
+                    category_key TEXT NOT NULL DEFAULT '',
+                    payload_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(catalog_revision, name_key, category_key)
+                );
+                CREATE INDEX IF NOT EXISTS idx_experimental_noid_cache_created
+                    ON experimental_noid_candidate_cache(created_at);
+                CREATE TABLE IF NOT EXISTS experimental_noid_decisions (
+                    decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL,
+                    item_key TEXT NOT NULL,
+                    supplier TEXT NOT NULL DEFAULT '',
+                    category TEXT NOT NULL DEFAULT '',
+                    confidence_tier TEXT NOT NULL DEFAULT 'none',
+                    action TEXT NOT NULL,
+                    candidate_id TEXT NOT NULL DEFAULT '',
+                    candidate_score REAL NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_experimental_noid_decisions_job
+                    ON experimental_noid_decisions(job_id, action, category);
                 """
+            )
+            _ensure_column(
+                conn,
+                "experimental_noid_jobs",
+                "cache_hits",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
+            _ensure_column(
+                conn,
+                "experimental_noid_jobs",
+                "cache_misses",
+                "INTEGER NOT NULL DEFAULT 0",
             )
             conn.execute(
                 "UPDATE experimental_noid_jobs SET status='interrupted', "
@@ -208,7 +261,67 @@ class ExperimentalNoIdRuntime:
                 out.add((str(row[0]).casefold(), str(row[1]), str(row[2])))
         return out
 
-    def _prepare_candidates(self, task, rejection_keys):
+    def _prepare_candidates(self, task, rejection_keys, catalog_revision):
+        category_key = str(task.get("category", "") or "").strip().casefold()
+        cache_key = (catalog_revision, task["name_key"], category_key)
+        with self._candidate_key_lock(cache_key):
+            cache_allowed = str(catalog_revision or "") not in {"", "unavailable"}
+            cached = (
+                self._load_candidate_cache(
+                    catalog_revision,
+                    task["name_key"],
+                    category_key,
+                )
+                if cache_allowed
+                else None
+            )
+            cache_hit = cached is not None
+            if cached is None:
+                cached = self._resolve_candidate_pool(task)
+                if cache_allowed:
+                    self._store_candidate_cache(
+                        catalog_revision,
+                        task["name_key"],
+                        category_key,
+                        cached,
+                    )
+        candidates = list(cached.get("candidates", []) or [])
+        exact_id = self.normalize_onliner_id(cached.get("exact_id", ""))
+        cleaned = []
+        for candidate in candidates:
+            candidate = dict(candidate or {})
+            oid = self.normalize_onliner_id(candidate.get("id", ""))
+            if not oid:
+                continue
+            candidate["id"] = oid
+            candidate["rejected"] = (
+                task["supplier"].casefold(),
+                task["name_key"],
+                oid,
+            ) in rejection_keys
+            cleaned.append(candidate)
+        cleaned.sort(
+            key=lambda item: float(item.get("score", 0.0) or 0.0),
+            reverse=True,
+        )
+        exact_active = bool(
+            exact_id
+            and cleaned
+            and self.normalize_onliner_id(cleaned[0].get("id", "")) == exact_id
+            and not cleaned[0].get("rejected")
+        )
+        tier, top_score, gap = classify_candidates(cleaned, exact=exact_active)
+        return cleaned, tier, top_score, gap, cache_hit
+
+    def _candidate_key_lock(self, cache_key):
+        with self._candidate_key_locks_guard:
+            lock = self._candidate_key_locks.get(cache_key)
+            if lock is None:
+                lock = threading.Lock()
+                self._candidate_key_locks[cache_key] = lock
+            return lock
+
+    def _resolve_candidate_pool(self, task):
         exact = self.find_exact(task["product_name"])
         candidates = []
         exact_id = self.normalize_onliner_id((exact or {}).get("id", ""))
@@ -235,7 +348,6 @@ class ExperimentalNoIdRuntime:
             if not oid or oid in seen:
                 continue
             seen.add(oid)
-            rejected = (task["supplier"].casefold(), task["name_key"], oid) in rejection_keys
             cleaned.append({
                 "id": oid,
                 "name": str((candidate or {}).get("name", "") or "").strip(),
@@ -243,11 +355,52 @@ class ExperimentalNoIdRuntime:
                 "score": round(float((candidate or {}).get("score", 0.0) or 0.0), 3),
                 "source": str((candidate or {}).get("source", "local_db") or "local_db"),
                 "reason": str((candidate or {}).get("reason", "") or ""),
-                "rejected": rejected,
             })
         cleaned.sort(key=lambda item: float(item.get("score", 0.0) or 0.0), reverse=True)
-        tier, top_score, gap = classify_candidates(cleaned, exact=bool(exact_id and not cleaned[0].get("rejected")))
-        return cleaned, tier, top_score, gap
+        return {
+            "exact_id": exact_id,
+            "candidates": cleaned,
+        }
+
+    def _load_candidate_cache(self, catalog_revision, name_key, category_key):
+        with self.db_connection() as conn:
+            row = conn.execute(
+                "SELECT payload_json FROM experimental_noid_candidate_cache "
+                "WHERE catalog_revision=? AND name_key=? AND category_key=?",
+                (catalog_revision, name_key, category_key),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            payload = json.loads(str(row[0] or "{}"))
+        except (TypeError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _store_candidate_cache(self, catalog_revision, name_key, category_key, payload):
+        with self.db_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO experimental_noid_candidate_cache "
+                "(catalog_revision,name_key,category_key,payload_json,created_at) "
+                "VALUES (?,?,?,?,?)",
+                (
+                    catalog_revision,
+                    name_key,
+                    category_key,
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                    int(time.time()),
+                ),
+            )
+
+    def _prune_candidate_cache(self, catalog_revision):
+        if str(catalog_revision or "") in {"", "unavailable"}:
+            return
+        with self.db_connection() as conn:
+            conn.execute(
+                "DELETE FROM experimental_noid_candidate_cache "
+                "WHERE catalog_revision<>?",
+                (catalog_revision,),
+            )
 
     def _store_items(self, job_id, resolved_items):
         if not resolved_items:
@@ -280,10 +433,32 @@ class ExperimentalNoIdRuntime:
         except Exception:
             pass
 
+    def _record_decision(self, item, *, action, candidate_id="", candidate_score=0):
+        with self.db_connection() as conn:
+            conn.execute(
+                "INSERT INTO experimental_noid_decisions "
+                "(job_id,item_key,supplier,category,confidence_tier,action,"
+                "candidate_id,candidate_score,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    str(item.get("job_id", "") or ""),
+                    str(item.get("item_key", "") or ""),
+                    str(item.get("supplier", "") or ""),
+                    str(item.get("category", "") or ""),
+                    str(item.get("confidence_tier", "none") or "none"),
+                    str(action or ""),
+                    self.normalize_onliner_id(candidate_id),
+                    round(float(candidate_score or 0), 4),
+                    int(time.time()),
+                ),
+            )
+
     def _update_job(self, job_id, **values):
         if not values:
             return
-        allowed = {"status", "total", "processed", "message", "error", "finished_at"}
+        allowed = {
+            "status", "total", "processed", "message", "error", "finished_at",
+            "cache_hits", "cache_misses",
+        }
         values = {key: value for key, value in values.items() if key in allowed}
         if not values:
             return
@@ -317,12 +492,20 @@ class ExperimentalNoIdRuntime:
                 )
                 return
             rejection_keys = self._load_rejections()
+            catalog_revision = str(self.catalog_revision() or "unavailable")
+            self._prune_candidate_cache(catalog_revision)
             processed = 0
             errors = 0
+            cache_hits = 0
+            cache_misses = 0
             pending_writes = []
 
             def resolve(task):
-                return task, self._prepare_candidates(task, rejection_keys)
+                return task, self._prepare_candidates(
+                    task,
+                    rejection_keys,
+                    catalog_revision,
+                )
 
             with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
                 futures = {pool.submit(resolve, task): task for task in tasks}
@@ -330,10 +513,15 @@ class ExperimentalNoIdRuntime:
                     task = futures[future]
                     try:
                         task, result = future.result()
-                        candidates, tier, top_score, gap = result
+                        candidates, tier, top_score, gap, cache_hit = result
+                        if cache_hit:
+                            cache_hits += 1
+                        else:
+                            cache_misses += 1
                     except Exception:
                         errors += 1
                         candidates, tier, top_score, gap = [], "none", 0.0, 0.0
+                        cache_misses += 1
                     pending_writes.append((task, candidates, tier, top_score, gap))
                     processed += 1
                     if len(pending_writes) >= 25 or processed == total:
@@ -343,18 +531,25 @@ class ExperimentalNoIdRuntime:
                         self._update_job(
                             job_id,
                             processed=processed,
+                            cache_hits=cache_hits,
+                            cache_misses=cache_misses,
                             message=f"Подобрано кандидатов: {processed} из {total}.",
                         )
             self._update_job(
                 job_id,
                 status="completed",
                 processed=total,
+                cache_hits=cache_hits,
+                cache_misses=cache_misses,
                 message=(
-                    f"Подбор завершён. Обработано {total} товаров без ID."
+                    f"Подбор завершён. Обработано {total} товаров без ID. "
+                    f"Кэш: {cache_hits}, новых расчётов: {cache_misses}."
                     + (f" Ошибок отдельных позиций: {errors}." if errors else "")
                 ),
                 finished_at=int(time.time()),
             )
+            with self._candidate_key_locks_guard:
+                self._candidate_key_locks.clear()
             self._checkpoint_database()
         except Exception as exc:
             LOGGER.exception("experimental no-ID worker failed")
@@ -365,6 +560,8 @@ class ExperimentalNoIdRuntime:
                 error=str(exc),
                 finished_at=int(time.time()),
             )
+            with self._candidate_key_locks_guard:
+                self._candidate_key_locks.clear()
             self._checkpoint_database()
 
     def status(self, session_dir, job_id=""):
@@ -374,7 +571,8 @@ class ExperimentalNoIdRuntime:
             return {"ok": True, "job": None}
         with self.db_connection() as conn:
             job = conn.execute(
-                "SELECT job_id,session_id,status,total,processed,message,error,started_at,finished_at "
+                "SELECT job_id,session_id,status,total,processed,message,error,"
+                "cache_hits,cache_misses,started_at,finished_at "
                 "FROM experimental_noid_jobs WHERE job_id=? AND session_id=?",
                 (job_id, session_id),
             ).fetchone()
@@ -421,6 +619,100 @@ class ExperimentalNoIdRuntime:
         data["suppliers"] = suppliers
         data["categories"] = categories
         return {"ok": True, "job": data}
+
+    def quality(self, session_dir, job_id=""):
+        session_id = Path(session_dir).name if session_dir else ""
+        job_id = str(job_id or "").strip() or self._latest_job_id(session_id)
+        if not job_id:
+            return {"ok": True, "job_id": "", "overall": {}, "categories": []}
+        with self.db_connection() as conn:
+            job = conn.execute(
+                "SELECT job_id,total,processed,cache_hits,cache_misses "
+                "FROM experimental_noid_jobs WHERE job_id=? AND session_id=?",
+                (job_id, session_id),
+            ).fetchone()
+            if job is None:
+                return {"ok": True, "job_id": "", "overall": {}, "categories": []}
+            tiers = {
+                str(row[0]): int(row[1])
+                for row in conn.execute(
+                    "SELECT confidence_tier,COUNT(*) FROM experimental_noid_items "
+                    "WHERE job_id=? GROUP BY confidence_tier",
+                    (job_id,),
+                ).fetchall()
+            }
+            actions = {
+                str(row[0]): int(row[1])
+                for row in conn.execute(
+                    "SELECT action,COUNT(*) FROM experimental_noid_decisions "
+                    "WHERE job_id=? GROUP BY action",
+                    (job_id,),
+                ).fetchall()
+            }
+            category_rows = conn.execute(
+                "SELECT category,confidence_tier,COUNT(*) "
+                "FROM experimental_noid_items WHERE job_id=? "
+                "GROUP BY category,confidence_tier ORDER BY lower(category)",
+                (job_id,),
+            ).fetchall()
+            category_decisions = conn.execute(
+                "SELECT category,action,COUNT(*) "
+                "FROM experimental_noid_decisions WHERE job_id=? "
+                "GROUP BY category,action",
+                (job_id,),
+            ).fetchall()
+        categories = {}
+        for category, tier, count in category_rows:
+            item = categories.setdefault(
+                str(category or "Без категории"),
+                {"category": str(category or "Без категории"), "total": 0, "tiers": {}, "decisions": {}},
+            )
+            item["total"] += int(count)
+            item["tiers"][str(tier)] = int(count)
+        for category, action, count in category_decisions:
+            item = categories.setdefault(
+                str(category or "Без категории"),
+                {"category": str(category or "Без категории"), "total": 0, "tiers": {}, "decisions": {}},
+            )
+            item["decisions"][str(action)] = int(count)
+        for item in categories.values():
+            _add_decision_quality(item, item.get("decisions", {}))
+        confirmed = int(actions.get("confirm", 0))
+        rejected = int(actions.get("reject_candidate", 0))
+        decided_candidates = confirmed + rejected
+        return {
+            "ok": True,
+            "job_id": job_id,
+            "overall": {
+                "total": int(job["total"]),
+                "processed": int(job["processed"]),
+                "tiers": tiers,
+                "decisions": actions,
+                "cache_hits": int(job["cache_hits"]),
+                "cache_misses": int(job["cache_misses"]),
+                "candidate_acceptance_rate": (
+                    round(confirmed / decided_candidates, 4)
+                    if decided_candidates
+                    else None
+                ),
+                "precision": (
+                    round(confirmed / decided_candidates, 4)
+                    if decided_candidates
+                    else None
+                ),
+                "false_positive_rate": (
+                    round(rejected / decided_candidates, 4)
+                    if decided_candidates
+                    else None
+                ),
+                "decision_sample": decided_candidates,
+                "auto_confirm_rate": 0.0,
+            },
+            "categories": sorted(
+                categories.values(),
+                key=lambda item: item["category"].casefold(),
+            ),
+        }
 
     def items(self, session_dir, params):
         session_id = Path(session_dir).name if session_dir else ""
@@ -511,6 +803,12 @@ class ExperimentalNoIdRuntime:
                     "WHERE job_id=? AND item_key=?",
                     (candidate_id, int(time.time()), job_id, item_key),
                 )
+            self._record_decision(
+                item,
+                action="confirm",
+                candidate_id=candidate_id,
+                candidate_score=float(candidate.get("score", 0) or 0),
+            )
             return {"ok": True, "status": "confirmed", "selected_id": candidate_id}
         if action == "reject_candidate":
             candidate_id = self.normalize_onliner_id(payload.get("candidate_id", ""))
@@ -533,6 +831,20 @@ class ExperimentalNoIdRuntime:
                     "WHERE job_id=? AND item_key=?",
                     (json.dumps(candidates, ensure_ascii=False), tier, top_score, gap, int(time.time()), job_id, item_key),
                 )
+            rejected_candidate = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if self.normalize_onliner_id(candidate.get("id", "")) == candidate_id
+                ),
+                {},
+            )
+            self._record_decision(
+                item,
+                action="reject_candidate",
+                candidate_id=candidate_id,
+                candidate_score=float(rejected_candidate.get("score", 0) or 0),
+            )
             return {"ok": True, "status": "rejected", "candidate_id": candidate_id}
         if action == "skip":
             with self.db_connection() as conn:
@@ -541,5 +853,16 @@ class ExperimentalNoIdRuntime:
                     "WHERE job_id=? AND item_key=?",
                     (int(time.time()), job_id, item_key),
                 )
+            self._record_decision(item, action="skip")
             return {"ok": True, "status": "skipped"}
         return {"ok": False, "error": "Неизвестное действие."}, 400
+
+
+def _add_decision_quality(target, actions):
+    confirmed = int((actions or {}).get("confirm", 0) or 0)
+    rejected = int((actions or {}).get("reject_candidate", 0) or 0)
+    sample = confirmed + rejected
+    target["decision_sample"] = sample
+    target["precision"] = round(confirmed / sample, 4) if sample else None
+    target["false_positive_rate"] = round(rejected / sample, 4) if sample else None
+    target["auto_confirm_rate"] = 0.0

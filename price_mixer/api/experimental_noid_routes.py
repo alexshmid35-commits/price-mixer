@@ -25,6 +25,13 @@ def create_experimental_noid_bp(*, get_active_session_dir, get_runtime):
     def items():
         return as_response(get_runtime().items(get_active_session_dir(), request.args))
 
+    @bp.get("/api/experimental-noid/quality")
+    def quality():
+        return as_response(get_runtime().quality(
+            get_active_session_dir(),
+            request.args.get("job_id", ""),
+        ))
+
     @bp.post("/api/experimental-noid/decision")
     def decision():
         return as_response(get_runtime().decide(
@@ -33,4 +40,3 @@ def create_experimental_noid_bp(*, get_active_session_dir, get_runtime):
         ))
 
     return bp
-

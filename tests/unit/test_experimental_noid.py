@@ -23,7 +23,7 @@ def test_classify_candidates_marks_only_reliable_reason_strong():
     assert classify_candidates(fuzzy)[0] == "possible"
 
 
-def _runtime(tmp_path):
+def _runtime(tmp_path, frame=None):
     db_path = tmp_path / "catalog.db"
 
     @contextmanager
@@ -36,11 +36,12 @@ def _runtime(tmp_path):
         finally:
             conn.close()
 
-    frame = pd.DataFrame([
-        {"OnlinerID": "", "Название": "Камера Exact A1", "Поставщик": "IVEN", "Категория": "IP-камеры"},
-        {"OnlinerID": "", "Название": "Плата MSI B650M", "Поставщик": "Tradex", "Категория": "Материнская плата"},
-        {"OnlinerID": "777", "Название": "Товар с ID", "Поставщик": "N-Tech", "Категория": "SSD"},
-    ], index=[10, 20, 30])
+    if frame is None:
+        frame = pd.DataFrame([
+            {"OnlinerID": "", "Название": "Камера Exact A1", "Поставщик": "IVEN", "Категория": "IP-камеры"},
+            {"OnlinerID": "", "Название": "Плата MSI B650M", "Поставщик": "Tradex", "Категория": "Материнская плата"},
+            {"OnlinerID": "777", "Название": "Товар с ID", "Поставщик": "N-Tech", "Категория": "SSD"},
+        ], index=[10, 20, 30])
     confirmations = []
 
     def exact(name):
@@ -108,6 +109,18 @@ def test_runtime_builds_persistent_review_and_confirms_manually(tmp_path):
     assert confirmations[0]["items"][0]["row_idx"] == "10"
     status = runtime.status(session_dir, job_id)["job"]
     assert status["decision_counts"]["confirmed"] == 1
+    quality = runtime.quality(session_dir, job_id)
+    assert quality["overall"]["decisions"] == {"confirm": 1}
+    assert quality["overall"]["candidate_acceptance_rate"] == 1.0
+    assert quality["overall"]["precision"] == 1.0
+    assert quality["overall"]["false_positive_rate"] == 0.0
+    assert quality["overall"]["auto_confirm_rate"] == 0.0
+    assert any(
+        item["category"] == "IP-камеры"
+        and item["decisions"] == {"confirm": 1}
+        and item["precision"] == 1.0
+        for item in quality["categories"]
+    )
 
 
 def test_rejected_candidate_is_remembered_for_next_job(tmp_path):
@@ -131,4 +144,92 @@ def test_rejected_candidate_is_remembered_for_next_job(tmp_path):
     remembered = next(item for item in second_report["items"] if item["product_name"] == "Плата MSI B650M")
     assert remembered["confidence_tier"] == "none"
     assert remembered["candidates"][0]["rejected"] is True
+    quality = runtime.quality(session_dir, first["job_id"])
+    assert quality["overall"]["decisions"] == {"reject_candidate": 1}
+    assert quality["overall"]["candidate_acceptance_rate"] == 0.0
+    assert quality["overall"]["precision"] == 0.0
+    assert quality["overall"]["false_positive_rate"] == 1.0
 
+
+def test_second_job_reuses_catalog_revision_candidate_cache(tmp_path):
+    runtime, _confirmations = _runtime(tmp_path)
+    runtime.catalog_revision = lambda: "catalog-r1"
+    session_dir = tmp_path / "abc12345"
+    session_dir.mkdir()
+    exact_calls = 0
+    candidate_calls = 0
+    original_exact = runtime.find_exact
+    original_candidates = runtime.find_top_candidates
+
+    def counted_exact(name):
+        nonlocal exact_calls
+        exact_calls += 1
+        return original_exact(name)
+
+    def counted_candidates(name, **kwargs):
+        nonlocal candidate_calls
+        candidate_calls += 1
+        return original_candidates(name, **kwargs)
+
+    runtime.find_exact = counted_exact
+    runtime.find_top_candidates = counted_candidates
+
+    first, _ = runtime.start(session_dir)
+    first_status = runtime.status(session_dir, first["job_id"])["job"]
+    first_counts = (exact_calls, candidate_calls)
+    second, _ = runtime.start(session_dir)
+    second_status = runtime.status(session_dir, second["job_id"])["job"]
+
+    assert first_status["cache_hits"] == 0
+    assert first_status["cache_misses"] == 2
+    assert second_status["cache_hits"] == 2
+    assert second_status["cache_misses"] == 0
+    assert (exact_calls, candidate_calls) == first_counts
+
+
+def test_same_product_cache_is_shared_but_supplier_decisions_are_isolated(tmp_path):
+    frame = pd.DataFrame([
+        {
+            "OnlinerID": "",
+            "Название": "Камера Exact A1",
+            "Поставщик": "IVEN",
+            "Категория": "IP-камеры",
+        },
+        {
+            "OnlinerID": "",
+            "Название": "Камера Exact A1",
+            "Поставщик": "Tradex",
+            "Категория": "IP-камеры",
+        },
+    ], index=[10, 20])
+    runtime, confirmations = _runtime(tmp_path, frame=frame)
+    runtime.catalog_revision = lambda: "catalog-r1"
+    session_dir = tmp_path / "abc12345"
+    session_dir.mkdir()
+
+    first, _ = runtime.start(session_dir)
+    report = runtime.items(session_dir, {"job_id": first["job_id"]})
+    by_supplier = {item["supplier"]: item for item in report["items"]}
+    runtime.decide(session_dir, {
+        "job_id": first["job_id"],
+        "item_key": by_supplier["IVEN"]["item_key"],
+        "action": "reject_candidate",
+        "candidate_id": "101",
+    })
+
+    second, _ = runtime.start(session_dir)
+    report = runtime.items(session_dir, {"job_id": second["job_id"]})
+    by_supplier = {item["supplier"]: item for item in report["items"]}
+
+    assert by_supplier["IVEN"]["candidates"][0]["rejected"] is True
+    assert by_supplier["IVEN"]["confidence_tier"] == "none"
+    assert by_supplier["Tradex"]["candidates"][0]["rejected"] is False
+    assert by_supplier["Tradex"]["confidence_tier"] == "exact"
+    decision = runtime.decide(session_dir, {
+        "job_id": second["job_id"],
+        "item_key": by_supplier["Tradex"]["item_key"],
+        "action": "confirm",
+        "candidate_id": "101",
+    })
+    assert decision["status"] == "confirmed"
+    assert confirmations[-1]["items"][0]["supplier"] == "Tradex"

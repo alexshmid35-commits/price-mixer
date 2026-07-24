@@ -59,7 +59,9 @@
             chip('Возможные', tiers.possible) +
             chip('Без кандидатов', tiers.none) +
             chip('Подтверждено', decisions.confirmed) +
-            chip('Пропущено', decisions.skipped);
+            chip('Пропущено', decisions.skipped) +
+            chip('Из кэша', job && job.cache_hits) +
+            chip('Новых расчётов', job && job.cache_misses);
     }
 
     function fillFilter(select, rows, emptyLabel){

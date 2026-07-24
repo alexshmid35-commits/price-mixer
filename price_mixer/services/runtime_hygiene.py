@@ -84,6 +84,10 @@ ARTIFACT_POLICIES = {
         "data", "price_mixer.db", True,
         description="Primary local Onliner catalog and SQLite-backed state.",
     ),
+    "session_products.db": ArtifactPolicy(
+        "data", "price_mixer.services.session_products", True,
+        description="Canonical indexed working rows for supplier-price sessions.",
+    ),
     "jobs.db": ArtifactPolicy(
         "runtime", "price_mixer.workers.durable_worker", False,
         description="Durable queue state; jobs are reproducible operational work.",

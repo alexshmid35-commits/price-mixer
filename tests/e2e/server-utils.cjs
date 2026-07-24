@@ -106,6 +106,7 @@ async function startServer() {
     PRICE_MIXER_LOG_DIR: runtimeDirs.logs,
     PRICE_MIXER_JOB_MODE: 'external',
     PRICE_MIXER_JOB_DB: path.join(runtimeDirs.data, 'jobs.db'),
+    PRICE_MIXER_SESSION_STORE_MODE: 'canonical',
   };
 
   const worker = spawnLogged(

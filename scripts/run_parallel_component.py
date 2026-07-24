@@ -47,6 +47,7 @@ def main(argv=None):
         "PRICE_MIXER_BACKUP_DIR": str(directories["backups"]),
         "PRICE_MIXER_JOB_MODE": "external",
         "PRICE_MIXER_JOB_DB": str(directories["data"] / "jobs.db"),
+        "PRICE_MIXER_SESSION_STORE_MODE": "canonical",
         "PYTHONUNBUFFERED": "1",
     })
 

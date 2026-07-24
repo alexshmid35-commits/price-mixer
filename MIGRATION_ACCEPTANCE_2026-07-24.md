@@ -11,12 +11,12 @@ Date: 2026-07-24
 
 ## Runtime verification
 
-- Verified backup objects: 13/13.
+- Verified backup objects: 14/14, including the indexed session-products store.
 - SQLite `quick_check`: `ok`.
 - Catalog rows: 801,971.
 - Name variants: 798,602.
-- Manual ID bindings: 15,251.
-- Supplier-scoped manual bindings: 15,251; legacy unscoped: 0.
+- Manual ID bindings: 15,254.
+- Supplier-scoped manual bindings: 15,254; legacy unscoped: 0.
 - All copied state/data and upload session files match their source hashes.
 - Real session counters match the working mixer:
   - visible rows: 12,847;
@@ -65,10 +65,25 @@ Synthetic benchmark results are written by `scripts/benchmark_local.py`.
 - Real 33,223-row session: warm HTTP page/search about 17 ms.
 - Static assets use a five-minute browser cache; API and HTML remain no-store.
 
+The canonical session-products read model adds indexed SQL paging and FTS5
+search while retaining the JSON compatibility snapshot:
+
+- real 12,847-row parity: 6/6 page, sort, search, no-ID and duplicate scenarios;
+- 100k rows: page p95 2.7 ms and FTS search p95 25.2 ms internally;
+- a changed 100k-row revision is indexed in about 1.7 seconds;
+- the existing compatibility engine is used automatically if sync/parity fails.
+
+The experimental no-ID review now caches candidate extraction by catalog
+revision and normalized product/category key. On 200 real current-price
+products, the first pass took 17.2 seconds and the repeated pass 81 ms
+(200/200 cache hits). Rejections and confirmations remain supplier-scoped.
+Human decisions are recorded for precision and false-positive reporting by
+category; automatic confirmation remains disabled.
+
 ## Automated verification
 
-- Python: 774 tests passed.
-- JavaScript syntax: `result-pevm.js` and `result-main-table.js` passed.
+- Python: 784 tests passed.
+- JavaScript syntax: all application and E2E JavaScript files passed.
 - Playwright E2E: 3/3 passed with isolated web and external durable worker.
 
 ## Parallel acceptance
