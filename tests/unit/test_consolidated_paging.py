@@ -63,3 +63,47 @@ def test_build_consolidated_page_uses_numeric_multi_column_sort():
     )
 
     assert [row[2] for row in payload["data"]] == [100, 120]
+
+
+def test_paging_cache_reuses_meta_and_sorted_query_between_pages():
+    calls = []
+    cache = svc.ConsolidatedPagingCache(
+        max_entries=2,
+        max_queries_per_entry=3,
+    )
+
+    first = cache.build_page(
+        ("session", 1),
+        ROWS,
+        start=0,
+        length=10,
+        order_specs=[(1, "asc")],
+        badge_counts_builder=lambda rows: calls.append(len(rows)) or {"all": len(rows)},
+    )
+    second = cache.build_page(
+        ("session", 1),
+        list(ROWS),
+        start=2,
+        length=10,
+        order_specs=[(1, "asc")],
+        badge_counts_builder=lambda rows: calls.append(len(rows)) or {"all": len(rows)},
+    )
+
+    assert calls == [5]
+    assert first["meta"] == second["meta"]
+    assert first["data"][0][1] == "Cable"
+    assert second["data"][0][1] == "Mouse"
+
+
+def test_paging_cache_clear_rebuilds_entry():
+    calls = []
+    cache = svc.ConsolidatedPagingCache()
+    kwargs = {
+        "badge_counts_builder": lambda rows: calls.append(True) or {},
+    }
+
+    cache.build_page("session", ROWS, **kwargs)
+    cache.clear()
+    cache.build_page("session", ROWS, **kwargs)
+
+    assert calls == [True, True]

@@ -142,7 +142,7 @@ from price_mixer.services.consolidated_io import (
     write_consolidated_json as _consolidated_write_json,
 )
 from price_mixer.services.consolidated_paging import (
-    build_consolidated_page as _build_consolidated_page,
+    ConsolidatedPagingCache,
 )
 from price_mixer.services.export_pipeline import (
     build_preexport_quality_payload as _export_build_preexport_quality_payload,
@@ -702,9 +702,14 @@ def require_basic_auth():
 @app.after_request
 def add_no_cache_headers(response):
     try:
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=300"
+            response.headers.pop("Pragma", None)
+            response.headers.pop("Expires", None)
+        else:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
     except Exception:
         pass
     return response
@@ -1246,6 +1251,10 @@ CATEGORY_OVERRIDE_LOCK = threading.RLock()
 CORRECTED_JSON_ROWS_CACHE = {}
 CORRECTED_JSON_ROWS_CACHE_LOCK = threading.RLock()
 CORRECTED_JSON_ROWS_CACHE_LIMIT = 8
+CONSOLIDATED_PAGING_CACHE = ConsolidatedPagingCache(
+    max_entries=4,
+    max_queries_per_entry=12,
+)
 ID_REPLACE_QUERY_CACHE_TTL = 3600
 ID_REPLACE_QUERY_CACHE = {}
 ID_REPLACE_QUERY_CACHE_LOCK = threading.RLock()
@@ -1435,6 +1444,7 @@ def _set_corrected_json_rows_cache(key, rows):
 def _clear_corrected_json_rows_cache():
     with CORRECTED_JSON_ROWS_CACHE_LOCK:
         CORRECTED_JSON_ROWS_CACHE.clear()
+    CONSOLIDATED_PAGING_CACHE.clear()
 
 
 def _normalize_visibility_map(visibility_map):
@@ -3282,7 +3292,16 @@ def api_consolidated_page():
         if column is None:
             break
         order_specs.append((column, request.args.get(f"order[{position}][dir]", "asc")))
-    payload = _build_consolidated_page(
+    page_cache_key = (
+        _corrected_json_rows_cache_key(
+            session_dir,
+            Path(session_dir) / "consolidated.json",
+            True,
+        ),
+        tuple(_export_name_exclude_patterns()),
+    )
+    payload = CONSOLIDATED_PAGING_CACHE.build_page(
+        page_cache_key,
         rows,
         draw=draw,
         start=request.args.get("start", 0, type=int) or 0,
@@ -3385,7 +3404,11 @@ def _get_manual_id_runtime():
     return ManualIdRuntime(
         read_consolidated_json_fast_df=read_consolidated_json_fast_df,
         read_consolidated_df=read_consolidated_df,
-        write_consolidated_df=write_consolidated_df,
+        write_consolidated_df=lambda target, frame: write_consolidated_df_background(
+            target,
+            frame,
+            label="manual-id",
+        ),
         write_consolidated_json=write_consolidated_json,
         load_id_cache=load_id_cache,
         save_id_cache=save_id_cache,
@@ -3420,7 +3443,11 @@ def _manual_id_reject_match_payload(session_dir, payload):
         session_dir,
         payload,
         read_consolidated_df=read_consolidated_df,
-        write_consolidated_df=write_consolidated_df,
+        write_consolidated_df=lambda target, frame: write_consolidated_df_background(
+            target,
+            frame,
+            label="manual-id-reject",
+        ),
         write_consolidated_json=write_consolidated_json,
         normalize_name_key=_normalize_name_key,
         load_manual_id_bindings=load_manual_id_bindings,

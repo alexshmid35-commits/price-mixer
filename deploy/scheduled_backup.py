@@ -31,6 +31,16 @@ def _parser():
             "/srv/price-mixer-backups",
         ),
     )
+    parser.add_argument(
+        "--keep-daily",
+        type=int,
+        default=int(os.getenv("PRICE_MIXER_BACKUP_KEEP_DAILY", "7")),
+    )
+    parser.add_argument(
+        "--keep-weekly",
+        type=int,
+        default=int(os.getenv("PRICE_MIXER_BACKUP_KEEP_WEEKLY", "4")),
+    )
     return parser
 
 
@@ -42,6 +52,8 @@ def main(argv=None):
             args.root,
             args.destination_root,
             include_secrets=False,
+            keep_daily=args.keep_daily,
+            keep_weekly=args.keep_weekly,
         )
     except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
         result = {
