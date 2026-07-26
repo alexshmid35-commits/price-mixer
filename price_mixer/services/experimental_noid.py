@@ -875,6 +875,7 @@ class ExperimentalNoIdRuntime:
                 continue
             items.append({
                 "item_key": item["item_key"],
+                "row_idx": item["row_idx"],
                 "product_name": item["product_name"],
                 "supplier": item["supplier"],
                 "category": item["category"],
@@ -899,21 +900,80 @@ class ExperimentalNoIdRuntime:
             return body, status_code
         succeeded = []
         failed = []
-        for item in body["items"]:
-            decision = self.decide(session_dir, {
-                "job_id": body["job_id"],
-                "item_key": item["item_key"],
-                "action": body["action"],
-                "candidate_id": item["candidate_id"],
+        now = int(time.time())
+        if body["action"] == "confirm":
+            result = self.confirm_batch(session_dir, {
+                "source": "experimental_noid_bulk_review",
+                "items": [{
+                    "row_idx": item["row_idx"],
+                    "name": item["product_name"],
+                    "supplier": item["supplier"],
+                    "onliner_id": item["candidate_id"],
+                } for item in body["items"]],
             })
-            result, code = decision if isinstance(decision, tuple) else (decision, 200)
-            if code < 400 and result.get("ok"):
-                succeeded.append(item["item_key"])
-            else:
-                failed.append({
-                    "item_key": item["item_key"],
-                    "error": str(result.get("error") or result.get("message") or "Ошибка"),
-                })
+            result_body, code = result if isinstance(result, tuple) else (result, 200)
+            if code >= 400 and int((result_body or {}).get("updated", 0) or 0) <= 0:
+                return result_body, code
+
+            frame = self.read_dataframe(session_dir)
+            confirmed_items = []
+            for item in body["items"]:
+                try:
+                    current_id = self.normalize_onliner_id(
+                        frame.at[int(item["row_idx"]), "OnlinerID"]
+                    )
+                except Exception:
+                    current_id = ""
+                if current_id == item["candidate_id"]:
+                    succeeded.append(item["item_key"])
+                    confirmed_items.append(item)
+                else:
+                    failed.append({
+                        "item_key": item["item_key"],
+                        "error": "ID не был сохранён: строка изменилась или сработала защита от дублей.",
+                    })
+            with self.db_connection() as conn:
+                conn.executemany(
+                    "UPDATE experimental_noid_items SET decision_state='confirmed',"
+                    "selected_id=?,updated_at=? WHERE job_id=? AND item_key=?",
+                    [
+                        (item["candidate_id"], now, body["job_id"], item["item_key"])
+                        for item in confirmed_items
+                    ],
+                )
+                conn.executemany(
+                    "INSERT INTO experimental_noid_decisions "
+                    "(job_id,item_key,supplier,category,confidence_tier,action,"
+                    "candidate_id,candidate_score,created_at) VALUES (?,?,?,?,?,'confirm',?,?,?)",
+                    [
+                        (
+                            body["job_id"], item["item_key"], item["supplier"],
+                            item["category"], item["confidence_tier"],
+                            item["candidate_id"], round(float(item["score"] or 0), 4), now,
+                        )
+                        for item in confirmed_items
+                    ],
+                )
+        else:
+            succeeded = [item["item_key"] for item in body["items"]]
+            with self.db_connection() as conn:
+                conn.executemany(
+                    "UPDATE experimental_noid_items SET decision_state='skipped',updated_at=? "
+                    "WHERE job_id=? AND item_key=?",
+                    [(now, body["job_id"], item["item_key"]) for item in body["items"]],
+                )
+                conn.executemany(
+                    "INSERT INTO experimental_noid_decisions "
+                    "(job_id,item_key,supplier,category,confidence_tier,action,created_at) "
+                    "VALUES (?,?,?,?,?,'skip',?)",
+                    [
+                        (
+                            body["job_id"], item["item_key"], item["supplier"],
+                            item["category"], item["confidence_tier"], now,
+                        )
+                        for item in body["items"]
+                    ],
+                )
         return {
             "ok": True,
             "action": body["action"],

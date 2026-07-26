@@ -194,12 +194,11 @@
         var candidates = Array.isArray(item.candidates) ? item.candidates : [];
         var active = activeCandidates(item);
         var tier = String(item.confidence_tier || 'none');
-        var html = '<div class="experimental-noid-item" data-item-key="' + escapeHtml(item.item_key || '') + '">';
+        var selectable = item.decision_state === 'open';
+        var selected = state.selected.has(String(item.item_key || ''));
+        var html = '<div class="experimental-noid-item' + (selected ? ' is-selected' : '') + '" data-item-key="' + escapeHtml(item.item_key || '') + '"' + (selectable ? ' data-selectable="true"' : '') + '>';
         html += '<div class="experimental-noid-local">';
-        if(item.decision_state === 'open'){
-            html += '<label class="experimental-noid-select"><input type="checkbox" data-exp-select="' + escapeHtml(item.item_key) + '"' + (state.selected.has(String(item.item_key || '')) ? ' checked' : '') + '> Выбрать товар</label>';
-        }
-        html += '<div class="experimental-noid-local-name">' + escapeHtml(item.product_name || '') + '</div>';
+        html += '<div class="experimental-noid-local-name"' + (selectable ? ' data-exp-select-toggle="' + escapeHtml(item.item_key) + '" role="button" tabindex="0" title="Нажми, чтобы выбрать товар"' : '') + '>' + escapeHtml(item.product_name || '') + '</div>';
         html += '<div class="experimental-noid-local-meta">';
         html += '<span class="experimental-noid-tag">' + escapeHtml(item.supplier || 'Без поставщика') + '</span>';
         html += '<span class="experimental-noid-tag">' + escapeHtml(item.category || 'Без категории') + '</span>';
@@ -276,11 +275,23 @@
             if(button){ button.disabled = !count; }
         });
         var selectPage = byId('experimental-noid-select-page');
-        var boxes = Array.prototype.slice.call(document.querySelectorAll('[data-exp-select]'));
+        var items = Array.prototype.slice.call(document.querySelectorAll('.experimental-noid-item[data-selectable="true"]'));
         if(selectPage){
-            selectPage.checked = !!boxes.length && boxes.every(function(box){ return box.checked; });
-            selectPage.indeterminate = boxes.some(function(box){ return box.checked; }) && !selectPage.checked;
+            selectPage.checked = !!items.length && items.every(function(item){ return state.selected.has(String(item.dataset.itemKey || '')); });
+            selectPage.indeterminate = items.some(function(item){ return state.selected.has(String(item.dataset.itemKey || '')); }) && !selectPage.checked;
         }
+    }
+
+    function toggleItemSelection(itemKey){
+        var key = String(itemKey || '');
+        if(!key){ return; }
+        if(state.selected.has(key)){ state.selected.delete(key); } else { state.selected.add(key); }
+        document.querySelectorAll('.experimental-noid-item').forEach(function(item){
+            if(String(item.dataset.itemKey || '') === key){
+                item.classList.toggle('is-selected', state.selected.has(key));
+            }
+        });
+        updateBulkControls();
     }
 
     function bulkPayload(action){
@@ -293,6 +304,9 @@
 
     function runBulk(action){
         var payload = bulkPayload(action);
+        var actionButton = byId(action === 'confirm' ? 'experimental-noid-bulk-confirm-btn' : 'experimental-noid-bulk-skip-btn');
+        var originalLabel = actionButton ? actionButton.textContent : '';
+        if(actionButton){ actionButton.disabled = true; actionButton.textContent = 'Проверяю...'; }
         requestJson('/api/experimental-noid/bulk-preview', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -301,8 +315,11 @@
             if(!Number(preview.count || 0)){ throw new Error('В выбранных строках нет доступных кандидатов.'); }
             var verb = action === 'confirm' ? 'Подтвердить первые кандидаты' : 'Пропустить товары';
             if(!window.confirm(verb + ': ' + Number(preview.count || 0) + '?')){
+                if(actionButton){ actionButton.textContent = originalLabel; }
+                updateBulkControls();
                 return null;
             }
+            if(actionButton){ actionButton.textContent = action === 'confirm' ? 'Сохраняю одним пакетом...' : 'Пропускаю...'; }
             return requestJson('/api/experimental-noid/bulk-decision', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -316,10 +333,15 @@
                 if(item){ item.remove(); }
             });
             updateBulkControls();
+            if(actionButton){ actionButton.textContent = originalLabel; }
             if(typeof reloadMainTable === 'function'){ reloadMainTable(); }
             if(typeof refreshActionBadges === 'function'){ refreshActionBadges(); }
             return loadStatus({skipItemRefresh: true});
-        }).catch(function(error){ window.alert(error.message); });
+        }).catch(function(error){
+            if(actionButton){ actionButton.textContent = originalLabel; }
+            updateBulkControls();
+            window.alert(error.message);
+        });
     }
 
     function renderInsights(history, quality){
@@ -463,20 +485,24 @@
                 var button = event.target.closest('[data-exp-action]');
                 if(button){ makeDecision(button); }
             });
-            list.addEventListener('change', function(event){
-                var checkbox = event.target.closest('[data-exp-select]');
-                if(!checkbox){ return; }
-                var key = String(checkbox.dataset.expSelect || '');
-                if(checkbox.checked){ state.selected.add(key); } else { state.selected.delete(key); }
-                updateBulkControls();
+            list.addEventListener('click', function(event){
+                var title = event.target.closest('[data-exp-select-toggle]');
+                if(title){ toggleItemSelection(title.dataset.expSelectToggle); }
+            });
+            list.addEventListener('keydown', function(event){
+                var title = event.target.closest('[data-exp-select-toggle]');
+                if(title && (event.key === 'Enter' || event.key === ' ')){
+                    event.preventDefault();
+                    toggleItemSelection(title.dataset.expSelectToggle);
+                }
             });
         }
         var selectPage = byId('experimental-noid-select-page');
         if(selectPage){ selectPage.addEventListener('change', function(){
-            document.querySelectorAll('[data-exp-select]').forEach(function(box){
-                box.checked = selectPage.checked;
-                var key = String(box.dataset.expSelect || '');
-                if(box.checked){ state.selected.add(key); } else { state.selected.delete(key); }
+            document.querySelectorAll('.experimental-noid-item[data-selectable="true"]').forEach(function(item){
+                var key = String(item.dataset.itemKey || '');
+                if(selectPage.checked){ state.selected.add(key); } else { state.selected.delete(key); }
+                item.classList.toggle('is-selected', selectPage.checked);
             });
             updateBulkControls();
         }); }
@@ -485,7 +511,19 @@
         var history = byId('experimental-noid-history-btn');
         if(bulkConfirm){ bulkConfirm.addEventListener('click', function(){ runBulk('confirm'); }); }
         if(bulkSkip){ bulkSkip.addEventListener('click', function(){ runBulk('skip'); }); }
-        if(history){ history.addEventListener('click', loadInsights); }
+        if(history){ history.addEventListener('click', function(){
+            var panel = byId('experimental-noid-insights');
+            if(panel && !panel.hidden){
+                panel.hidden = true;
+                history.textContent = 'История и качество';
+                return;
+            }
+            history.textContent = 'Скрыть историю';
+            loadInsights().catch(function(error){
+                history.textContent = 'История и качество';
+                window.alert(error.message);
+            });
+        }); }
         var insights = byId('experimental-noid-insights');
         if(insights){ insights.addEventListener('click', function(event){
             var button = event.target.closest('[data-exp-undo]');

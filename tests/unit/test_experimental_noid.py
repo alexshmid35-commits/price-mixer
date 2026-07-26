@@ -67,6 +67,11 @@ def _runtime(tmp_path, frame=None, exclude_row=None):
 
     def confirm(_session_dir, payload):
         confirmations.append(payload)
+        for item in payload.get("items", []):
+            try:
+                frame.at[int(item["row_idx"]), "OnlinerID"] = str(item["onliner_id"])
+            except (KeyError, TypeError, ValueError):
+                pass
         return {"status": "ok", "updated": 1}
 
     runtime = ExperimentalNoIdRuntime(
@@ -314,7 +319,8 @@ def test_bulk_preview_and_decision_use_first_active_candidate(tmp_path):
     assert preview["count"] == 2
     assert result["processed"] == 2
     assert result["failed"] == []
-    assert len(confirmations) == 2
+    assert len(confirmations) == 1
+    assert len(confirmations[0]["items"]) == 2
     history = runtime.history(session_dir, started["job_id"])
     assert len(history["decisions"]) == 2
     assert {row["action"] for row in history["decisions"]} == {"confirm"}
