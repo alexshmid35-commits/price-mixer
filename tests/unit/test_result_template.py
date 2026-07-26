@@ -32,6 +32,10 @@ def test_duplicate_id_counter_visible_for_multiple_suppliers():
     assert 'id="run-all-pevm-checks-btn"' in html
     assert 'id="autofill-ntech-pc-btn"' in html
     assert 'id="autofill-iven-pc-btn"' in html
+    assert 'id="show-review-queue-btn"' in html
+    assert 'id="review-queue-count-badge"' in html
+    assert 'id="review-queue-card"' in html
+    assert 'id="review-queue-list"' in html
     assert 'src="/static/js/result-pevm.js"' in html
     assert 'data-generic-review-key=' not in html
     assert 'id="cpu-review-btn"' not in html

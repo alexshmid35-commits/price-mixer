@@ -302,7 +302,6 @@ window.loadReviewQueue = function(){
             if(note) note.textContent = 'Запустите «Валидация и очистка ID» — неверно сопоставленные товары появятся здесь с кандидатами на выбор.';
             return;
         }
-        if(card) card.style.display = 'block';
         if(note) note.textContent = 'Выберите правильный ID из кандидатов или нажмите «Пропустить». После выбора — запустите автоподбор снова.';
 
         // Сохраняем данные в глобальный map по индексу — без небезопасных inline-аргументов
@@ -353,6 +352,7 @@ window.loadReviewQueue = function(){
                     if(sa !== sb){ return sb - sa; }
                     return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'ru');
                 });
+                _reviewQueueData[idx].candidates = cands;
                 html += '<div style="font-size:11px;color:#374151;font-weight:600;margin-bottom:6px;">Кандидаты:</div>';
                 html += '<div style="display:flex;flex-direction:column;gap:6px;">';
                 cands.forEach(function(c, ci){
@@ -449,3 +449,21 @@ function _doReviewPick(nameKey, oid, candName, url, itemName, supplier){
 }
 
 window.pickReviewCandidate = _doReviewPick;
+
+document.addEventListener('DOMContentLoaded', function(){
+    var button = document.getElementById('show-review-queue-btn');
+    var card = document.getElementById('review-queue-card');
+    if(!button || !card){ return; }
+    button.addEventListener('click', function(){
+        var opening = card.style.display === 'none' || !card.style.display;
+        card.style.display = opening ? 'block' : 'none';
+        button.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        if(opening){
+            window.loadReviewQueue();
+            window.setTimeout(function(){
+                card.scrollIntoView({behavior:'smooth', block:'nearest'});
+            }, 80);
+        }
+    });
+    window.loadReviewQueue();
+});
