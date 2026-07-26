@@ -352,8 +352,16 @@
         var html = '<div class="experimental-noid-insights-grid"><div><h4>Последние решения</h4>';
         if(!decisions.length){ html += '<div class="experimental-noid-empty">История пока пуста.</div>'; }
         decisions.slice(0, 30).forEach(function(item){
-            var label = item.action === 'confirm' ? 'Подтверждён ID ' + item.candidate_id : (item.action === 'skip' ? 'Пропущен' : 'Кандидат отклонён');
-            html += '<div class="experimental-noid-history-row"><span>' + escapeHtml(item.supplier || '') + '</span><span>' + escapeHtml(item.product_name || item.item_key || '') + '<br><small>' + escapeHtml(label) + '</small></span>';
+            var actionLabel = item.action === 'confirm' ? 'ID подтверждён' : (item.action === 'skip' ? 'Товар пропущен' : 'Кандидат отклонён');
+            var timeLabel = item.created_at ? new Date(Number(item.created_at) * 1000).toLocaleString('ru-RU') : '';
+            html += '<div class="experimental-noid-history-row"><div class="experimental-noid-history-supplier">' + escapeHtml(item.supplier || 'Без поставщика') + '<small>' + escapeHtml(timeLabel) + '</small></div>';
+            html += '<div class="experimental-noid-history-detail">';
+            html += '<div><span>Товар в прайсе</span><strong>' + escapeHtml(item.product_name || item.item_key || '') + '</strong></div>';
+            if(item.action !== 'skip'){
+                html += '<div><span>' + (item.action === 'confirm' ? 'Подставлен кандидат' : 'Отклонён кандидат') + '</span><strong>' + escapeHtml(item.candidate_name || 'Название кандидата не сохранено') + '</strong></div>';
+                html += '<div class="experimental-noid-history-id"><span>Onliner ID</span><b>' + escapeHtml(item.candidate_id || '—') + '</b><em>score ' + Number(item.candidate_score || 0).toFixed(3) + '</em></div>';
+            }
+            html += '<small class="experimental-noid-history-action">' + escapeHtml(actionLabel) + '</small></div>';
             html += item.undone_at ? '<span>Отменено</span>' : '<button class="btn btn-outline" data-exp-undo="' + Number(item.decision_id) + '">Отменить</button>';
             html += '</div>';
         });

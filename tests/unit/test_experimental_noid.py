@@ -324,6 +324,10 @@ def test_bulk_preview_and_decision_use_first_active_candidate(tmp_path):
     history = runtime.history(session_dir, started["job_id"])
     assert len(history["decisions"]) == 2
     assert {row["action"] for row in history["decisions"]} == {"confirm"}
+    assert {row["candidate_name"] for row in history["decisions"]} == {
+        "Камера Exact A1",
+        "Материнская плата MSI B650M",
+    }
 
 
 def test_undo_confirmation_requires_unchanged_current_id(tmp_path):

@@ -45,8 +45,18 @@
 .experimental-noid-insights { max-height:220px; overflow:auto; padding:12px 18px; border-bottom:1px solid #dbe4ee; background:#fff; }
 .experimental-noid-insights-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .experimental-noid-insights h4 { margin:0 0 8px; color:#0f172a; font-size:13px; }
-.experimental-noid-history-row { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #eef2f7; color:#475569; font-size:11px; }
+.experimental-noid-history-row { display:grid; grid-template-columns:90px minmax(0,1fr) auto; align-items:start; gap:10px; padding:9px 0; border-bottom:1px solid #eef2f7; color:#475569; font-size:11px; }
 .experimental-noid-history-row .btn { padding:4px 7px; font-size:10px; }
+.experimental-noid-history-supplier { color:#334155; font-weight:700; }
+.experimental-noid-history-supplier small { display:block; margin-top:3px; color:#94a3b8; font-size:9px; font-weight:500; }
+.experimental-noid-history-detail { display:grid; gap:5px; min-width:0; }
+.experimental-noid-history-detail > div { display:grid; grid-template-columns:120px minmax(0,1fr); gap:7px; }
+.experimental-noid-history-detail span { color:#64748b; }
+.experimental-noid-history-detail strong { color:#1f2937; font-weight:650; overflow-wrap:anywhere; }
+.experimental-noid-history-id { display:flex !important; align-items:center; flex-wrap:wrap; }
+.experimental-noid-history-id b { color:#2563eb; font-family:monospace; }
+.experimental-noid-history-id em { color:#64748b; font-style:normal; }
+.experimental-noid-history-action { color:#16a34a; font-weight:700; }
 .experimental-noid-quality-row { display:flex; justify-content:space-between; gap:8px; padding:5px 0; border-bottom:1px solid #eef2f7; color:#475569; font-size:11px; }
 .experimental-noid-list { min-height: 0; overflow: auto; padding: 0 18px; }
 .experimental-noid-item { position: relative; display: grid; grid-template-columns: minmax(300px,.8fr) minmax(520px,1.3fr); gap: 16px; padding: 15px 0; border-bottom: 1px solid #e5e7eb; transition: opacity .22s ease, transform .22s ease, max-height .25s ease, padding .25s ease; }

@@ -995,7 +995,7 @@ class ExperimentalNoIdRuntime:
             rows = conn.execute(
                 "SELECT d.decision_id,d.item_key,d.supplier,d.category,d.confidence_tier,"
                 "d.action,d.candidate_id,d.candidate_score,d.created_at,d.undone_at,"
-                "i.product_name FROM experimental_noid_decisions d "
+                "i.product_name,i.candidates_json FROM experimental_noid_decisions d "
                 "LEFT JOIN experimental_noid_items i "
                 "ON i.job_id=d.job_id AND i.item_key=d.item_key "
                 "JOIN experimental_noid_jobs j ON j.job_id=d.job_id "
@@ -1003,7 +1003,28 @@ class ExperimentalNoIdRuntime:
                 "ORDER BY d.decision_id DESC LIMIT ?",
                 (job_id, session_id, limit),
             ).fetchall()
-        return {"ok": True, "job_id": job_id, "decisions": [dict(row) for row in rows]}
+        decisions = []
+        for row in rows:
+            item = dict(row)
+            try:
+                candidates = json.loads(item.pop("candidates_json") or "[]")
+            except (TypeError, json.JSONDecodeError):
+                candidates = []
+                item.pop("candidates_json", None)
+            candidate_id = self.normalize_onliner_id(item.get("candidate_id", ""))
+            candidate = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if self.normalize_onliner_id(candidate.get("id", "")) == candidate_id
+                ),
+                {},
+            )
+            item["candidate_name"] = str(candidate.get("name", "") or "")
+            item["candidate_reason"] = str(candidate.get("reason", "") or "")
+            item["candidate_url"] = str(candidate.get("url", "") or "")
+            decisions.append(item)
+        return {"ok": True, "job_id": job_id, "decisions": decisions}
 
     def undo(self, session_dir, payload):
         if not session_dir:
