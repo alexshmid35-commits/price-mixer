@@ -98,26 +98,3 @@ test('synthetic supplier price uploads, consolidates and downloads', async ({
   );
   expect((await download.body()).length).toBeGreaterThan(1000);
 });
-
-test('dry-run upload returns stats without opening a working session', async ({
-  request,
-}) => {
-  const upload = await request.post('/upload', {
-    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    multipart: {
-      files: {
-        name: 'e2e-price.csv',
-        mimeType: 'text/csv',
-        buffer: fs.readFileSync(fixturePath),
-      },
-      'supplier_e2e-price.csv': 'E2E',
-      dry_run: '1',
-    },
-  });
-  expect(upload.status()).toBe(200);
-  expect(await upload.json()).toMatchObject({
-    status: 'ok',
-    dry_run: true,
-    stats: { consolidated: 2 },
-  });
-});

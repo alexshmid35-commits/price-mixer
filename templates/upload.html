@@ -79,7 +79,6 @@ a:hover { text-decoration: underline; }
 .api-source-title { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
 .api-source-title strong { font-size: 16px; color: #202124; }
 .api-source-supplier { font-size: 12px; color: #5f6368; }
-.dry-run-option { display:inline-flex; align-items:center; gap:7px; color:#475569; font-size:12px; font-weight:600; }
 .api-source-badge { padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #eef3fd; color: #1a73e8; white-space: nowrap; }
 .api-source-badge.error { background: #fdeeee; color: #d93025; }
 .api-source-badge.ready { background: #e6f4ea; color: #137333; }
@@ -136,7 +135,6 @@ a:hover { text-decoration: underline; }
     <div class="hint">Для каждого файла укажите имя поставщика (например: BN, Tradex, TGPC)</div>
     <div class="actions" id="actions-area" style="display:none; margin-top:12px;">
         <button type="submit" class="btn" id="submit-btn">Обработать прайсы</button>
-        <label class="dry-run-option"><input type="checkbox" id="manual-dry-run"> Тестовый импорт без смены рабочей сессии</label>
     </div>
 </div>
 <div class="card" id="api-sources-card">
@@ -840,8 +838,6 @@ function buildManualUploadFormData() {
         formData.append('files', f, f.name);
         formData.append('supplier_' + encodeURIComponent(f.name), getSupplierByFileName(f.name));
     }
-    var dryRun = document.getElementById('manual-dry-run');
-    if(dryRun && dryRun.checked){ formData.append('dry_run', '1'); }
     return formData;
 }
 
@@ -978,13 +974,6 @@ document.getElementById('upload-form').addEventListener('submit', function(e){
         try {
             data = JSON.parse(xhr.responseText || '{}');
         } catch (parseErr) {}
-        if(xhr.status >= 200 && xhr.status < 300 && data && data.status === 'ok' && data.dry_run){
-            hideBusyOverlay();
-            setManualSubmitDisabled(false);
-            var stats = data.stats || {};
-            alert('Тестовый импорт готов. Строк: ' + Number(stats.consolidated || 0) + ', без ID: ' + Number(stats.without_id || 0) + ', дублей ID: ' + Number(stats.duplicate_id_rows || 0) + '. Рабочая сессия не изменена.');
-            return;
-        }
         if(xhr.status >= 200 && xhr.status < 300 && data && data.status === 'ok' && data.redirect_url){
             updateBusyOverlay('Открываем результат', 'Прайс обработан, загружаем рабочее окно...');
             window.location.href = data.redirect_url;

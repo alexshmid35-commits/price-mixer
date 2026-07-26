@@ -120,7 +120,6 @@ def process_supplier_files(
     coerce_bool: Callable[..., bool],
     maybe_cleanup_old_uploads: Callable[..., Any],
     last_active_session_dir=None,
-    dry_run=False,
 ):
     started_perf = time.monotonic()
 
@@ -209,11 +208,11 @@ def process_supplier_files(
     log_step("manual_bindings_loaded", records=len(manual_bindings))
     manual_bindings, manual_aliases_changed = expand_iven_pc_manual_aliases(manual_bindings)
     log_step("manual_aliases_expanded", changed=manual_aliases_changed)
-    if manual_aliases_changed and not dry_run:
+    if manual_aliases_changed:
         save_manual_id_bindings(manual_bindings)
     id_cache, id_cache_changed = sanitize_id_cache(load_id_cache())
     log_step("id_cache_loaded", records=len(id_cache), changed=id_cache_changed)
-    if id_cache_changed and not dry_run:
+    if id_cache_changed:
         save_id_cache(id_cache)
     id_fanout = build_id_fanout_map(id_cache)
     log_step("id_state_loaded", manual_bindings=len(manual_bindings), id_cache=len(id_cache))
@@ -327,9 +326,8 @@ def process_supplier_files(
         "snapshot_diff": snapshot_diff,
     }
 
-    if not dry_run:
-        with suppress(Exception):
-            maybe_cleanup_old_uploads(exclude_dirs=[session_dir, last_active_session_dir], min_interval_sec=60)
+    with suppress(Exception):
+        maybe_cleanup_old_uploads(exclude_dirs=[session_dir, last_active_session_dir], min_interval_sec=60)
     log_step("done", rows=len(consolidated_df), without_id=stats["without_id"])
 
     return {

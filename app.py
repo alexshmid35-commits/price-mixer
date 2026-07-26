@@ -2769,7 +2769,7 @@ def _finalize_processed_session(session_id, session_dir, output_path):
     LAST_ACTIVE_SESSION_DIR = str(session_dir)
 
 
-def _process_supplier_files(file_entries, session_id=None, session_dir=None, dry_run=False):
+def _process_supplier_files(file_entries, session_id=None, session_dir=None):
     return _processing_process_supplier_files(
         file_entries,
         session_id=session_id,
@@ -2807,7 +2807,6 @@ def _process_supplier_files(file_entries, session_id=None, session_dir=None, dry
         coerce_bool=_coerce_bool,
         maybe_cleanup_old_uploads=_maybe_cleanup_old_uploads,
         last_active_session_dir=LAST_ACTIVE_SESSION_DIR,
-        dry_run=dry_run,
     )
 
 
@@ -2843,7 +2842,6 @@ def upload():
         result = _get_upload_runtime().process(
             request.files.getlist("files"),
             request.form,
-            dry_run=_coerce_bool(request.form.get("dry_run"), default=False),
         )
     except UploadInputError as exc:
         message = str(exc)[:180]
@@ -2856,15 +2854,6 @@ def upload():
         if wants_json:
             return jsonify({"status": "error", "message": message}), 500
         return redirect(url_for("main_api.index", error=message))
-
-    if _coerce_bool(request.form.get("dry_run"), default=False):
-        shutil.rmtree(result.session_dir, ignore_errors=True)
-        return jsonify({
-            "status": "ok",
-            "dry_run": True,
-            "message": "Тестовый импорт завершён. Текущая сессия не изменена.",
-            "stats": result.stats,
-        })
 
     _finalize_processed_session(
         result.session_id,
