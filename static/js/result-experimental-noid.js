@@ -1,7 +1,7 @@
 (function(){
     'use strict';
 
-    var state = { jobId: '', page: 1, pages: 0, totalItems: 0, pollTimer: null, searchTimer: null, job: null, lastRenderedProcessed: -1 };
+    var state = { jobId: '', page: 1, pages: 0, totalItems: 0, pollTimer: null, searchTimer: null, job: null, lastRenderedProcessed: -1, selected: new Set() };
 
     function byId(id){ return document.getElementById(id); }
 
@@ -196,6 +196,9 @@
         var tier = String(item.confidence_tier || 'none');
         var html = '<div class="experimental-noid-item" data-item-key="' + escapeHtml(item.item_key || '') + '">';
         html += '<div class="experimental-noid-local">';
+        if(item.decision_state === 'open'){
+            html += '<label class="experimental-noid-select"><input type="checkbox" data-exp-select="' + escapeHtml(item.item_key) + '"' + (state.selected.has(String(item.item_key || '')) ? ' checked' : '') + '> Выбрать товар</label>';
+        }
         html += '<div class="experimental-noid-local-name">' + escapeHtml(item.product_name || '') + '</div>';
         html += '<div class="experimental-noid-local-meta">';
         html += '<span class="experimental-noid-tag">' + escapeHtml(item.supplier || 'Без поставщика') + '</span>';
@@ -247,6 +250,7 @@
                 var items = Array.isArray(payload.items) ? payload.items : [];
                 list.innerHTML = items.length ? items.map(renderItem).join('') : '<div class="experimental-noid-empty">По выбранным фильтрам позиций нет.</div>';
             }
+            updateBulkControls();
             var label = byId('experimental-noid-page-label');
             if(label){ label.textContent = 'Страница ' + (state.pages ? state.page : 0) + ' из ' + state.pages + ' · товаров ' + Number(payload.total || 0); }
             var prev = byId('experimental-noid-prev-btn');
@@ -261,6 +265,103 @@
     function updateLocalPageLabel(){
         var label = byId('experimental-noid-page-label');
         if(label){ label.textContent = 'Страница ' + (state.pages ? state.page : 0) + ' из ' + state.pages + ' · товаров ' + Math.max(0, state.totalItems); }
+    }
+
+    function updateBulkControls(){
+        var count = state.selected.size;
+        var label = byId('experimental-noid-selected-count');
+        if(label){ label.textContent = 'Выбрано: ' + count; }
+        ['experimental-noid-bulk-confirm-btn','experimental-noid-bulk-skip-btn'].forEach(function(id){
+            var button = byId(id);
+            if(button){ button.disabled = !count; }
+        });
+        var selectPage = byId('experimental-noid-select-page');
+        var boxes = Array.prototype.slice.call(document.querySelectorAll('[data-exp-select]'));
+        if(selectPage){
+            selectPage.checked = !!boxes.length && boxes.every(function(box){ return box.checked; });
+            selectPage.indeterminate = boxes.some(function(box){ return box.checked; }) && !selectPage.checked;
+        }
+    }
+
+    function bulkPayload(action){
+        return {
+            job_id: state.jobId,
+            action: action,
+            item_keys: Array.from(state.selected)
+        };
+    }
+
+    function runBulk(action){
+        var payload = bulkPayload(action);
+        requestJson('/api/experimental-noid/bulk-preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(function(preview){
+            if(!Number(preview.count || 0)){ throw new Error('В выбранных строках нет доступных кандидатов.'); }
+            var verb = action === 'confirm' ? 'Подтвердить первые кандидаты' : 'Пропустить товары';
+            if(!window.confirm(verb + ': ' + Number(preview.count || 0) + '?')){
+                return null;
+            }
+            return requestJson('/api/experimental-noid/bulk-decision', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+        }).then(function(result){
+            if(!result){ return; }
+            (result.item_keys || []).forEach(function(key){
+                state.selected.delete(String(key));
+                var item = document.querySelector('.experimental-noid-item[data-item-key="' + CSS.escape(String(key)) + '"]');
+                if(item){ item.remove(); }
+            });
+            updateBulkControls();
+            if(typeof reloadMainTable === 'function'){ reloadMainTable(); }
+            if(typeof refreshActionBadges === 'function'){ refreshActionBadges(); }
+            return loadStatus({skipItemRefresh: true});
+        }).catch(function(error){ window.alert(error.message); });
+    }
+
+    function renderInsights(history, quality){
+        var panel = byId('experimental-noid-insights');
+        if(!panel){ return; }
+        var decisions = (history && history.decisions) || [];
+        var suppliers = (quality && quality.suppliers) || [];
+        var html = '<div class="experimental-noid-insights-grid"><div><h4>Последние решения</h4>';
+        if(!decisions.length){ html += '<div class="experimental-noid-empty">История пока пуста.</div>'; }
+        decisions.slice(0, 30).forEach(function(item){
+            var label = item.action === 'confirm' ? 'Подтверждён ID ' + item.candidate_id : (item.action === 'skip' ? 'Пропущен' : 'Кандидат отклонён');
+            html += '<div class="experimental-noid-history-row"><span>' + escapeHtml(item.supplier || '') + '</span><span>' + escapeHtml(item.product_name || item.item_key || '') + '<br><small>' + escapeHtml(label) + '</small></span>';
+            html += item.undone_at ? '<span>Отменено</span>' : '<button class="btn btn-outline" data-exp-undo="' + Number(item.decision_id) + '">Отменить</button>';
+            html += '</div>';
+        });
+        html += '</div><div><h4>Качество по поставщикам</h4>';
+        suppliers.forEach(function(item){
+            var precision = item.precision === null || item.precision === undefined ? 'нет выборки' : Math.round(Number(item.precision) * 100) + '%';
+            html += '<div class="experimental-noid-quality-row"><span>' + escapeHtml(item.supplier) + ' · товаров ' + Number(item.total || 0) + '</span><strong>точность ' + escapeHtml(precision) + '</strong></div>';
+        });
+        html += '</div></div>';
+        panel.innerHTML = html;
+        panel.hidden = false;
+    }
+
+    function loadInsights(){
+        return Promise.all([
+            requestJson('/api/experimental-noid/history?job_id=' + encodeURIComponent(state.jobId) + '&limit=100'),
+            requestJson('/api/experimental-noid/quality?job_id=' + encodeURIComponent(state.jobId))
+        ]).then(function(results){ renderInsights(results[0], results[1]); });
+    }
+
+    function undoDecision(decisionId){
+        requestJson('/api/experimental-noid/undo', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({decision_ids: [decisionId]})
+        }).then(function(result){
+            if(!Number(result.restored || 0)){ throw new Error((result.failed && result.failed[0] && result.failed[0].error) || 'Не удалось отменить решение.'); }
+            if(typeof reloadMainTable === 'function'){ reloadMainTable(); }
+            return Promise.all([loadStatus(), loadItems(), loadInsights()]);
+        }).catch(function(error){ window.alert(error.message); });
     }
 
     function applyDecisionLocally(button, action){
@@ -281,6 +382,8 @@
 
         var item = button.closest('.experimental-noid-item');
         if(!item){ return; }
+        state.selected.delete(String(item.dataset.itemKey || ''));
+        updateBulkControls();
         item.querySelectorAll('[data-exp-action]').forEach(function(control){ control.disabled = true; });
         var note = document.createElement('div');
         note.className = 'experimental-noid-decision-note ' + (action === 'confirm' ? 'confirmed' : 'skipped');
@@ -360,7 +463,34 @@
                 var button = event.target.closest('[data-exp-action]');
                 if(button){ makeDecision(button); }
             });
+            list.addEventListener('change', function(event){
+                var checkbox = event.target.closest('[data-exp-select]');
+                if(!checkbox){ return; }
+                var key = String(checkbox.dataset.expSelect || '');
+                if(checkbox.checked){ state.selected.add(key); } else { state.selected.delete(key); }
+                updateBulkControls();
+            });
         }
+        var selectPage = byId('experimental-noid-select-page');
+        if(selectPage){ selectPage.addEventListener('change', function(){
+            document.querySelectorAll('[data-exp-select]').forEach(function(box){
+                box.checked = selectPage.checked;
+                var key = String(box.dataset.expSelect || '');
+                if(box.checked){ state.selected.add(key); } else { state.selected.delete(key); }
+            });
+            updateBulkControls();
+        }); }
+        var bulkConfirm = byId('experimental-noid-bulk-confirm-btn');
+        var bulkSkip = byId('experimental-noid-bulk-skip-btn');
+        var history = byId('experimental-noid-history-btn');
+        if(bulkConfirm){ bulkConfirm.addEventListener('click', function(){ runBulk('confirm'); }); }
+        if(bulkSkip){ bulkSkip.addEventListener('click', function(){ runBulk('skip'); }); }
+        if(history){ history.addEventListener('click', loadInsights); }
+        var insights = byId('experimental-noid-insights');
+        if(insights){ insights.addEventListener('click', function(event){
+            var button = event.target.closest('[data-exp-undo]');
+            if(button){ undoDecision(Number(button.dataset.expUndo)); }
+        }); }
         ['experimental-noid-supplier-filter','experimental-noid-category-filter','experimental-noid-tier-filter','experimental-noid-state-filter'].forEach(function(id){
             var field = byId(id);
             if(field){ field.addEventListener('change', function(){ state.page = 1; loadItems(); }); }

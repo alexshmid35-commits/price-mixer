@@ -1117,6 +1117,14 @@ a:hover { text-decoration: underline; }
       <input id="experimental-noid-search" type="search" placeholder="Название, модель или ID">
       <button class="btn btn-outline experimental-noid-refresh" id="experimental-noid-refresh-btn" title="Обновить отчёт" aria-label="Обновить отчёт">&#8635;</button>
     </div>
+    <div class="experimental-noid-bulkbar">
+      <label><input type="checkbox" id="experimental-noid-select-page"> Выбрать страницу</label>
+      <span id="experimental-noid-selected-count">Выбрано: 0</span>
+      <button class="btn" id="experimental-noid-bulk-confirm-btn" disabled>Подтвердить выбранные</button>
+      <button class="btn btn-outline" id="experimental-noid-bulk-skip-btn" disabled>Пропустить выбранные</button>
+      <button class="btn btn-outline" id="experimental-noid-history-btn">История и качество</button>
+    </div>
+    <div class="experimental-noid-insights" id="experimental-noid-insights" hidden></div>
     <div class="experimental-noid-list" id="experimental-noid-list">
       <div class="experimental-noid-empty">Нет сформированного отчёта.</div>
     </div>

@@ -21,6 +21,7 @@ class UploadResult:
     session_id: str
     session_dir: Path
     output_path: Path
+    stats: dict
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ class UploadRuntime:
     remove_session_dir: Callable[[Path], None]
     logger: Any
 
-    def process(self, files, form) -> UploadResult:
+    def process(self, files, form, *, dry_run=False) -> UploadResult:
         usable_files = [item for item in files or [] if item and item.filename]
         self.logger.info("upload received file_count=%s", len(usable_files))
         if not usable_files:
@@ -57,6 +58,7 @@ class UploadRuntime:
                 entries,
                 session_id=session_id,
                 session_dir=session_dir,
+                dry_run=bool(dry_run),
             )
         except Exception as exc:
             self.remove_session_dir(session_dir)
@@ -66,4 +68,5 @@ class UploadRuntime:
             session_id=str(result["session_id"]),
             session_dir=Path(result["session_dir"]),
             output_path=Path(result["output_path"]),
+            stats=dict(result.get("stats") or {}),
         )

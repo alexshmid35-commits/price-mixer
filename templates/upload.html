@@ -79,6 +79,11 @@ a:hover { text-decoration: underline; }
 .api-source-title { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
 .api-source-title strong { font-size: 16px; color: #202124; }
 .api-source-supplier { font-size: 12px; color: #5f6368; }
+.upload-profile-row { display:grid; grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) auto auto; gap:8px; margin-top:12px; }
+.upload-profile-row select, .upload-profile-row input { min-width:0; height:40px; padding:8px 10px; border:1px solid #d9e2f1; border-radius:6px; background:#fff; color:#1f2937; }
+.upload-profile-row .btn { padding:8px 12px; font-size:12px; }
+.dry-run-option { display:inline-flex; align-items:center; gap:7px; color:#475569; font-size:12px; font-weight:600; }
+@media (max-width: 760px) { .upload-profile-row { grid-template-columns:1fr; } }
 .api-source-badge { padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #eef3fd; color: #1a73e8; white-space: nowrap; }
 .api-source-badge.error { background: #fdeeee; color: #d93025; }
 .api-source-badge.ready { background: #e6f4ea; color: #137333; }
@@ -132,9 +137,16 @@ a:hover { text-decoration: underline; }
     </div>
     <div id="native-file-inputs" style="display:none;"></div>
     <div class="file-list" id="file-list"></div>
+    <div class="upload-profile-row">
+        <select id="upload-profile-select" aria-label="Профиль поставщиков"><option value="">Профиль поставщиков</option></select>
+        <input id="upload-profile-name" type="text" maxlength="40" placeholder="Название профиля">
+        <button type="button" class="btn btn-outline" id="upload-profile-save">Сохранить профиль</button>
+        <button type="button" class="btn btn-outline" id="upload-profile-delete">Удалить</button>
+    </div>
     <div class="hint">Для каждого файла укажите имя поставщика (например: BN, Tradex, TGPC)</div>
     <div class="actions" id="actions-area" style="display:none; margin-top:12px;">
         <button type="submit" class="btn" id="submit-btn">Обработать прайсы</button>
+        <label class="dry-run-option"><input type="checkbox" id="manual-dry-run"> Тестовый импорт без смены рабочей сессии</label>
     </div>
 </div>
 <div class="card" id="api-sources-card">
@@ -177,6 +189,41 @@ var dropZone = document.getElementById('drop-zone');
 var fileList = document.getElementById('file-list');
 var actionsArea = document.getElementById('actions-area');
 var nativeFileInputs = document.getElementById('native-file-inputs');
+var uploadProfilesKey = 'priceMixerUploadProfilesV1';
+
+function loadUploadProfiles() {
+    try { return JSON.parse(localStorage.getItem(uploadProfilesKey) || '{}') || {}; }
+    catch (_err) { return {}; }
+}
+
+function refreshUploadProfiles() {
+    var select = document.getElementById('upload-profile-select');
+    if(!select){ return; }
+    var current = select.value;
+    var profiles = loadUploadProfiles();
+    select.innerHTML = '<option value="">Профиль поставщиков</option>';
+    Object.keys(profiles).sort().forEach(function(name){
+        var option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+    });
+    if(profiles[current]){ select.value = current; }
+}
+
+function currentSupplierSequence() {
+    return Array.prototype.map.call(document.querySelectorAll('.supplier-input'), function(input){
+        return String(input.value || '').trim();
+    });
+}
+
+function applyUploadProfile(name) {
+    var profile = loadUploadProfiles()[name];
+    if(!profile || !Array.isArray(profile.suppliers)){ return; }
+    document.querySelectorAll('.supplier-input').forEach(function(input, index){
+        if(profile.suppliers[index]){ input.value = profile.suppliers[index]; }
+    });
+}
 
 function bindManualFileInput(input) {
     if(!input){ return; }
@@ -838,6 +885,8 @@ function buildManualUploadFormData() {
         formData.append('files', f, f.name);
         formData.append('supplier_' + encodeURIComponent(f.name), getSupplierByFileName(f.name));
     }
+    var dryRun = document.getElementById('manual-dry-run');
+    if(dryRun && dryRun.checked){ formData.append('dry_run', '1'); }
     return formData;
 }
 
@@ -918,6 +967,36 @@ function updateFileList() {
     });
 })();
 
+(function setupUploadProfiles(){
+    refreshUploadProfiles();
+    var select = document.getElementById('upload-profile-select');
+    var nameInput = document.getElementById('upload-profile-name');
+    var save = document.getElementById('upload-profile-save');
+    var remove = document.getElementById('upload-profile-delete');
+    if(select){ select.addEventListener('change', function(){
+        if(select.value){ applyUploadProfile(select.value); if(nameInput){ nameInput.value = select.value; } }
+    }); }
+    if(save){ save.addEventListener('click', function(){
+        var name = String((nameInput && nameInput.value) || '').trim();
+        var suppliers = currentSupplierSequence();
+        if(!name || !suppliers.length){ alert('Укажи название профиля и добавь файлы.'); return; }
+        var profiles = loadUploadProfiles();
+        profiles[name] = {suppliers: suppliers};
+        localStorage.setItem(uploadProfilesKey, JSON.stringify(profiles));
+        refreshUploadProfiles();
+        select.value = name;
+    }); }
+    if(remove){ remove.addEventListener('click', function(){
+        var name = String((select && select.value) || '').trim();
+        if(!name){ return; }
+        var profiles = loadUploadProfiles();
+        delete profiles[name];
+        localStorage.setItem(uploadProfilesKey, JSON.stringify(profiles));
+        refreshUploadProfiles();
+        if(nameInput){ nameInput.value = ''; }
+    }); }
+})();
+
 document.getElementById('upload-form').addEventListener('submit', function(e){
     if(selectedFiles.length === 0){
         e.preventDefault();
@@ -974,6 +1053,13 @@ document.getElementById('upload-form').addEventListener('submit', function(e){
         try {
             data = JSON.parse(xhr.responseText || '{}');
         } catch (parseErr) {}
+        if(xhr.status >= 200 && xhr.status < 300 && data && data.status === 'ok' && data.dry_run){
+            hideBusyOverlay();
+            setManualSubmitDisabled(false);
+            var stats = data.stats || {};
+            alert('Тестовый импорт готов. Строк: ' + Number(stats.consolidated || 0) + ', без ID: ' + Number(stats.without_id || 0) + ', дублей ID: ' + Number(stats.duplicate_id_rows || 0) + '. Рабочая сессия не изменена.');
+            return;
+        }
         if(xhr.status >= 200 && xhr.status < 300 && data && data.status === 'ok' && data.redirect_url){
             updateBusyOverlay('Открываем результат', 'Прайс обработан, загружаем рабочее окно...');
             window.location.href = data.redirect_url;

@@ -49,6 +49,29 @@ def test_upload_runtime_returns_normalized_result(tmp_path):
     assert result.session_id == "session"
     assert result.session_dir == tmp_path / "session"
     assert result.output_path.name == "result.xlsx"
+    assert result.stats == {}
+
+
+def test_upload_runtime_forwards_dry_run_and_stats(tmp_path):
+    calls = []
+
+    def processor(_entries, **kwargs):
+        calls.append(kwargs)
+        return {
+            "session_id": "session",
+            "session_dir": tmp_path / "session",
+            "output_path": tmp_path / "session" / "result.xlsx",
+            "stats": {"consolidated": 42},
+        }
+
+    result = runtime(tmp_path, processor=processor).process(
+        [Upload("iven.xlsx")],
+        {},
+        dry_run=True,
+    )
+
+    assert calls[0]["dry_run"] is True
+    assert result.stats == {"consolidated": 42}
 
 
 def test_upload_runtime_removes_partial_session_on_failure(tmp_path):

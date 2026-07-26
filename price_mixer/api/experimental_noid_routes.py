@@ -39,4 +39,33 @@ def create_experimental_noid_bp(*, get_active_session_dir, get_runtime):
             request.get_json(silent=True) or {},
         ))
 
+    @bp.post("/api/experimental-noid/bulk-preview")
+    def bulk_preview():
+        return as_response(get_runtime().bulk_preview(
+            get_active_session_dir(),
+            request.get_json(silent=True) or {},
+        ))
+
+    @bp.post("/api/experimental-noid/bulk-decision")
+    def bulk_decision():
+        return as_response(get_runtime().bulk_decide(
+            get_active_session_dir(),
+            request.get_json(silent=True) or {},
+        ))
+
+    @bp.get("/api/experimental-noid/history")
+    def history():
+        return as_response(get_runtime().history(
+            get_active_session_dir(),
+            request.args.get("job_id", ""),
+            request.args.get("limit", 100),
+        ))
+
+    @bp.post("/api/experimental-noid/undo")
+    def undo():
+        return as_response(get_runtime().undo(
+            get_active_session_dir(),
+            request.get_json(silent=True) or {},
+        ))
+
     return bp

@@ -290,3 +290,67 @@ def test_same_product_cache_is_shared_but_supplier_decisions_are_isolated(tmp_pa
     })
     assert decision["status"] == "confirmed"
     assert confirmations[-1]["items"][0]["supplier"] == "Tradex"
+
+
+def test_bulk_preview_and_decision_use_first_active_candidate(tmp_path):
+    runtime, confirmations = _runtime(tmp_path)
+    session_dir = tmp_path / "abc12345"
+    session_dir.mkdir()
+    started, _ = runtime.start(session_dir)
+    report = runtime.items(session_dir, {"job_id": started["job_id"]})
+    keys = [item["item_key"] for item in report["items"]]
+
+    preview = runtime.bulk_preview(session_dir, {
+        "job_id": started["job_id"],
+        "action": "confirm",
+        "item_keys": keys,
+    })
+    result = runtime.bulk_decide(session_dir, {
+        "job_id": started["job_id"],
+        "action": "confirm",
+        "item_keys": keys,
+    })
+
+    assert preview["count"] == 2
+    assert result["processed"] == 2
+    assert result["failed"] == []
+    assert len(confirmations) == 2
+    history = runtime.history(session_dir, started["job_id"])
+    assert len(history["decisions"]) == 2
+    assert {row["action"] for row in history["decisions"]} == {"confirm"}
+
+
+def test_undo_confirmation_requires_unchanged_current_id(tmp_path):
+    frame = pd.DataFrame([{
+        "OnlinerID": "",
+        "Название": "Камера Exact A1",
+        "Поставщик": "IVEN",
+        "Категория": "IP-камеры",
+    }], index=[10])
+    runtime, _confirmations = _runtime(tmp_path, frame=frame)
+    cleared = []
+    runtime.read_dataframe = lambda _session_dir: frame.copy()
+    runtime.clear_manual_id = lambda _session_dir, payload: (
+        cleared.append(payload) or {"status": "ok", "cleared": 1}
+    )
+    session_dir = tmp_path / "abc12345"
+    session_dir.mkdir()
+    started, _ = runtime.start(session_dir)
+    item = runtime.items(session_dir, {"job_id": started["job_id"]})["items"][0]
+    runtime.decide(session_dir, {
+        "job_id": started["job_id"],
+        "item_key": item["item_key"],
+        "action": "confirm",
+        "candidate_id": "101",
+    })
+    frame.at[10, "OnlinerID"] = "101"
+    decision_id = runtime.history(session_dir, started["job_id"])["decisions"][0]["decision_id"]
+
+    result = runtime.undo(session_dir, {"decision_ids": [decision_id]})
+
+    assert result == {"ok": True, "restored": 1, "failed": []}
+    assert cleared[0]["item"]["supplier"] == "IVEN"
+    assert runtime.items(
+        session_dir,
+        {"job_id": started["job_id"], "decision_state": "open"},
+    )["total"] == 1

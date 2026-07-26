@@ -89,6 +89,7 @@ class ExperimentalNoIdRuntime:
         find_exact,
         find_top_candidates,
         confirm_batch,
+        clear_manual_id=None,
         catalog_revision=None,
         exclude_row=None,
         start_thread=None,
@@ -102,6 +103,7 @@ class ExperimentalNoIdRuntime:
         self.find_top_candidates = find_top_candidates
         self.catalog_revision = catalog_revision or (lambda: "unavailable")
         self.confirm_batch = confirm_batch
+        self.clear_manual_id = clear_manual_id
         self.exclude_row = exclude_row or (lambda _row: False)
         self.start_thread = start_thread or self._default_start_thread
         self.max_workers = max(1, min(int(max_workers or 8), 12))
@@ -188,7 +190,8 @@ class ExperimentalNoIdRuntime:
                     action TEXT NOT NULL,
                     candidate_id TEXT NOT NULL DEFAULT '',
                     candidate_score REAL NOT NULL DEFAULT 0,
-                    created_at INTEGER NOT NULL DEFAULT 0
+                    created_at INTEGER NOT NULL DEFAULT 0,
+                    undone_at INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS idx_experimental_noid_decisions_job
                     ON experimental_noid_decisions(job_id, action, category);
@@ -204,6 +207,12 @@ class ExperimentalNoIdRuntime:
                 conn,
                 "experimental_noid_jobs",
                 "cache_misses",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
+            _ensure_column(
+                conn,
+                "experimental_noid_decisions",
+                "undone_at",
                 "INTEGER NOT NULL DEFAULT 0",
             )
             conn.execute(
@@ -674,7 +683,7 @@ class ExperimentalNoIdRuntime:
                 str(row[0]): int(row[1])
                 for row in conn.execute(
                     "SELECT action,COUNT(*) FROM experimental_noid_decisions "
-                    "WHERE job_id=? GROUP BY action",
+                    "WHERE job_id=? AND undone_at=0 GROUP BY action",
                     (job_id,),
                 ).fetchall()
             }
@@ -686,8 +695,20 @@ class ExperimentalNoIdRuntime:
             ).fetchall()
             category_decisions = conn.execute(
                 "SELECT category,action,COUNT(*) "
-                "FROM experimental_noid_decisions WHERE job_id=? "
+                "FROM experimental_noid_decisions WHERE job_id=? AND undone_at=0 "
                 "GROUP BY category,action",
+                (job_id,),
+            ).fetchall()
+            supplier_rows = conn.execute(
+                "SELECT supplier,confidence_tier,COUNT(*) "
+                "FROM experimental_noid_items WHERE job_id=? "
+                "GROUP BY supplier,confidence_tier ORDER BY lower(supplier)",
+                (job_id,),
+            ).fetchall()
+            supplier_decisions = conn.execute(
+                "SELECT supplier,action,COUNT(*) "
+                "FROM experimental_noid_decisions WHERE job_id=? AND undone_at=0 "
+                "GROUP BY supplier,action",
                 (job_id,),
             ).fetchall()
         categories = {}
@@ -705,6 +726,22 @@ class ExperimentalNoIdRuntime:
             )
             item["decisions"][str(action)] = int(count)
         for item in categories.values():
+            _add_decision_quality(item, item.get("decisions", {}))
+        suppliers = {}
+        for supplier, tier, count in supplier_rows:
+            item = suppliers.setdefault(
+                str(supplier or "Без поставщика"),
+                {"supplier": str(supplier or "Без поставщика"), "total": 0, "tiers": {}, "decisions": {}},
+            )
+            item["total"] += int(count)
+            item["tiers"][str(tier)] = int(count)
+        for supplier, action, count in supplier_decisions:
+            item = suppliers.setdefault(
+                str(supplier or "Без поставщика"),
+                {"supplier": str(supplier or "Без поставщика"), "total": 0, "tiers": {}, "decisions": {}},
+            )
+            item["decisions"][str(action)] = int(count)
+        for item in suppliers.values():
             _add_decision_quality(item, item.get("decisions", {}))
         confirmed = int(actions.get("confirm", 0))
         rejected = int(actions.get("reject_candidate", 0))
@@ -740,6 +777,10 @@ class ExperimentalNoIdRuntime:
             "categories": sorted(
                 categories.values(),
                 key=lambda item: item["category"].casefold(),
+            ),
+            "suppliers": sorted(
+                suppliers.values(),
+                key=lambda item: item["supplier"].casefold(),
             ),
         }
 
@@ -789,6 +830,208 @@ class ExperimentalNoIdRuntime:
             items.append(item)
         pages = (total + limit - 1) // limit if total else 0
         return {"ok": True, "job_id": job_id, "items": items, "total": total, "page": page, "pages": pages}
+
+    def _selected_open_items(self, session_dir, payload):
+        session_id = Path(session_dir).name if session_dir else ""
+        payload = payload if isinstance(payload, dict) else {}
+        job_id = str(payload.get("job_id", "") or "").strip() or self._latest_job_id(session_id)
+        item_keys = list(dict.fromkeys(
+            str(value or "").strip()
+            for value in (payload.get("item_keys", []) or [])
+            if str(value or "").strip()
+        ))
+        if not item_keys:
+            return job_id, []
+        item_keys = item_keys[:50]
+        placeholders = ",".join("?" for _ in item_keys)
+        with self.db_connection() as conn:
+            rows = conn.execute(
+                "SELECT i.* FROM experimental_noid_items i "
+                "JOIN experimental_noid_jobs j ON j.job_id=i.job_id "
+                f"WHERE i.job_id=? AND j.session_id=? AND i.decision_state='open' "
+                f"AND i.item_key IN ({placeholders}) "
+                f"ORDER BY {TIER_ORDER_SQL}, i.top_score DESC, i.product_name",
+                [job_id, session_id, *item_keys],
+            ).fetchall()
+        return job_id, [dict(row) for row in rows]
+
+    def bulk_preview(self, session_dir, payload):
+        if not session_dir:
+            return {"ok": False, "error": "Нет активного прайса."}, 400
+        action = str((payload or {}).get("action", "confirm") or "confirm").strip()
+        if action not in {"confirm", "skip"}:
+            return {"ok": False, "error": "Доступны массовое подтверждение и пропуск."}, 400
+        requested = len((payload or {}).get("item_keys", []) or [])
+        if requested > 50:
+            return {"ok": False, "error": "За один раз можно обработать до 50 товаров."}, 400
+        job_id, rows = self._selected_open_items(session_dir, payload)
+        items = []
+        without_candidate = 0
+        for item in rows:
+            candidates = json.loads(item.get("candidates_json") or "[]")
+            candidate = next((entry for entry in candidates if not entry.get("rejected")), None)
+            if action == "confirm" and not candidate:
+                without_candidate += 1
+                continue
+            items.append({
+                "item_key": item["item_key"],
+                "product_name": item["product_name"],
+                "supplier": item["supplier"],
+                "category": item["category"],
+                "confidence_tier": item["confidence_tier"],
+                "candidate_id": self.normalize_onliner_id((candidate or {}).get("id", "")),
+                "candidate_name": str((candidate or {}).get("name", "") or ""),
+                "score": float((candidate or {}).get("score", 0) or 0),
+            })
+        return {
+            "ok": True,
+            "job_id": job_id,
+            "action": action,
+            "count": len(items),
+            "without_candidate": without_candidate,
+            "items": items,
+        }
+
+    def bulk_decide(self, session_dir, payload):
+        preview = self.bulk_preview(session_dir, payload)
+        body, status_code = preview if isinstance(preview, tuple) else (preview, 200)
+        if status_code >= 400:
+            return body, status_code
+        succeeded = []
+        failed = []
+        for item in body["items"]:
+            decision = self.decide(session_dir, {
+                "job_id": body["job_id"],
+                "item_key": item["item_key"],
+                "action": body["action"],
+                "candidate_id": item["candidate_id"],
+            })
+            result, code = decision if isinstance(decision, tuple) else (decision, 200)
+            if code < 400 and result.get("ok"):
+                succeeded.append(item["item_key"])
+            else:
+                failed.append({
+                    "item_key": item["item_key"],
+                    "error": str(result.get("error") or result.get("message") or "Ошибка"),
+                })
+        return {
+            "ok": True,
+            "action": body["action"],
+            "processed": len(succeeded),
+            "failed": failed,
+            "item_keys": succeeded,
+        }
+
+    def history(self, session_dir, job_id="", limit=100):
+        session_id = Path(session_dir).name if session_dir else ""
+        job_id = str(job_id or "").strip() or self._latest_job_id(session_id)
+        try:
+            limit = max(10, min(500, int(limit or 100)))
+        except (TypeError, ValueError):
+            limit = 100
+        if not job_id:
+            return {"ok": True, "job_id": "", "decisions": []}
+        with self.db_connection() as conn:
+            rows = conn.execute(
+                "SELECT d.decision_id,d.item_key,d.supplier,d.category,d.confidence_tier,"
+                "d.action,d.candidate_id,d.candidate_score,d.created_at,d.undone_at,"
+                "i.product_name FROM experimental_noid_decisions d "
+                "LEFT JOIN experimental_noid_items i "
+                "ON i.job_id=d.job_id AND i.item_key=d.item_key "
+                "JOIN experimental_noid_jobs j ON j.job_id=d.job_id "
+                "WHERE d.job_id=? AND j.session_id=? "
+                "ORDER BY d.decision_id DESC LIMIT ?",
+                (job_id, session_id, limit),
+            ).fetchall()
+        return {"ok": True, "job_id": job_id, "decisions": [dict(row) for row in rows]}
+
+    def undo(self, session_dir, payload):
+        if not session_dir:
+            return {"ok": False, "error": "Нет активного прайса."}, 400
+        raw_ids = (payload or {}).get("decision_ids", [])
+        if not isinstance(raw_ids, list):
+            raw_ids = [raw_ids]
+        decision_ids = []
+        for value in raw_ids[:100]:
+            try:
+                decision_ids.append(int(value))
+            except (TypeError, ValueError):
+                continue
+        if not decision_ids:
+            return {"ok": False, "error": "Не выбраны решения для отмены."}, 400
+        session_id = Path(session_dir).name
+        restored = 0
+        failed = []
+        for decision_id in decision_ids:
+            with self.db_connection() as conn:
+                row = conn.execute(
+                    "SELECT d.*,i.product_name,i.row_idx,i.name_key,i.candidates_json "
+                    "FROM experimental_noid_decisions d "
+                    "JOIN experimental_noid_items i ON i.job_id=d.job_id AND i.item_key=d.item_key "
+                    "JOIN experimental_noid_jobs j ON j.job_id=d.job_id "
+                    "WHERE d.decision_id=? AND j.session_id=?",
+                    (decision_id, session_id),
+                ).fetchone()
+            if not row or int(row["undone_at"] or 0):
+                failed.append({"decision_id": decision_id, "error": "Решение уже отменено или не найдено."})
+                continue
+            item = dict(row)
+            action = str(item.get("action", ""))
+            if action == "confirm":
+                if not callable(self.clear_manual_id):
+                    failed.append({"decision_id": decision_id, "error": "Отмена подтверждения недоступна."})
+                    continue
+                frame = self.read_dataframe(session_dir)
+                try:
+                    current_id = self.normalize_onliner_id(frame.at[int(item["row_idx"]), "OnlinerID"])
+                except Exception:
+                    current_id = ""
+                if current_id != self.normalize_onliner_id(item.get("candidate_id", "")):
+                    failed.append({"decision_id": decision_id, "error": "ID строки уже изменён после решения."})
+                    continue
+                result = self.clear_manual_id(session_dir, {
+                    "source": "experimental_noid_undo",
+                    "item": {
+                        "name": item["product_name"],
+                        "supplier": item["supplier"],
+                        "row_idx": item["row_idx"],
+                    },
+                })
+                result_body, code = result if isinstance(result, tuple) else (result, 200)
+                if code >= 400:
+                    failed.append({"decision_id": decision_id, "error": str(result_body.get("message", "Ошибка отмены"))})
+                    continue
+            elif action == "reject_candidate":
+                candidates = json.loads(item.get("candidates_json") or "[]")
+                candidate_id = self.normalize_onliner_id(item.get("candidate_id", ""))
+                for candidate in candidates:
+                    if self.normalize_onliner_id(candidate.get("id", "")) == candidate_id:
+                        candidate["rejected"] = False
+                tier, top_score, gap = classify_candidates(candidates)
+                with self.db_connection() as conn:
+                    conn.execute(
+                        "DELETE FROM experimental_noid_rejections "
+                        "WHERE supplier=? AND name_key=? AND candidate_id=?",
+                        (str(item["supplier"]).casefold(), item["name_key"], candidate_id),
+                    )
+                    conn.execute(
+                        "UPDATE experimental_noid_items SET candidates_json=?,confidence_tier=?,"
+                        "top_score=?,score_gap=?,updated_at=? WHERE job_id=? AND item_key=?",
+                        (json.dumps(candidates, ensure_ascii=False), tier, top_score, gap,
+                         int(time.time()), item["job_id"], item["item_key"]),
+                    )
+            with self.db_connection() as conn:
+                conn.execute(
+                    "UPDATE experimental_noid_items SET decision_state='open',selected_id='',updated_at=? "
+                    "WHERE job_id=? AND item_key=?",
+                    (int(time.time()), item["job_id"], item["item_key"]),
+                )
+                conn.execute(
+                    "UPDATE experimental_noid_decisions SET undone_at=? WHERE decision_id=?",
+                    (int(time.time()), decision_id),
+                )
+            restored += 1
+        return {"ok": True, "restored": restored, "failed": failed}
 
     def decide(self, session_dir, payload):
         if not session_dir:
