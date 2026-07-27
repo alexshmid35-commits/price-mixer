@@ -1,15 +1,16 @@
 """API source runtime, download, and fetch worker helpers."""
 
-from collections.abc import Callable, Mapping
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import threading
 import time
 import uuid
 import zipfile
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pandas as pd
@@ -18,7 +19,6 @@ import requests
 from price_mixer.logging_config import get_logger, log_context, new_job_id
 from price_mixer.runtime_paths import get_runtime_paths
 from price_mixer.state_store import load_dict, save_dict
-
 
 LOGGER = get_logger("price_mixer.jobs.api_source")
 source_fetch_statuses = {}
@@ -429,6 +429,137 @@ def resolve_curl_cmd():
     raise RuntimeError("Системный curl не найден. Установите curl и перезапустите приложение.")
 
 
+def resolve_ssh_cmd():
+    cmd = shutil.which("ssh")
+    if cmd:
+        return cmd
+    raise RuntimeError("Системный SSH-клиент не найден")
+
+
+def iven_ssh_fallback_host(source_key):
+    if normalize_source_key(source_key) != "iven_zakaz":
+        return ""
+    host = str(os.getenv("PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST", "") or "").strip()
+    if not host:
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9_.:@-]{1,255}", host):
+        raise ValueError("Некорректный SSH-хост резервной загрузки IVEN")
+    return host
+
+
+def _is_retryable_iven_network_error(exc):
+    message = str(exc or "").lower()
+    return any(
+        marker in message
+        for marker in (
+            "curl: (28)",
+            "curl: (52)",
+            "curl: (56)",
+            "connection reset",
+            "empty reply",
+            "timed out",
+            "timeout",
+        )
+    )
+
+
+def ssh_download_to_path(
+    url,
+    target_path,
+    verify_ssl,
+    source_key,
+    client_key,
+    headers=None,
+    *,
+    host,
+):
+    headers = headers or {}
+    target_path = Path(target_path)
+    if "\n" in str(url) or "\r" in str(url):
+        raise ValueError("Некорректный URL источника")
+
+    curl_parts = [
+        "curl",
+        "-L",
+        "--silent",
+        "--show-error",
+        "--connect-timeout",
+        "15",
+        "--max-time",
+        "180",
+    ]
+    if not verify_ssl:
+        curl_parts.append("-k")
+    if is_iven_source(source_key):
+        curl_parts.append("--http1.1")
+    for key, value in headers.items():
+        curl_parts.extend(["-H", f"{key}: {value}"])
+    curl_parts.append("$URL")
+    remote_cmd = (
+        "IFS= read -r URL || exit 64; exec "
+        + " ".join(shlex.quote(part) if part != "$URL" else '"$URL"' for part in curl_parts)
+    )
+    cmd = [
+        resolve_ssh_cmd(),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "ServerAliveInterval=5",
+        "-o",
+        "ServerAliveCountMax=36",
+        host,
+        remote_cmd,
+    ]
+    update_source_runtime(
+        source_key,
+        client_key=client_key,
+        status="downloading",
+        message="Локальное соединение сброшено. Получаю заказной прайс через резервный сервер...",
+        progress=5,
+        ready=False,
+    )
+    with open(target_path, "wb") as output:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=output,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            proc.stdin.write((str(url) + "\n").encode("utf-8"))
+            proc.stdin.close()
+            while proc.poll() is None:
+                size = target_path.stat().st_size if target_path.exists() else 0
+                progress = min(95, max(5, int(size / 65536))) if size else 5
+                update_source_runtime(
+                    source_key,
+                    client_key=client_key,
+                    downloaded=size,
+                    progress=progress,
+                )
+                time.sleep(0.35)
+            stderr = proc.stderr.read()
+        except Exception:
+            proc.kill()
+            raise
+
+    if proc.returncode != 0:
+        err = (stderr or b"").decode("utf-8", errors="ignore").strip()
+        raise RuntimeError(err or f"SSH fallback exited with code {proc.returncode}")
+    size = target_path.stat().st_size if target_path.exists() else 0
+    if size <= 0 or not zipfile.is_zipfile(target_path):
+        raise RuntimeError("Резервный сервер вернул поврежденный файл вместо XLSX")
+    update_source_runtime(
+        source_key,
+        client_key=client_key,
+        downloaded=size,
+        total_bytes=size,
+        progress=100,
+    )
+
+
 def head_content_length_via_curl(url, verify_ssl, headers=None):
     headers = headers or {}
     cmd = [resolve_curl_cmd(), "-I", "-L", "--silent", "--show-error"]
@@ -514,6 +645,7 @@ def curl_download_to_path_with_retries(
     target_path = Path(target_path)
     attempts = max(1, int(attempts or 1))
     last_error = None
+    fallback_host = iven_ssh_fallback_host(source_key)
     for attempt in range(1, attempts + 1):
         if attempt > 1:
             update_source_runtime(
@@ -529,6 +661,23 @@ def curl_download_to_path_with_retries(
             return
         except Exception as exc:
             last_error = exc
+            if fallback_host and _is_retryable_iven_network_error(exc):
+                try:
+                    target_path.unlink(missing_ok=True)
+                    ssh_download_to_path(
+                        url,
+                        target_path,
+                        verify_ssl,
+                        source_key,
+                        client_key,
+                        headers=headers,
+                        host=fallback_host,
+                    )
+                    return
+                except Exception as fallback_exc:
+                    last_error = RuntimeError(
+                        f"Локальная и резервная загрузка IVEN не удались: {fallback_exc}"
+                    )
             try:
                 target_path.unlink(missing_ok=True)
             except Exception:

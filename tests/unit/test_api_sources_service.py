@@ -323,6 +323,52 @@ def test_curl_download_to_path_with_retries_recovers_after_iven_reset(tmp_path, 
     assert get_source_runtime("iven", "client1")["progress"] == 100
 
 
+def test_curl_download_to_path_with_retries_uses_ssh_fallback_for_iven_zakaz(tmp_path, monkeypatch):
+    api_sources.source_fetch_statuses.clear()
+    target = tmp_path / "iven_zakaz.xlsx"
+    local_calls = []
+    fallback_calls = []
+
+    def _curl_download(url, target_path, verify_ssl, source_key, client_key, headers=None):
+        local_calls.append((url, source_key))
+        raise RuntimeError("curl: (56) Recv failure: Connection reset by peer")
+
+    def _ssh_download(url, target_path, verify_ssl, source_key, client_key, headers=None, *, host):
+        fallback_calls.append((url, source_key, host))
+        Path(target_path).write_bytes(b"price")
+        update_source_runtime(source_key, client_key, downloaded=5, total_bytes=5, progress=100)
+
+    monkeypatch.setattr(api_sources, "curl_download_to_path", _curl_download)
+    monkeypatch.setattr(api_sources, "ssh_download_to_path", _ssh_download)
+    monkeypatch.setenv("PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST", "root@example.test")
+
+    api_sources.curl_download_to_path_with_retries(
+        "https://example.test/iven-zakaz.xlsx",
+        target,
+        False,
+        "iven_zakaz",
+        "client1",
+        attempts=3,
+    )
+
+    assert local_calls == [("https://example.test/iven-zakaz.xlsx", "iven_zakaz")]
+    assert fallback_calls == [
+        ("https://example.test/iven-zakaz.xlsx", "iven_zakaz", "root@example.test")
+    ]
+    assert target.read_bytes() == b"price"
+
+
+def test_iven_ssh_fallback_host_is_scoped_and_validated(monkeypatch):
+    monkeypatch.setenv("PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST", "root@example.test")
+
+    assert api_sources.iven_ssh_fallback_host("iven_zakaz") == "root@example.test"
+    assert api_sources.iven_ssh_fallback_host("iven") == ""
+
+    monkeypatch.setenv("PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST", "root@example.test;bad")
+    with pytest.raises(ValueError, match="Некорректный SSH-хост"):
+        api_sources.iven_ssh_fallback_host("iven_zakaz")
+
+
 def test_fetch_api_source_worker_iven_uses_serialized_retry_downloader(tmp_path, monkeypatch):
     api_sources.source_fetch_statuses.clear()
     history = []
