@@ -6,7 +6,7 @@ The migration copy was accepted and switched to the primary local ports on
 ## Start candidate
 
 ```bash
-PRICE_MIXER_PYTHON=/absolute/path/to/python \
+scripts/bootstrap_local.sh
 scripts/start_parallel_local.sh /absolute/path/to/runtime 5012
 ```
 
@@ -45,7 +45,7 @@ original legacy launcher only as an emergency fallback.
 After acceptance, the candidate runtime can own the normal ports:
 
 ```bash
-scripts/start_primary_local.sh /absolute/runtime /absolute/onliner-parser
+scripts/start_primary_local.sh /absolute/runtime
 ```
 
 This starts the mixer on 5001, its external worker, and the parser on 5055.

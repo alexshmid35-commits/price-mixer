@@ -1,0 +1,35 @@
+[Unit]
+Description=Price Mixer embedded Onliner parser
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=price-mixer
+Group=price-mixer
+WorkingDirectory=/opt/price-mixer/current/onliner-parser
+EnvironmentFile=/etc/price-mixer/price-mixer.env
+Environment=ONLINER_UI_HOST=127.0.0.1
+Environment=ONLINER_UI_PORT=5055
+Environment=ONLINER_PARSER_STATE_DIR=/var/lib/price-mixer/state/onliner-parser
+Environment=PRICE_MIXER_ONLINER_API_SETTINGS=/var/lib/price-mixer/state/onliner_api_settings.json
+Environment=ONLINER_SHEETS_KEY_FILE=/etc/price-mixer/google-service-account.json
+ExecStart=/opt/price-mixer/current/.venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5055 --timeout 900 ui_server:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/price-mixer/current
+ReadWritePaths=/var/lib/price-mixer/state
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=onliner-parser
+
+[Install]
+WantedBy=multi-user.target

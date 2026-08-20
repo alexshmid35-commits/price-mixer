@@ -71,6 +71,7 @@ class SortingReparseRuntime:
             candidate_dirs.append(Path(configured_dir).expanduser())
         candidate_dirs.extend(
             [
+                self.project_root / "onliner-parser",
                 self.project_root.parent / "onliner-parser",
                 Path("/opt/onliner-parser"),
             ]
@@ -94,10 +95,19 @@ class SortingReparseRuntime:
                 None,
             )
             if python_path:
+                configured_log = os.getenv("ONLINER_PARSER_LOG_FILE", "").strip()
+                log_dir = os.getenv("PRICE_MIXER_LOG_DIR", "").strip()
+                log_path = (
+                    Path(configured_log).expanduser()
+                    if configured_log
+                    else Path(log_dir) / "parallel-parser.log"
+                    if log_dir
+                    else parser_dir / "parser_stdout.log"
+                )
                 return (
                     [str(python_path), str(script_path)],
                     parser_dir,
-                    parser_dir / "parser_stdout.log",
+                    log_path,
                 )
         raise RuntimeError("не найден onliner-parser/ui_server.py; укажи ONLINER_PARSER_DIR в .env")
 
@@ -108,6 +118,22 @@ class SortingReparseRuntime:
             if self.service_healthy():
                 return
             command, parser_dir, log_path = self.launch_spec()
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            parser_env = os.environ.copy()
+            state_dir = str(parser_env.get("PRICE_MIXER_STATE_DIR", "") or "").strip()
+            if state_dir:
+                parser_env.setdefault(
+                    "ONLINER_PARSER_STATE_DIR",
+                    str(Path(state_dir) / "onliner-parser"),
+                )
+                parser_env.setdefault(
+                    "PRICE_MIXER_ONLINER_API_SETTINGS",
+                    str(Path(state_dir) / "onliner_api_settings.json"),
+                )
+            parser_env.setdefault(
+                "ONLINER_SHEETS_KEY_FILE",
+                str(self.project_root / "ai2025-462421-df1d36f12313.json"),
+            )
             with log_path.open("a", encoding="utf-8") as log_file:
                 subprocess.Popen(
                     command,
@@ -117,6 +143,7 @@ class SortingReparseRuntime:
                     stderr=subprocess.STDOUT,
                     start_new_session=True,
                     close_fds=True,
+                    env=parser_env,
                 )
             deadline = time.monotonic() + max(float(start_timeout), 1.0)
             while time.monotonic() < deadline:

@@ -105,6 +105,11 @@ find static/js -type f -name '*.js' -print0 | xargs -0 -n1 node --check
   scripts/benchmark_local.py \
   price_mixer/services/review_matching/engine.py
 "$PYTHON" -m pytest -q tests/unit
+PARSER_TEST_PYTHON="$("$PYTHON" -c 'import sys; print(sys.executable)')"
+(
+  cd onliner-parser
+  "$PARSER_TEST_PYTHON" -m pytest -q
+)
 
 if [[ "${RUN_E2E:-0}" == "1" ]]; then
   PRICE_MIXER_TEST_PYTHON="$PYTHON" npm run test:e2e

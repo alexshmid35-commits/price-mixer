@@ -29,6 +29,8 @@ API-источников выполняются отдельным durable worke
 - `deploy/price-mixer.service` — шаблон systemd;
 - `deploy/price-mixer-worker.service` — отдельный durable worker для XLSX и
   API-source jobs;
+- `deploy/onliner-parser.service` — встроенный Onliner-парсер на loopback-порту
+  `5055`;
 - `deploy/nginx-price-mixer.conf` — шаблон HTTPS reverse proxy;
 - `deploy/price-mixer.env.example` — перечень переменных без секретов;
 - `deploy/check_production.py` — fail-fast проверка конфигурации;
@@ -55,8 +57,9 @@ Python 3.11.
 
 1. Создать отдельного системного пользователя `price-mixer`.
 2. Скопировать код в `/opt/price-mixer/current`.
-3. Создать Python 3.11 virtualenv.
-4. Установить `requirements-prod.txt`.
+3. Создать один Python 3.11 virtualenv в `.venv`.
+4. Установить `requirements-prod.txt`. Это окружение используется миксером,
+   worker и встроенным каталогом `onliner-parser`.
 5. Дать пользователю сервиса права на текущий runtime layout.
 6. Сделать backup согласно `RUNTIME_LAYOUT.md`.
 
@@ -96,13 +99,16 @@ backup и остановки сервиса; автоматически они �
 ```bash
 sudo install -m 0644 deploy/price-mixer.service /etc/systemd/system/price-mixer.service
 sudo install -m 0644 deploy/price-mixer-worker.service /etc/systemd/system/price-mixer-worker.service
+sudo install -m 0644 deploy/onliner-parser.service /etc/systemd/system/onliner-parser.service
 sudo install -m 0644 deploy/price-mixer-backup.service /etc/systemd/system/price-mixer-backup.service
 sudo install -m 0644 deploy/price-mixer-backup.timer /etc/systemd/system/price-mixer-backup.timer
 sudo systemctl daemon-reload
-sudo systemctl enable --now price-mixer-worker price-mixer
+sudo systemctl enable --now onliner-parser price-mixer-worker price-mixer
 sudo systemctl enable --now price-mixer-backup.timer
 sudo systemctl status price-mixer
+sudo systemctl status onliner-parser
 curl --fail http://127.0.0.1:5001/api/health
+curl --fail http://127.0.0.1:5055/api/price-mixer/status
 /opt/price-mixer/current/.venv/bin/python deploy/smoke_production.py
 ```
 
@@ -111,6 +117,7 @@ curl --fail http://127.0.0.1:5001/api/health
 ```bash
 journalctl -u price-mixer -f
 journalctl -u price-mixer-worker -f
+journalctl -u onliner-parser -f
 ```
 
 Приложение пишет структурированные JSON-логи при

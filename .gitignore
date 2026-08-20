@@ -49,3 +49,11 @@ onliner_id_cache*.json
 onliner_market_cache.json
 onliner_product_cache.json
 id_mismatch_report*.json
+
+# Embedded Onliner parser runtime files
+onliner-parser/discovered_categories.json
+onliner-parser/discovered_categories.md
+onliner-parser/valid_categories.json
+onliner-parser/valid_categories.md
+onliner-parser/onliner_parse_progress.json
+onliner-parser/onliner_backfill_progress.json

@@ -24,6 +24,7 @@ included in backups and must never be removed by cache or runtime cleanup.
 | `id_review_queue.json` | `review_queue_store` | Unresolved manual review queue |
 | `supplier_snapshots.json` | `supplier_snapshots` | Supplier change history |
 | `api_fetch_history.json` | `supplier_snapshots` | API fetch history |
+| `onliner-parser/` | embedded Onliner parser | Progress and generated category metadata |
 
 Several state stores are now SQLite-primary and use these JSON files as
 migration or fallback sources. That does not make the JSON files safe to
@@ -107,6 +108,12 @@ The path layer supports:
 | `PRICE_MIXER_UPLOAD_DIR` | `/var/lib/price-mixer/uploads` |
 | `PRICE_MIXER_LOG_DIR` | `/var/log/price-mixer` |
 | `PRICE_MIXER_BACKUP_DIR` | `/srv/price-mixer-backups` |
+| `ONLINER_PARSER_STATE_DIR` | `/var/lib/price-mixer/state/onliner-parser` |
+
+The parser source is embedded in `onliner-parser/` inside the current code
+release. It uses the same `.venv` as the mixer and writes mutable state only to
+`ONLINER_PARSER_STATE_DIR`. No runtime component should depend on a legacy
+backup directory.
 
 `deploy/migrate_runtime_layout.py plan` is read-only. The `copy` command:
 

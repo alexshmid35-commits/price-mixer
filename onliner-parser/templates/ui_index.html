@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Onliner Parser</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <style>
+    :root {
+      --bg: #f3f5f7;
+      --surface: #ffffff;
+      --surface-soft: #f7f8fa;
+      --line: #d8dde3;
+      --line-strong: #b8c0ca;
+      --ink: #17202a;
+      --muted: #66717e;
+      --green: #168447;
+      --green-soft: #e9f5ee;
+      --amber: #9a6200;
+      --amber-soft: #fff4d8;
+      --blue: #2368a2;
+      --blue-soft: #eaf2f8;
+      --red: #c7372f;
+      --red-soft: #fae9e7;
+      --shadow: 0 8px 24px rgba(29, 38, 48, 0.07);
+      --radius: 8px;
+      --font: Inter, "SF Pro Text", "Segoe UI", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: var(--font);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button,
+    summary,
+    label {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .app-shell {
+      width: min(1320px, calc(100vw - 32px));
+      margin: 20px auto 32px;
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      min-height: 64px;
+      padding: 0 4px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      border-radius: 7px;
+      color: #fff;
+      background: var(--green);
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.15;
+      font-weight: 750;
+    }
+
+    .brand p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .server-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .server-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 3px var(--green-soft);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+      align-items: start;
+      margin-top: 16px;
+    }
+
+    .main-column {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .surface {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .section {
+      padding: 18px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.3;
+      font-weight: 750;
+    }
+
+    .section-meta {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .profile-switcher {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface-soft);
+    }
+
+    .profile-option {
+      position: relative;
+      min-width: 0;
+      cursor: pointer;
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      transition: background 140ms ease, box-shadow 140ms ease;
+    }
+
+    .profile-option:last-child { border-right: 0; }
+    .profile-option input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .profile-content {
+      display: block;
+      min-height: 128px;
+      padding: 15px;
+      border-top: 4px solid transparent;
+    }
+
+    .profile-option[data-tone="green"] .profile-content { border-top-color: var(--green); }
+    .profile-option[data-tone="amber"] .profile-content { border-top-color: #d28a00; }
+    .profile-option[data-tone="blue"] .profile-content { border-top-color: var(--blue); }
+
+    .profile-option:has(input:checked) {
+      background: var(--green-soft);
+      box-shadow: inset 0 0 0 2px var(--green);
+      z-index: 1;
+    }
+
+    .profile-option[data-tone="amber"]:has(input:checked) {
+      background: var(--amber-soft);
+      box-shadow: inset 0 0 0 2px #c17b00;
+    }
+
+    .profile-option[data-tone="blue"]:has(input:checked) {
+      background: var(--blue-soft);
+      box-shadow: inset 0 0 0 2px var(--blue);
+    }
+
+    .profile-name {
+      display: block;
+      font-size: 14px;
+      line-height: 1.25;
+      font-weight: 750;
+    }
+
+    .profile-count {
+      display: inline-block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .profile-description {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .selection-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+    }
+
+    .selection-name {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .selection-count {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    details.settings {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    details.settings > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 52px;
+      padding: 0 18px;
+      list-style: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    details.settings > summary::-webkit-details-marker { display: none; }
+
+    details.settings > summary::after {
+      content: "+";
+      color: var(--muted);
+      font-size: 20px;
+      font-weight: 400;
+    }
+
+    details.settings[open] > summary::after { content: "−"; }
+
+    .settings-body {
+      padding: 0 18px 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .fields-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .field label,
+    .field-label {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    input[type="text"],
+    select {
+      width: 100%;
+      height: 38px;
+      padding: 0 10px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      outline: none;
+    }
+
+    input[type="text"]:focus,
+    select:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(35, 104, 162, 0.12);
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .toggle-row input {
+      width: 17px;
+      height: 17px;
+      margin: 0;
+      accent-color: var(--green);
+    }
+
+    .toggle-row label {
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .manual-toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      margin-top: 14px;
+    }
+
+    .small-button {
+      height: 38px;
+      padding: 0 12px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .small-button:hover { background: var(--surface-soft); }
+    .small-button:focus-visible {
+      outline: 3px solid rgba(35, 104, 162, 0.18);
+      outline-offset: 1px;
+    }
+
+    .folder-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .folder {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .folder summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 42px;
+      padding: 0 12px;
+      list-style: none;
+      cursor: pointer;
+      background: var(--surface-soft);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .folder summary::-webkit-details-marker { display: none; }
+    .folder-badge { color: var(--muted); font-weight: 650; }
+
+    .category-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border-top: 1px solid var(--line);
+    }
+
+    .category-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      min-height: 46px;
+      padding: 7px 10px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .category-item:hover { background: var(--green-soft); }
+    .category-item input {
+      flex: 0 0 auto;
+      margin: 0;
+      accent-color: var(--green);
+    }
+
+    .category-copy { min-width: 0; }
+    .category-title {
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .category-slug {
+      overflow: hidden;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 16px;
+      min-width: 0;
+    }
+
+    .status-panel { padding: 18px; }
+
+    .status-topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .status-topline h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 9px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: #edf0f3;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .status-pill.running { color: var(--blue); background: var(--blue-soft); }
+    .status-pill.completed { color: var(--green); background: var(--green-soft); }
+    .status-pill.stopped { color: var(--amber); background: var(--amber-soft); }
+    .status-pill.failed { color: var(--red); background: var(--red-soft); }
+
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      overflow: hidden;
+      background: #e5e9ed;
+      border-radius: 4px;
+    }
+
+    .progress-bar {
+      width: 0;
+      height: 100%;
+      background: var(--green);
+      transition: width 180ms ease;
+    }
+
+    .progress-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 9px;
+    }
+
+    .progress-value {
+      font-size: 21px;
+      font-weight: 780;
+    }
+
+    .progress-detail {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      margin: 16px 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--line);
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 10px;
+      background: var(--surface-soft);
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      overflow: hidden;
+      margin-top: 4px;
+      font-size: 14px;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-message {
+      min-height: 58px;
+      padding: 11px 12px;
+      border-left: 3px solid var(--line-strong);
+      background: var(--surface-soft);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .status-message.running { border-left-color: var(--blue); }
+    .status-message.completed { border-left-color: var(--green); }
+    .status-message.stopped { border-left-color: #c17b00; }
+    .status-message.failed { border-left-color: var(--red); }
+
+    .primary-actions {
+      display: grid;
+      grid-template-columns: 1fr 96px;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .action-button {
+      height: 44px;
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .action-button:focus-visible {
+      outline: 3px solid rgba(35, 104, 162, 0.2);
+      outline-offset: 2px;
+    }
+
+    .action-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
+    .action-button.run { color: #fff; background: var(--green); }
+    .action-button.run:hover:not(:disabled) { background: #106f3a; }
+    .action-button.stop { color: var(--red); background: var(--red-soft); }
+    .action-button.stop:hover:not(:disabled) { background: #f5d6d2; }
+
+    .log-details {
+      margin-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .log-details summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 42px;
+      list-style: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .log-details summary::-webkit-details-marker { display: none; }
+
+    .log-box {
+      max-height: 330px;
+      overflow: auto;
+      padding: 10px;
+      color: #dce4eb;
+      background: #17212b;
+      border-radius: 6px;
+      font: 10px/1.5 "SFMono-Regular", Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 1040px) {
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { position: static; }
+    }
+
+    @media (max-width: 760px) {
+      .app-shell {
+        width: min(100% - 16px, 680px);
+        margin-top: 10px;
+      }
+
+      .app-header { padding-bottom: 10px; }
+      .brand p,
+      .server-state span:last-child { display: none; }
+      .profile-switcher { grid-template-columns: 1fr; }
+      .profile-option { border-right: 0; border-bottom: 1px solid var(--line); }
+      .profile-option:last-child { border-bottom: 0; }
+      .profile-content { min-height: auto; padding: 12px; }
+      .fields-grid { grid-template-columns: 1fr; }
+      .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .manual-toolbar { grid-template-columns: 1fr 1fr; }
+      .manual-toolbar input { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 460px) {
+      .section,
+      .status-panel { padding: 14px; }
+      details.settings > summary { padding: 0 14px; }
+      .settings-body { padding: 0 14px 14px; }
+      .category-grid { grid-template-columns: 1fr; }
+      .selection-strip { align-items: flex-start; flex-direction: column; gap: 4px; }
+      .primary-actions { grid-template-columns: 1fr 82px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark">O</div>
+        <div>
+          <h1>Onliner Parser</h1>
+          <p>Обновление каталога в Google Sheets</p>
+        </div>
+      </div>
+      <div class="server-state">
+        <span class="server-dot"></span>
+        <span>Сервер доступен</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <div class="main-column">
+        <section class="surface section">
+          <div class="section-head">
+            <h2>Выберите раздел</h2>
+            <span class="section-meta">{{ categories|length }} категорий всего</span>
+          </div>
+
+          <div class="profile-switcher" id="profileSwitcher">
+            {% for key, preset in presets.items() %}
+            <label class="profile-option" data-tone="{{ preset.tone }}">
+              <input type="radio" name="catalogProfile" value="{{ key }}" {% if loop.first %}checked{% endif %}>
+              <span class="profile-content">
+                <span class="profile-name">{{ preset.label }}</span>
+                <span class="profile-count">{{ preset.categories|length }} катег.</span>
+                <span class="profile-description">{{ preset.description }}</span>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+
+          <div class="selection-strip">
+            <span class="selection-name" id="selectionName">Компьютерная техника</span>
+            <span class="selection-count" id="selectionCount">0 категорий выбрано</span>
+          </div>
+        </section>
+
+        <details class="settings">
+          <summary>Параметры запуска</summary>
+          <div class="settings-body">
+            <div class="fields-grid">
+              <div class="field">
+                <label for="mode">Режим</label>
+                <select id="mode">
+                  {% for key, data in mode_options.items() %}
+                  <option value="{{ key }}">{{ data.label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field">
+                <label for="sheetTab">Лист</label>
+                <input id="sheetTab" type="text" value="{{ default_sheet_tab }}" placeholder="All_Catalog">
+              </div>
+              <div class="field">
+                <label for="matchText">Фильтр товара</label>
+                <input id="matchText" type="text" placeholder="Бренд или модель">
+              </div>
+            </div>
+            <div class="toggle-row">
+              <input id="resumeMode" type="checkbox">
+              <label for="resumeMode">Продолжить сохранённый прогресс</label>
+            </div>
+          </div>
+        </details>
+
+        <details class="settings" id="manualSettings">
+          <summary>Точная настройка категорий</summary>
+          <div class="settings-body">
+            <div class="manual-toolbar">
+              <input id="categorySearch" type="text" placeholder="Поиск категории">
+              <button class="small-button" type="button" id="selectVisible">Выбрать найденное</button>
+              <button class="small-button" type="button" id="clearSelection">Снять выбор</button>
+            </div>
+
+            <div class="folder-list" id="categoryList">
+              <details class="folder" open>
+                <summary>
+                  <span>Компьютерная техника</span>
+                  <span class="folder-badge">{{ category_groups.it|length }}</span>
+                </summary>
+                <div class="category-grid">
+                  {% for item in category_groups.it %}
+                  <label class="category-item" data-title="{{ item.title|lower }} {{ item.slug|lower }}">
+                    <input class="category-checkbox" type="checkbox" value="{{ item.slug }}">
+                    <span class="category-copy">
+                      <span class="category-title">{{ item.title }}</span>
+                      <span class="category-slug">{{ item.slug }}</span>
+                    </span>
+                  </label>
+                  {% endfor %}
+                </div>
+              </details>
+
+              <details class="folder">
+                <summary>
+                  <span>Медиа</span>
+                  <span class="folder-badge">{{ category_groups.media|length }}</span>
+                </summary>
+                <div class="category-grid">
+                  {% for item in category_groups.media %}
+                  <label class="category-item" data-title="{{ item.title|lower }} {{ item.slug|lower }}">
+                    <input class="category-checkbox" type="checkbox" value="{{ item.slug }}">
+                    <span class="category-copy">
+                      <span class="category-title">{{ item.title }}</span>
+                      <span class="category-slug">{{ item.slug }}</span>
+                    </span>
+                  </label>
+                  {% endfor %}
+                </div>
+              </details>
+
+              <details class="folder">
+                <summary>
+                  <span>Остальные</span>
+                  <span class="folder-badge">{{ category_groups.other|length }}</span>
+                </summary>
+                <div class="category-grid">
+                  {% for item in category_groups.other %}
+                  <label class="category-item" data-title="{{ item.title|lower }} {{ item.slug|lower }}">
+                    <input class="category-checkbox" type="checkbox" value="{{ item.slug }}">
+                    <span class="category-copy">
+                      <span class="category-title">{{ item.title }}</span>
+                      <span class="category-slug">{{ item.slug }}</span>
+                    </span>
+                  </label>
+                  {% endfor %}
+                </div>
+              </details>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <aside class="sidebar">
+        <section class="surface status-panel">
+          <div class="status-topline">
+            <h2>Состояние</h2>
+            <span class="status-pill" id="statusPill">Готов</span>
+          </div>
+
+          <div class="progress-track" aria-label="Прогресс">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+          <div class="progress-row">
+            <span class="progress-value" id="progressValue">0 / 0</span>
+            <span class="progress-detail" id="progressDetail">0%<br>Страница: -</span>
+          </div>
+
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-label">Товаров</div>
+              <div class="metric-value" id="statusItemsCount">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">В работе</div>
+              <div class="metric-value" id="statusCategoryCount">0</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Осталось</div>
+              <div class="metric-value" id="statusRemaining">0</div>
+            </div>
+          </div>
+
+          <div class="status-message" id="statusMessage">Сервер готов к запуску.</div>
+
+          <div class="primary-actions">
+            <button class="action-button run" type="button" id="runButton">Запустить</button>
+            <button class="action-button stop" type="button" id="stopButton" disabled>Стоп</button>
+          </div>
+
+          <details class="log-details" id="logDetails">
+            <summary>Журнал задачи</summary>
+            <div class="log-box" id="logBox">Лог пока пуст.</div>
+          </details>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script id="builtInPresets" type="application/json">{{ presets|tojson }}</script>
+  <script>
+    const presets = JSON.parse(document.getElementById("builtInPresets").textContent);
+    const categoryCheckboxes = Array.from(document.querySelectorAll(".category-checkbox"));
+    const categoryItems = Array.from(document.querySelectorAll(".category-item"));
+    const profileRadios = Array.from(document.querySelectorAll('input[name="catalogProfile"]'));
+    const categorySearch = document.getElementById("categorySearch");
+    const statusPill = document.getElementById("statusPill");
+    const statusItemsCount = document.getElementById("statusItemsCount");
+    const statusCategoryCount = document.getElementById("statusCategoryCount");
+    const statusRemaining = document.getElementById("statusRemaining");
+    const statusMessage = document.getElementById("statusMessage");
+    const logBox = document.getElementById("logBox");
+    const logDetails = document.getElementById("logDetails");
+    const progressValue = document.getElementById("progressValue");
+    const progressBar = document.getElementById("progressBar");
+    const progressDetail = document.getElementById("progressDetail");
+    const runButton = document.getElementById("runButton");
+    const stopButton = document.getElementById("stopButton");
+    const selectionName = document.getElementById("selectionName");
+    const selectionCount = document.getElementById("selectionCount");
+    const PROFILE_STORAGE_KEY = "onliner_parser_profile_v2";
+    let syncingProfile = false;
+    let activeProfile = "";
+
+    const statusLabels = {
+      idle: "Готов",
+      running: "Работает",
+      completed: "Готово",
+      stopped: "Остановлено",
+      failed: "Ошибка",
+    };
+
+    function selectedCategories() {
+      return categoryCheckboxes.filter(box => box.checked).map(box => box.value);
+    }
+
+    function categoryWord(count) {
+      const mod10 = count % 10;
+      const mod100 = count % 100;
+      if (mod10 === 1 && mod100 !== 11) return "категория";
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "категории";
+      return "категорий";
+    }
+
+    function setCheckedCategories(categories) {
+      const selected = new Set(categories || []);
+      syncingProfile = true;
+      categoryCheckboxes.forEach(box => {
+        box.checked = selected.has(box.value);
+      });
+      syncingProfile = false;
+    }
+
+    function updateSelectionSummary() {
+      const count = selectedCategories().length;
+      const preset = presets[activeProfile];
+      selectionName.textContent = preset ? preset.label : "Ручной выбор";
+      selectionCount.textContent = count + " " + categoryWord(count) + " выбрано";
+    }
+
+    function applyProfile(key) {
+      const preset = presets[key];
+      if (!preset) return;
+      activeProfile = key;
+      setCheckedCategories(preset.categories);
+      const radio = profileRadios.find(item => item.value === key);
+      if (radio) radio.checked = true;
+      localStorage.setItem(PROFILE_STORAGE_KEY, key);
+      updateSelectionSummary();
+    }
+
+    function markManualSelection() {
+      if (syncingProfile) return;
+      activeProfile = "";
+      profileRadios.forEach(radio => { radio.checked = false; });
+      updateSelectionSummary();
+    }
+
+    function filterCategories() {
+      const query = categorySearch.value.trim().toLowerCase();
+      categoryItems.forEach(item => {
+        item.style.display = !query || item.dataset.title.includes(query) ? "" : "none";
+      });
+    }
+
+    function collectPayload() {
+      return {
+        mode: document.getElementById("mode").value,
+        sheet_tab: document.getElementById("sheetTab").value.trim(),
+        categories: selectedCategories(),
+        resume: document.getElementById("resumeMode").checked,
+        match_text: document.getElementById("matchText").value.trim(),
+        profile: "",
+        electronics_only: false,
+      };
+    }
+
+    async function runJob() {
+      const payload = collectPayload();
+      if (!payload.categories.length) {
+        statusMessage.textContent = "Выберите профиль или категории.";
+        return;
+      }
+
+      runButton.disabled = true;
+      statusMessage.textContent = "Запускаю задачу...";
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        runButton.disabled = false;
+        statusMessage.textContent = data.error || "Не удалось запустить задачу.";
+        return;
+      }
+      updateStatusUI(data.status);
+    }
+
+    async function stopJob() {
+      stopButton.disabled = true;
+      statusMessage.textContent = "Останавливаю и сохраняю прогресс...";
+      const response = await fetch("/api/stop", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        statusMessage.textContent = data.error || "Не удалось остановить задачу.";
+        return;
+      }
+      updateStatusUI(data.status);
+    }
+
+    function updateStatusUI(status) {
+      const progress = status.progress || {};
+      const state = status.status || "idle";
+      const percent = Number(progress.percent || 0);
+      const completed = Number(progress.completed_categories || 0);
+      const total = Number(progress.total_categories || 0);
+      const remaining = Number(progress.remaining_categories || 0);
+      const hasActiveSelection = (status.categories || []).length > 0;
+      const page = hasActiveSelection && progress.current_page ? String(progress.current_page) : "-";
+
+      statusPill.textContent = statusLabels[state] || state;
+      statusPill.className = "status-pill " + state;
+      statusItemsCount.textContent = status.items_count == null ? "-" : Number(status.items_count).toLocaleString("ru-RU");
+      statusCategoryCount.textContent = String((status.categories || []).length);
+      statusRemaining.textContent = String(remaining);
+      statusMessage.textContent = status.message || "Сервер готов к запуску.";
+      statusMessage.className = "status-message " + state;
+      progressValue.textContent = completed + " / " + total;
+      progressDetail.innerHTML = percent + "%<br>Страница: " + page;
+      progressBar.style.width = percent + "%";
+      logBox.textContent = status.log || "Лог пока пуст.";
+      logBox.scrollTop = logBox.scrollHeight;
+
+      runButton.disabled = Boolean(status.is_running);
+      runButton.textContent = status.is_running ? "Выполняется" : "Запустить";
+      stopButton.disabled = !status.is_running;
+      if (state === "failed") logDetails.open = true;
+    }
+
+    async function refreshStatus() {
+      try {
+        const response = await fetch("/api/status");
+        updateStatusUI(await response.json());
+      } catch (error) {
+        statusPill.textContent = "Нет связи";
+        statusPill.className = "status-pill failed";
+        statusMessage.textContent = "Не удалось получить состояние сервера.";
+        statusMessage.className = "status-message failed";
+      }
+    }
+
+    profileRadios.forEach(radio => {
+      radio.addEventListener("change", () => {
+        if (radio.checked) applyProfile(radio.value);
+      });
+    });
+
+    categoryCheckboxes.forEach(box => box.addEventListener("change", markManualSelection));
+    categorySearch.addEventListener("input", filterCategories);
+    runButton.addEventListener("click", runJob);
+    stopButton.addEventListener("click", stopJob);
+
+    document.getElementById("selectVisible").addEventListener("click", () => {
+      categoryItems.forEach(item => {
+        if (item.style.display !== "none") item.querySelector("input").checked = true;
+      });
+      markManualSelection();
+    });
+
+    document.getElementById("clearSelection").addEventListener("click", () => {
+      categoryCheckboxes.forEach(box => { box.checked = false; });
+      markManualSelection();
+    });
+
+    const savedProfile = localStorage.getItem(PROFILE_STORAGE_KEY);
+    const initialProfile = presets[savedProfile] ? savedProfile : Object.keys(presets)[0];
+    applyProfile(initialProfile);
+    refreshStatus();
+    setInterval(refreshStatus, 2500);
+  </script>
+</body>
+</html>

@@ -1,8 +1,9 @@
 [Unit]
 Description=Price Mixer WSGI service
-After=network-online.target price-mixer-worker.service
+After=network-online.target price-mixer-worker.service onliner-parser.service
 Wants=network-online.target
 Wants=price-mixer-worker.service
+Wants=onliner-parser.service
 
 [Service]
 Type=simple
