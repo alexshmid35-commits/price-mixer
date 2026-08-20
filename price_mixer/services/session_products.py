@@ -500,10 +500,7 @@ class SessionProductStore:
                 placeholders = ",".join("?" for _ in deleted)
                 params = [session_id, *deleted]
                 if not rebuild_fts:
-                    connection.execute(
-                        f"DELETE FROM session_products_fts WHERE session_id=? AND row_index IN ({placeholders})",
-                        params,
-                    )
+                    self._delete_fts_rows(connection, session_id, deleted)
                 connection.execute(
                     f"DELETE FROM session_products WHERE session_id=? AND row_index IN ({placeholders})",
                     params,
@@ -514,9 +511,10 @@ class SessionProductStore:
                     (session_id,),
                 )
             else:
-                connection.executemany(
-                    "DELETE FROM session_products_fts WHERE session_id=? AND row_index=?",
-                    [(session_id, item["row_index"]) for item in changed],
+                self._delete_fts_rows(
+                    connection,
+                    session_id,
+                    [item["row_index"] for item in changed],
                 )
             connection.executemany(
                 "INSERT INTO session_products "
@@ -596,6 +594,47 @@ class SessionProductStore:
             "rows_sha256": digest,
             "updated_rows": len(changed),
             "deleted_rows": len(deleted),
+        }
+
+    @staticmethod
+    def _delete_fts_rows(connection, session_id, row_indexes, *, batch_size=700):
+        """Delete changed FTS rows in batches instead of scanning once per row."""
+        indexes = sorted({int(value) for value in row_indexes or []})
+        size = max(1, int(batch_size or 700))
+        for start in range(0, len(indexes), size):
+            batch = indexes[start : start + size]
+            placeholders = ",".join("?" for _ in batch)
+            connection.execute(
+                f"DELETE FROM session_products_fts WHERE session_id=? AND row_index IN ({placeholders})",
+                [session_id, *batch],
+            )
+
+    def prune_sessions(self, existing_session_dirs):
+        """Remove SQL rows whose upload-session directories no longer exist."""
+        if not self.enabled:
+            return {"status": "disabled", "removed_sessions": 0, "removed_rows": 0}
+        existing_ids = {self.session_id(path) for path in existing_session_dirs or [] if path}
+        with self.connection() as connection:
+            stored = connection.execute("SELECT session_id,row_count FROM session_product_meta").fetchall()
+            stale = [row for row in stored if str(row["session_id"]) not in existing_ids]
+            if not stale:
+                return {"status": "ok", "removed_sessions": 0, "removed_rows": 0}
+            stale_ids = [str(row["session_id"]) for row in stale]
+            placeholders = ",".join("?" for _ in stale_ids)
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                f"DELETE FROM session_products_fts WHERE session_id IN ({placeholders})",
+                stale_ids,
+            )
+            connection.execute(
+                f"DELETE FROM session_product_meta WHERE session_id IN ({placeholders})",
+                stale_ids,
+            )
+            connection.commit()
+        return {
+            "status": "ok",
+            "removed_sessions": len(stale_ids),
+            "removed_rows": sum(int(row["row_count"] or 0) for row in stale),
         }
 
     def query_page(

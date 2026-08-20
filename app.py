@@ -644,7 +644,7 @@ def _ensure_background_workers():
 
 
 def _cleanup_old_uploads(exclude_dirs=None):
-    return _upload_sessions_cleanup_old(
+    result = _upload_sessions_cleanup_old(
         UPLOAD_DIR,
         load_settings=load_app_settings,
         exclude_dirs=exclude_dirs,
@@ -652,6 +652,23 @@ def _cleanup_old_uploads(exclude_dirs=None):
         keep_days_default=UPLOAD_KEEP_DAYS,
         keep_api_fetch_hours_default=UPLOAD_KEEP_API_FETCH_HOURS,
     )
+    try:
+        existing_sessions = [path for path in Path(UPLOAD_DIR).iterdir() if path.is_dir()]
+        sql_cleanup = SESSION_PRODUCT_STORE.prune_sessions(existing_sessions)
+        result["sql_sessions_removed"] = int(sql_cleanup.get("removed_sessions", 0) or 0)
+        result["sql_rows_removed"] = int(sql_cleanup.get("removed_rows", 0) or 0)
+    except Exception:
+        APP_LOGGER.exception("session_products cleanup failed")
+        result["sql_sessions_removed"] = 0
+        result["sql_rows_removed"] = 0
+    if int(result.get("removed", 0) or 0) or int(result.get("sql_sessions_removed", 0) or 0):
+        APP_LOGGER.info(
+            "upload session cleanup removed_dirs=%s removed_sql_sessions=%s removed_sql_rows=%s",
+            int(result.get("removed", 0) or 0),
+            int(result.get("sql_sessions_removed", 0) or 0),
+            int(result.get("sql_rows_removed", 0) or 0),
+        )
+    return result
 
 
 def _maybe_cleanup_old_uploads(exclude_dirs=None, min_interval_sec=1800):

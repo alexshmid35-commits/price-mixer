@@ -138,6 +138,29 @@ def test_reconcile_rows_updates_only_changed_rows_and_preserves_order(tmp_path):
     assert store.query_page(session, search="mouse one")["data"][0][0] == "998213"
 
 
+def test_reconcile_rows_batches_changed_fts_deletes(tmp_path, monkeypatch):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="r1")
+    changed = [list(row) for row in ROWS]
+    changed[0][1] = "Monitor Z Updated"
+    changed[1][1] = "Monitor A Updated"
+    calls = []
+    original = store._delete_fts_rows
+
+    def tracked(connection, session_id, row_indexes, **kwargs):
+        calls.append(list(row_indexes))
+        return original(connection, session_id, row_indexes, **kwargs)
+
+    monkeypatch.setattr(store, "_delete_fts_rows", tracked)
+
+    result = store.reconcile_rows(session, changed, source_revision="r2")
+
+    assert result["updated_rows"] == 2
+    assert calls == [[5, 6]]
+    assert store.query_page(session, search="updated")["recordsFiltered"] == 2
+
+
 def test_reconcile_rows_deletes_missing_rows_and_is_idempotent(tmp_path):
     store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
     session = tmp_path / "abc123"
@@ -167,6 +190,35 @@ def test_incomplete_legacy_store_is_not_canonical_until_reconciled(tmp_path):
     assert migrated["updated_rows"] == 0
     assert store.metadata(session)["complete"] == 1
     assert store.read_rows(session) == ROWS
+
+
+def test_prune_sessions_removes_sql_rows_for_missing_upload_dirs(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    keep = tmp_path / "uploads" / "keep"
+    stale = tmp_path / "uploads" / "stale"
+    keep.mkdir(parents=True)
+    stale.mkdir()
+    store.replace_rows(keep, ROWS, source_revision="keep")
+    store.replace_rows(stale, ROWS[:2], source_revision="stale")
+    stale.rmdir()
+
+    result = store.prune_sessions([keep])
+
+    assert result == {
+        "status": "ok",
+        "removed_sessions": 1,
+        "removed_rows": 2,
+    }
+    assert store.read_rows(keep) == ROWS
+    assert store.metadata(stale) is None
+    with store.connection() as connection:
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM session_products_fts WHERE session_id=?",
+                (store.session_id(stale),),
+            ).fetchone()[0]
+            == 0
+        )
 
 
 def test_query_page_hides_categories_without_deleting_them(tmp_path):
