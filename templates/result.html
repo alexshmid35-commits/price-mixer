@@ -1,4 +1,4 @@
-{% macro static_asset(path) -%}{{ asset_url(path) if asset_url is defined else '/static/' ~ path }}{%- endmacro %}<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Price Mixer — Результат</title><script>
+{% macro static_asset(path) -%}{{ asset_url(path) if asset_url is defined else '/static/' ~ path }}{%- endmacro %}<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Price Mixer — Результат</title><link rel="icon" type="image/svg+xml" href="{{ static_asset('favicon.svg') }}"><script>
 if (window.location.protocol === 'file:' && /\/templates\/result\.html$/i.test(window.location.pathname)) {
     window.location.replace('http://127.0.0.1:5001/');
 }
