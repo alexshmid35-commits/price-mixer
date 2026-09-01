@@ -1,5 +1,6 @@
 """Unit tests for API source runtime and fetch worker helpers."""
 
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -250,7 +251,8 @@ def test_curl_download_to_path_iven_sources_use_direct_get_without_head_or_range
 
         def __init__(self, cmd, stdout=None, stderr=None):
             captured.append(cmd)
-            target.write_bytes(b"price")
+            with zipfile.ZipFile(target, "w") as archive:
+                archive.writestr("xl/workbook.xml", "<workbook/>")
 
         def poll(self):
             return 0
@@ -283,7 +285,44 @@ def test_curl_download_to_path_iven_sources_use_direct_get_without_head_or_range
     assert "--http1.1" in cmd
     assert "-k" in cmd
     assert ["-H", "X-Test: 1"] == cmd[cmd.index("-H"):cmd.index("-H") + 2]
-    assert get_source_runtime(source_key, "client1")["total_bytes"] == 5
+    assert get_source_runtime(source_key, "client1")["total_bytes"] == target.stat().st_size
+
+
+def test_curl_download_to_path_rejects_iven_bad_password_response(tmp_path, monkeypatch):
+    api_sources.source_fetch_statuses.clear()
+    target = tmp_path / "iven_zakaz.xlsx"
+
+    class FakeProc:
+        returncode = 0
+
+        def __init__(self, cmd, stdout=None, stderr=None):
+            target.write_bytes(b"Bad password")
+
+        def poll(self):
+            return 0
+
+        def communicate(self, timeout=None):
+            return b"", b""
+
+        def kill(self):
+            pass
+
+        def terminate(self):
+            pass
+
+    monkeypatch.setattr(api_sources, "resolve_curl_cmd", lambda: "curl")
+    monkeypatch.setattr(api_sources.subprocess, "Popen", FakeProc)
+
+    with pytest.raises(PermissionError, match="отклонил логин или пароль"):
+        api_sources.curl_download_to_path(
+            "https://example.test/price.xlsx",
+            target,
+            False,
+            "iven_zakaz",
+            "client1",
+        )
+
+    assert get_source_runtime("iven_zakaz", "client1")["progress"] != 100
 
 
 def test_curl_download_to_path_with_retries_recovers_after_iven_reset(tmp_path, monkeypatch):
@@ -321,6 +360,42 @@ def test_curl_download_to_path_with_retries_recovers_after_iven_reset(tmp_path, 
     assert target.read_bytes() == b"price"
     assert get_source_runtime("iven", "client1")["status"] == "downloading"
     assert get_source_runtime("iven", "client1")["progress"] == 100
+
+
+def test_curl_download_retries_stop_immediately_for_rejected_credentials(tmp_path, monkeypatch):
+    target = tmp_path / "iven_zakaz.xlsx"
+    calls = []
+
+    def _curl_download(*args, **kwargs):
+        calls.append("curl")
+        target.write_bytes(b"Bad password")
+        raise PermissionError("IVEN отклонил логин или пароль")
+
+    monkeypatch.setattr(api_sources, "curl_download_to_path", _curl_download)
+    monkeypatch.setattr(
+        api_sources,
+        "ssh_download_to_path",
+        lambda *args, **kwargs: pytest.fail("SSH must not run for rejected credentials"),
+    )
+    monkeypatch.setattr(
+        api_sources.time,
+        "sleep",
+        lambda seconds: pytest.fail("Credential errors must not be retried"),
+    )
+    monkeypatch.setenv("PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST", "root@example.test")
+
+    with pytest.raises(PermissionError, match="отклонил логин или пароль"):
+        api_sources.curl_download_to_path_with_retries(
+            "https://example.test/iven-zakaz.xlsx",
+            target,
+            False,
+            "iven_zakaz",
+            "client1",
+            attempts=3,
+        )
+
+    assert calls == ["curl"]
+    assert not target.exists()
 
 
 def test_curl_download_to_path_with_retries_uses_ssh_fallback_for_iven_zakaz(tmp_path, monkeypatch):

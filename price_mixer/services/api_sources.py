@@ -628,6 +628,15 @@ def curl_download_to_path(url, target_path, verify_ssl, source_key, client_key, 
         err = (stderr or b"").decode("utf-8", errors="ignore").strip()
         raise RuntimeError(err or f"curl exited with code {proc.returncode}")
     size = target_path.stat().st_size if target_path.exists() else 0
+    if is_iven and (size <= 0 or not zipfile.is_zipfile(target_path)):
+        preview = ""
+        try:
+            preview = target_path.read_bytes()[:256].decode("utf-8", errors="ignore").strip().lower()
+        except Exception:
+            pass
+        if "bad password" in preview or "bad login" in preview or "unauthorized" in preview:
+            raise PermissionError("IVEN отклонил логин или пароль")
+        raise RuntimeError("IVEN вернул поврежденный файл вместо XLSX")
     update_source_runtime(source_key, client_key=client_key, downloaded=size, total_bytes=total or size, progress=100)
 
 
@@ -661,6 +670,9 @@ def curl_download_to_path_with_retries(
             return
         except Exception as exc:
             last_error = exc
+            if isinstance(exc, PermissionError):
+                target_path.unlink(missing_ok=True)
+                break
             if fallback_host and _is_retryable_iven_network_error(exc):
                 try:
                     target_path.unlink(missing_ok=True)
