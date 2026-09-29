@@ -56,25 +56,12 @@ if not errorlevel 1 goto already_running
 goto incomplete_running
 
 :start_parser
-echo [5/8] Start Onliner parser on port 5055...
-powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5055/api/price-mixer/status -TimeoutSec 2; if($r.StatusCode -eq 200){ exit 0 } } catch {}; exit 1"
-if not errorlevel 1 goto parser_ready
-start "Price Mixer Parser" /min /D "%ROOT_DIR%" "%PYTHON_EXE%" "%ROOT_DIR%scripts\run_parser_component.py" "%PARSER_DIR%" "%RUNTIME_ROOT%" "%PYTHON_EXE%" "%ENV_FILE%"
-powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(90); do { try { $r=Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5055/api/price-mixer/status -TimeoutSec 2; if($r.StatusCode -eq 200){ exit 0 } } catch {}; Start-Sleep -Milliseconds 700 } while((Get-Date) -lt $deadline); exit 1"
-if errorlevel 1 goto parser_failed
+set "PRICE_MIXER_WINDOWS_RUNTIME_ROOT=%RUNTIME_ROOT%"
+"%PYTHON_EXE%" "%ROOT_DIR%scripts\start_windows_stack.py"
+if errorlevel 1 goto stack_failed
 
-:parser_ready
-echo [6/8] Start background worker...
-start "Price Mixer Worker" /min /D "%ROOT_DIR%" "%PYTHON_EXE%" "%ROOT_DIR%scripts\run_parallel_component.py" worker "%ROOT_DIR%" "%RUNTIME_ROOT%" 5001 "%ENV_FILE%" "%PYTHON_EXE%"
-powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(15); do { if(Test-Path '%RUNTIME_ROOT%\state\parallel-worker.pid'){ $p=[int](Get-Content '%RUNTIME_ROOT%\state\parallel-worker.pid' -ErrorAction SilentlyContinue); if(Get-Process -Id $p -ErrorAction SilentlyContinue){ exit 0 } }; Start-Sleep -Milliseconds 500 } while((Get-Date) -lt $deadline); exit 1"
-if errorlevel 1 goto worker_failed
-
-echo [7/8] Start Price Mixer web server on port 5001...
-start "Price Mixer Web" /min /D "%ROOT_DIR%" "%PYTHON_EXE%" "%ROOT_DIR%scripts\run_parallel_component.py" web "%ROOT_DIR%" "%RUNTIME_ROOT%" 5001 "%ENV_FILE%" "%PYTHON_EXE%"
-
-echo [8/8] Wait for server and open browser...
-powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(90); do { try { $r=Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5001/api/health -TimeoutSec 2; if($r.StatusCode -eq 200){ Start-Process 'http://127.0.0.1:5001'; exit 0 } } catch {}; Start-Sleep -Milliseconds 700 } while((Get-Date) -lt $deadline); exit 1"
-if errorlevel 1 goto start_failed
+echo [8/8] Open Price Mixer in browser...
+start "" "http://127.0.0.1:5001"
 
 where ssh >nul 2>&1
 if errorlevel 1 echo WARNING: Windows OpenSSH Client is not installed. IVEN_ZAKAZ reserve download may be unavailable.
@@ -144,26 +131,10 @@ echo.
 pause
 exit /b 1
 
-:parser_failed
+:stack_failed
 echo.
-echo Parser did not respond on http://127.0.0.1:5055
-echo Check: %RUNTIME_ROOT%\logs\parallel-parser.log
-echo.
-pause
-exit /b 1
-
-:worker_failed
-echo.
-echo Background worker did not start.
-echo Check: %RUNTIME_ROOT%\logs\parallel-worker.log
-echo.
-pause
-exit /b 1
-
-:start_failed
-echo.
-echo Server did not respond on http://127.0.0.1:5001
-echo Check: %RUNTIME_ROOT%\logs\parallel-web.log
+echo Price Mixer stack did not start. Check logs in:
+echo   %RUNTIME_ROOT%\logs
 echo.
 pause
 exit /b 1
