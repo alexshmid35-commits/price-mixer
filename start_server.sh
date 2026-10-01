@@ -1,112 +1,86 @@
 #!/bin/zsh
-# Price Mixer v4 REFACTORED — Start Server (macOS)
+set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RUNTIME_ROOT="${PRICE_MIXER_RUNTIME_ROOT:-$ROOT_DIR/../PriceMixer_next_runtime_2026-07-24}"
+PYTHON="$ROOT_DIR/.venv/bin/python"
+WORKER_PID_FILE="$RUNTIME_ROOT/state/parallel-worker.pid"
 
-PYTHON=""
-PORT=5001
-PID_FILE="$SCRIPT_DIR/server.pid"
+web_healthy() {
+    curl -fsS --max-time 2 "http://127.0.0.1:5001/api/health" >/dev/null 2>&1
+}
 
-# --- [1/6] Find Python (prefer .venv) ---
-echo "[1/6] Checking Python..."
+parser_healthy() {
+    curl -fsS --max-time 2 \
+        "http://127.0.0.1:5055/api/price-mixer/status" >/dev/null 2>&1
+}
 
-# Check .venv first
-if [ -f "$SCRIPT_DIR/.venv/bin/python3" ]; then
-    PYTHON="$SCRIPT_DIR/.venv/bin/python3"
-    echo "      Using .venv: $PYTHON"
-else
-    for candidate in python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
-        if command -v "$candidate" &>/dev/null; then
-            VERSION=$("$candidate" -c "import sys; print(sys.version_info.major)" 2>/dev/null)
-            if [ "$VERSION" = "3" ]; then
-                PYTHON="$candidate"
-                echo "      Found: $PYTHON ($("$candidate" --version 2>&1))"
-                break
-            fi
+worker_healthy() {
+    [ -f "$WORKER_PID_FILE" ] || return 1
+    local pid
+    pid="$(tr -dc '0-9' < "$WORKER_PID_FILE")"
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" >/dev/null 2>&1 || return 1
+    ps -p "$pid" -o command= 2>/dev/null | grep -q "price_mixer.workers.durable_worker"
+}
+
+stop_legacy_web() {
+    local pid_file="$ROOT_DIR/server.pid"
+    [ -f "$pid_file" ] || return 0
+    local pid command
+    pid="$(tr -dc '0-9' < "$pid_file")"
+    if [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1; then
+        command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+        if [[ "$command" == *"app.py"* ]]; then
+            kill "$pid" >/dev/null 2>&1 || true
+            sleep 1
         fi
-    done
-fi
+    fi
+    rm -f "$pid_file"
+}
 
-if [ -z "$PYTHON" ]; then
-    echo ""
-    echo "Python 3 not found."
-    echo "Install it via Homebrew:  brew install python"
-    echo "Or download from:         https://www.python.org/downloads/"
-    echo ""
-    read -k 1 "?Press any key to exit..."
+echo "[1/5] Проверяю структуру Price Mixer..."
+if [ ! -f "$RUNTIME_ROOT/state/app_settings.json" ]; then
+    echo "Не найдена актуальная runtime-папка: $RUNTIME_ROOT"
+    exit 1
+fi
+if [ ! -f "$ROOT_DIR/.env" ]; then
+    echo "Не найден файл настроек: $ROOT_DIR/.env"
+    exit 1
+fi
+if [ ! -f "$ROOT_DIR/onliner-parser/ui_server.py" ]; then
+    echo "Не найден встроенный Onliner-парсер."
     exit 1
 fi
 
-# --- [2/6] Check if already running ---
-echo "[2/6] Checking if server is already running..."
-if curl -s --max-time 2 "http://127.0.0.1:$PORT" > /dev/null 2>&1; then
-    echo "      Server is already running. Opening browser..."
-    open "http://127.0.0.1:$PORT"
+echo "[2/5] Проверяю Python и зависимости..."
+if [ ! -x "$PYTHON" ]; then
+    python3 -m venv "$ROOT_DIR/.venv"
+fi
+if ! "$PYTHON" -c \
+    "import dotenv, flask, pandas, numpy, requests, openpyxl, xlrd, gspread, oauth2client" \
+    >/dev/null 2>&1; then
+    "$PYTHON" -m pip install -r "$ROOT_DIR/requirements.txt"
+fi
+
+echo "[3/5] Проверяю текущие процессы..."
+if web_healthy && parser_healthy && worker_healthy; then
+    echo "Все компоненты уже работают."
+    open "http://127.0.0.1:5001"
     exit 0
 fi
 
-# --- [3/6] Check / create venv ---
-echo "[3/6] Checking virtual environment..."
-if [ ! -d "$SCRIPT_DIR/.venv" ]; then
-    echo "      Creating .venv..."
-    "$PYTHON" -m venv "$SCRIPT_DIR/.venv"
-    echo "      Installing dependencies..."
-    "$SCRIPT_DIR/.venv/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
-else
-    echo "      .venv exists"
+if web_healthy || parser_healthy || worker_healthy; then
+    echo "Найден неполный старый запуск. Перезапускаю стек целиком..."
+    "$ROOT_DIR/scripts/stop_primary_local.sh" "$RUNTIME_ROOT" >/dev/null 2>&1 || true
 fi
+stop_legacy_web
 
-# Use venv python from now on
-PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+echo "[4/5] Запускаю web, worker и Onliner-парсер..."
+PRICE_MIXER_PYTHON="$PYTHON" \
+    "$ROOT_DIR/scripts/start_primary_local.sh" \
+    "$RUNTIME_ROOT" "$ROOT_DIR/onliner-parser"
 
-# --- [4/6] Check dependencies ---
-echo "[4/6] Checking dependencies..."
-if ! "$PYTHON" -c "import flask, pandas, numpy, requests, openpyxl, xlrd, gspread, oauth2client" &>/dev/null; then
-    echo "      Some packages missing. Installing..."
-    "$SCRIPT_DIR/.venv/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
-    if [ $? -ne 0 ]; then
-        echo ""
-        echo "Failed to install dependencies."
-        echo ""
-        read -k 1 "?Press any key to exit..."
-        exit 1
-    fi
-fi
-
-# --- [5/6] Start server in background ---
-echo "[5/6] Starting server..."
-nohup "$PYTHON" app.py > server_stdout.log 2>&1 </dev/null &
-SERVER_PID=$!
-echo "$SERVER_PID" > "$PID_FILE"
-echo "      PID: $SERVER_PID  (saved to server.pid)"
-
-# --- [6/6] Wait and open browser ---
-echo "[6/6] Waiting for server to start..."
-DEADLINE=$(($(date +%s) + 90))
-while [ $(date +%s) -lt $DEADLINE ]; do
-    if curl -s --max-time 1 "http://127.0.0.1:$PORT" > /dev/null 2>&1; then
-        echo "      Server is up!"
-        open "http://127.0.0.1:$PORT"
-        echo ""
-        echo "Price Mixer v4 REFACTORED running at http://127.0.0.1:$PORT"
-        echo "Logs: server_stdout.log"
-        echo "Auth: credentials are loaded from .env"
-        echo "To stop: ./stop_server.sh"
-        exit 0
-    fi
-    # Check if process died early
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo ""
-        echo "Server process crashed. Check server_stdout.log for errors."
-        echo ""
-        exit 1
-    fi
-    sleep 0.7
-done
-
-echo ""
-echo "Server did not respond on http://127.0.0.1:$PORT within 90 seconds."
-echo "Check server_stdout.log for errors."
-echo ""
-exit 1
+echo "[5/5] Открываю Price Mixer..."
+open "http://127.0.0.1:5001"
+echo "Price Mixer полностью запущен. Для следующего запуска используй только start_server.sh."

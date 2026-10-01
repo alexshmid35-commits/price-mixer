@@ -1,7 +1,4 @@
 #!/bin/zsh
-cd "/Users/alexeyvoronkov/Desktop/Сводный прайс парсер OnlinerID/Price_List _localHost"
-while true; do
-  /opt/homebrew/bin/python3 app.py >> app.log 2>&1
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] server exited, restarting in 2s" >> app.log
-  sleep 2
-done
+# Совместимость со старым ярлыком. Единый лаунчер сам проверяет весь стек.
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$ROOT_DIR/start_server.sh"

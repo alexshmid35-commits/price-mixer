@@ -19,7 +19,12 @@ fi
 if [ -f "$STATE_DIR/parallel-parser.pid" ]; then
     pid="$(tr -dc '0-9' < "$STATE_DIR/parallel-parser.pid")"
     if [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1; then
-        kill "$pid"
+        command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+        if [[ "$command" == *"onliner-parser/ui_server.py"* ]]; then
+            kill "$pid"
+        else
+            echo "Parser PID $pid belongs to another process; removing stale PID file."
+        fi
     fi
     rm -f "$STATE_DIR/parallel-parser.pid"
 fi

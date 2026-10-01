@@ -22,13 +22,20 @@ stop_screen() {
 stop_pid_file() {
     local label="$1"
     local pid_file="$2"
+    local expected_command="$3"
     if [ ! -f "$pid_file" ]; then
         echo "$label is not running (no PID file)."
         return
     fi
-    local pid
+    local pid command
     pid="$(tr -dc '0-9' < "$pid_file")"
     if [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1; then
+        command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+        if [[ "$command" != *"$expected_command"* ]]; then
+            echo "$label PID $pid belongs to another process; removing stale PID file."
+            rm -f "$pid_file"
+            return
+        fi
         kill "$pid"
         local deadline=$(($(date +%s) + 15))
         while kill -0 "$pid" >/dev/null 2>&1 && [ "$(date +%s)" -lt "$deadline" ]; do
@@ -45,7 +52,7 @@ stop_pid_file() {
     rm -f "$pid_file"
 }
 
-stop_pid_file "Web" "$STATE_DIR/parallel-web.pid"
-stop_pid_file "Worker" "$STATE_DIR/parallel-worker.pid"
+stop_pid_file "Web" "$STATE_DIR/parallel-web.pid" "app.py"
+stop_pid_file "Worker" "$STATE_DIR/parallel-worker.pid" "price_mixer.workers.durable_worker"
 stop_screen "$STATE_DIR/parallel-web.screen"
 stop_screen "$STATE_DIR/parallel-worker.screen"
