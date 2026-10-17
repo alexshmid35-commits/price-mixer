@@ -138,6 +138,7 @@ from price_mixer.services.category_repair_runtime import (
     CategoryRepairRuntime,
     json_row_needs_category_repair as _category_json_row_needs_repair,
 )
+from price_mixer.services.product_type_categories import specific_product_category
 from price_mixer.services.consolidated_io import (
     consolidated_json_rows as _consolidated_json_rows,
     dataframe_from_consolidated_json_rows as _consolidated_dataframe_from_rows,
@@ -1352,6 +1353,11 @@ UI_CATEGORY_ALIASES = {
     "картридж": "Картриджи",
     "сумка": "Сумки и чехлы для ноутбуков",
     "термопасты и термопрокладки": "Кулеры",
+    "usb-хабы и док-станции": "USB-хабы",
+    "кулеры для воды": "Диспенсеры",
+    "электрические чайники": "Электрочайники и термопоты",
+    "чайники и термопоты": "Электрочайники и термопоты",
+    "чехлы для телефонов": "Чехлы для смартфонов",
 }
 
 SORTING_REVIEW_PREFIX = "Требует сортировки · родитель: "
@@ -1492,6 +1498,14 @@ def _file_cache_signature(path):
         return (0, 0)
 
 
+def _catalog_category_cache_signature():
+    catalog_path = RUNTIME_PATHS.data_file("onliner_products.db")
+    return (
+        _file_cache_signature(catalog_path),
+        _file_cache_signature(str(catalog_path) + "-wal"),
+    )
+
+
 def _corrected_json_rows_cache_key(session_dir, cons_json_path, apply_visibility):
     state_keys = [CATEGORY_OVERRIDES_STATE, MANUAL_CATEGORY_OVERRIDES_STATE]
     if apply_visibility:
@@ -1509,6 +1523,7 @@ def _corrected_json_rows_cache_key(session_dir, cons_json_path, apply_visibility
         )
         else _file_cache_signature(cons_json_path),
         _category_state_signature(state_keys),
+        _catalog_category_cache_signature(),
     )
 
 
@@ -2571,7 +2586,7 @@ def ensure_category_column(df, overrides=None):
     for index, oid in zip(out.index, ids):
         raw_category = str(catalog_categories.get(oid, "") or "").strip()
         product_name = out.at[index, "Название"] if has_name else ""
-        category = _native_catalog_category_for_product(raw_category, product_name)
+        category = specific_product_category(product_name) or _native_catalog_category_for_product(raw_category, product_name)
         if category:
             out.at[index, "Категория"] = category
         else:
@@ -2715,7 +2730,16 @@ def read_consolidated_json_fast_df(session_dir):
 
 def read_consolidated_export_df(session_dir):
     """Read consolidated data and overlay durable manual ID bindings before export."""
-    df = _apply_manual_bindings_to_consolidated_df(read_consolidated_json_fast_df(session_dir))
+    df = _consolidated_json_df(session_dir, apply_visibility=False)
+    if df is None:
+        df = ensure_category_column(read_consolidated_json_fast_df(session_dir))
+    ids_before = df["OnlinerID"].map(normalize_onliner_id) if df is not None and "OnlinerID" in df else None
+    df = _apply_manual_bindings_to_consolidated_df(df)
+    if ids_before is not None:
+        changed = ids_before.ne(df["OnlinerID"].map(normalize_onliner_id))
+        if changed.any():
+            repaired = ensure_category_column(df.loc[changed].copy())
+            df.loc[changed, "Категория"] = repaired["Категория"]
     return apply_saved_markups_to_df(df)
 
 
@@ -5001,7 +5025,7 @@ def _session_revision_token(session_dir):
             RUNTIME_PATHS.cache_file("onliner_market_cache.json"),
             session_path / "supplier_diff.json",
         ),
-        extra=(_category_state_signature(),),
+        extra=(_category_state_signature(), _catalog_category_cache_signature()),
     )
 
 

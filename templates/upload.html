@@ -42,6 +42,7 @@ a:hover { text-decoration: underline; }
 .settings-field.wide { grid-column: 1 / -1; }
 .settings-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; }
 .settings-checkbox input { width: 15px; height: 15px; }
+#settings-pane-suppliers input, #settings-pane-suppliers select { box-sizing: border-box; min-width: 0; }
 .settings-help { margin-top: 6px; font-size: 12px; color: #64748b; line-height: 1.45; white-space: pre-wrap; }
 .settings-help.wide { grid-column: 1 / -1; }
 @media (max-width: 900px) {
@@ -138,7 +139,7 @@ a:hover { text-decoration: underline; }
     </div>
 </div>
 <div class="card" id="api-sources-card">
-    <h2 style="font-size:20px; margin-bottom:8px;">Загрузка через API</h2>
+    <h2 style="font-size:20px; margin-bottom:8px;">Загрузка по ссылке / API</h2>
     <p class="subtitle" style="margin-bottom:16px;">Выгрузи прайс по ссылке/API, дождись 100% и обработай его тем же пайплайном, что и ручную загрузку.</p>
     <div class="api-sources-grid" id="api-sources-grid"></div>
     <div id="api-process-ready-wrap" style="display:none;justify-content:center;margin:12px 0 0;">
@@ -304,6 +305,7 @@ var uploadAppSettings = null;
                 <div class="settings-tabs" role="tablist">
                     <button type="button" class="settings-tab active" data-settings-pane="settings-pane-interface">Интерфейс</button>
                     <button type="button" class="settings-tab" data-settings-pane="settings-pane-export">Выгрузка</button>
+                    <button type="button" class="settings-tab" data-settings-pane="settings-pane-suppliers">Поставщики</button>
                     <button type="button" class="settings-tab" data-settings-pane="settings-pane-cleanup">Очистка</button>
                 </div>
                 <div class="settings-pane active" id="settings-pane-interface">
@@ -322,6 +324,16 @@ var uploadAppSettings = null;
                             <div class="settings-field wide"><label for="st-export-sheet-id">ID или ссылка Google-таблицы</label><input id="st-export-sheet-id" type="text" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/... или ID"></div>
                             <div class="settings-field"><label for="st-export-sheet-tab">Лист выгрузки</label><input id="st-export-sheet-tab" type="text" maxlength="99" autocomplete="off" placeholder="Price"></div>
                             <div class="settings-help wide">Эти значения используются кнопкой выгрузки в Google Таблицу. Если поле ID пустое, будет использовано значение из .env.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-pane" id="settings-pane-suppliers">
+                    <div class="settings-section">
+                        <h3>Techlab</h3>
+                        <div class="settings-grid">
+                            <div class="settings-field"><label for="st-techlab-price">Закупочная цена с НДС</label><select id="st-techlab-price"><option value="Опт">Опт</option><option value="Дил">Дил</option><option value="Vip">Vip</option></select></div>
+                            <div class="settings-field"><label for="st-techlab-stock-days">Склад, дней доставки</label><input id="st-techlab-stock-days" type="number" min="0" max="365"></div>
+                            <div class="settings-field"><label for="st-techlab-order-days">Под заказ, дней доставки</label><input id="st-techlab-order-days" type="number" min="0" max="365"></div>
                         </div>
                     </div>
                 </div>
@@ -349,12 +361,16 @@ var uploadAppSettings = null;
         var uiCfg = uploadAppSettings.ui || {};
         var exportCfg = uploadAppSettings.export || {};
         var uploadsCleanup = uploadAppSettings.uploads_cleanup || {};
+        var techlab = (uploadAppSettings.api_sources || {}).techlab || {};
         document.getElementById('st-ui-show-checks-block').checked = (uiCfg.show_checks_block !== false);
         document.getElementById('st-export-sheet-id').value = exportCfg.google_sheets_spreadsheet_url_or_id || '';
         document.getElementById('st-export-sheet-tab').value = exportCfg.google_sheets_tab || 'Price';
         document.getElementById('st-cleanup-keep-sessions').value = uploadsCleanup.keep_last_sessions || 20;
         document.getElementById('st-cleanup-keep-days').value = uploadsCleanup.keep_days || 7;
         document.getElementById('st-cleanup-keep-api-hours').value = uploadsCleanup.keep_api_fetch_hours || 12;
+        document.getElementById('st-techlab-price').value = techlab.price_column || 'Опт';
+        document.getElementById('st-techlab-stock-days').value = techlab.stock_delivery_days == null ? 2 : techlab.stock_delivery_days;
+        document.getElementById('st-techlab-order-days').value = techlab.order_delivery_days == null ? 2 : techlab.order_delivery_days;
     }
 
     function collectSettingsForm(){
@@ -365,6 +381,13 @@ var uploadAppSettings = null;
             export: {
                 google_sheets_spreadsheet_url_or_id: document.getElementById('st-export-sheet-id').value,
                 google_sheets_tab: document.getElementById('st-export-sheet-tab').value
+            },
+            api_sources: {
+                techlab: {
+                    price_column: document.getElementById('st-techlab-price').value,
+                    stock_delivery_days: document.getElementById('st-techlab-stock-days').value,
+                    order_delivery_days: document.getElementById('st-techlab-order-days').value
+                }
             },
             uploads_cleanup: {
                 keep_last_sessions: document.getElementById('st-cleanup-keep-sessions').value,
@@ -789,6 +812,7 @@ function detectSupplier(fname) {
     if (fl.indexOf('ntech') >= 0 || fl.indexOf('n-tech') >= 0 || fl.indexOf('n_tech') >= 0) return 'N-Tech';
     if (fl.indexOf('iven') >= 0) return 'IVEN';
     if (fl.indexOf('tradex') >= 0) return 'Tradex';
+    if (compactFileName.indexOf('techlab') >= 0) return 'Techlab';
     if (fl.indexOf('1030z') >= 0) return 'BN-1030Z';
     if (fl.indexOf('1030') >= 0) return 'BN-1030';
     if (fl.indexOf('1374') >= 0) return 'BN-1374';

@@ -46,6 +46,7 @@ def canonical_supplier_name(supplier):
         "ivenzakaz": "IVEN_zakaz",
         "tradex": "Tradex",
         "tgpc": "TGPC",
+        "techlab": "Techlab",
     }.get(compact, text)
 
 

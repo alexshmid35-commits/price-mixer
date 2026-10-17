@@ -439,11 +439,21 @@ def resolve_ssh_cmd():
 def iven_ssh_fallback_host(source_key):
     if normalize_source_key(source_key) != "iven_zakaz":
         return ""
-    host = str(os.getenv("PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST", "") or "").strip()
+    return source_ssh_fallback_host(source_key)
+
+
+def source_ssh_fallback_host(source_key):
+    env_name = {
+        "iven_zakaz": "PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST",
+        "techlab": "PRICE_MIXER_TECHLAB_SSH_HOST",
+    }.get(normalize_source_key(source_key))
+    if not env_name:
+        return ""
+    host = str(os.getenv(env_name, "") or "").strip()
     if not host:
         return ""
     if not re.fullmatch(r"[A-Za-z0-9_.:@-]{1,255}", host):
-        raise ValueError("Некорректный SSH-хост резервной загрузки IVEN")
+        raise ValueError("Некорректный SSH-хост резервной загрузки")
     return host
 
 
@@ -516,7 +526,7 @@ def ssh_download_to_path(
         source_key,
         client_key=client_key,
         status="downloading",
-        message="Локальное соединение сброшено. Получаю заказной прайс через резервный сервер...",
+        message="Локальное соединение недоступно. Получаю прайс через резервный сервер...",
         progress=5,
         ready=False,
     )
@@ -709,11 +719,11 @@ def curl_download_to_path_with_retries(
     raise last_error or RuntimeError("Не удалось скачать IVEN-прайс")
 
 
-def stream_download_to_path(url, target_path, verify_ssl, source_key, client_key, headers=None):
+def stream_download_to_path(url, target_path, verify_ssl, source_key, client_key, headers=None, timeout=120):
     headers = headers or {}
     target_path = Path(target_path)
     downloaded = 0
-    with requests.get(url, stream=True, verify=verify_ssl, timeout=120, headers=headers) as resp:
+    with requests.get(url, stream=True, verify=verify_ssl, timeout=timeout, headers=headers) as resp:
         resp.raise_for_status()
         try:
             total = int(resp.headers.get("Content-Length", "0") or 0)
@@ -751,6 +761,28 @@ def _read_downloaded_json(path):
     except Exception:
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _download_techlab_source(file_url, target_path, verify_ssl, client_key, headers):
+    from price_mixer.services.techlab import read_techlab_header
+
+    try:
+        stream_download_to_path(
+            file_url, target_path, verify_ssl, "techlab", client_key,
+            headers=headers, timeout=(8, 25),
+        )
+    except requests.exceptions.RequestException:
+        host = source_ssh_fallback_host("techlab")
+        if not host:
+            raise RuntimeError(
+                "Techlab: сайт недоступен из этой сети. Можно загрузить файл вручную "
+                "или настроить PRICE_MIXER_TECHLAB_SSH_HOST"
+            ) from None
+        ssh_download_to_path(
+            file_url, target_path, verify_ssl, "techlab", client_key,
+            headers=headers, host=host,
+        )
+    read_techlab_header(target_path)
 
 
 def _download_retry_after(payload):
@@ -1039,6 +1071,8 @@ def _fetch_api_source_worker(
                         client_key=client_key,
                         headers=headers,
                     )
+            elif source_key == "techlab":
+                _download_techlab_source(file_url, target_path, verify_ssl, client_key, headers)
             else:
                 _download_direct_source_with_retries(
                     file_url=file_url,

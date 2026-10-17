@@ -61,11 +61,20 @@ class CategoryManagementRuntime:
         payload["supplier"] = self.canonical_supplier_name(
             payload.get("supplier")
         )
+        if isinstance(payload.get("categories"), list):
+            payload["categories"] = [
+                self.canonical_ui_category_name(category)
+                for category in payload["categories"]
+            ]
         with self.visibility_lock:
+            current = {
+                supplier: [self.canonical_ui_category_name(category) for category in categories]
+                for supplier, categories in self.load_visibility_map(session_dir).items()
+            }
             result, visibility_map, status_code = (
                 self.update_category_visibility(
                     payload,
-                    self.load_visibility_map(session_dir),
+                    current,
                     category_sort_key=self.category_sort_key,
                 )
             )

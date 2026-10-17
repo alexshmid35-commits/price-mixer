@@ -71,6 +71,8 @@ def infer_supplier_from_filename(filename, app_settings=None, load_app_settings:
         return "IVEN"
     if "tradex" in name:
         return "Tradex"
+    if "techlab" in compact_name:
+        return "Techlab"
     if "1030z" in name:
         return "BN-1030Z"
     if "1030" in name:

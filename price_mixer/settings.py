@@ -289,6 +289,8 @@ APP_SETTINGS_DEFAULTS = {
             {"pattern": "ivenzakaz", "supplier": "IVEN_zakaz"},
             {"pattern": "iven", "supplier": "IVEN"},
             {"pattern": "tradex", "supplier": "Tradex"},
+            {"pattern": "techlab", "supplier": "Techlab"},
+            {"pattern": "tech-lab", "supplier": "Techlab"},
             {"pattern": "1030z", "supplier": "BN-1030Z"},
             {"pattern": "1030", "supplier": "BN-1030"},
             {"pattern": "1374", "supplier": "BN-1374"},
@@ -300,6 +302,17 @@ APP_SETTINGS_DEFAULTS = {
         "iven_zakaz": {"enabled": False, "label": "IVEN_ZAKAZ", "supplier": "IVEN_zakaz", "mode": "direct_file", "file_url": "", "verify_ssl": False},
         "tradex": {"enabled": False, "label": "Tradex", "supplier": "Tradex", "mode": "direct_file", "file_url": "", "verify_ssl": False},
         "ntech": {"enabled": False, "label": "N-Tech", "supplier": "N-Tech", "mode": "ntech_json", "auth_url": "", "price_url": "", "username": "", "password": "", "verify_ssl": False},
+        "techlab": {
+            "enabled": True,
+            "label": "Techlab",
+            "supplier": "Techlab",
+            "mode": "direct_file",
+            "file_url": "http://tech-lab.by/price/techlab_bn.xlsx",
+            "verify_ssl": True,
+            "price_column": "Опт",
+            "stock_delivery_days": 2,
+            "order_delivery_days": 2,
+        },
     },
     "uploads_cleanup": {"keep_last_sessions": 20, "keep_days": 7, "keep_api_fetch_hours": 12},
     "no_id_search": {
@@ -393,6 +406,14 @@ def _normalize_api_sources(sources):
             })
         else:
             item.update({"file_url": str(source_cfg.get("file_url", default_cfg.get("file_url", ""))).strip()})
+        if key == "techlab":
+            price_column = str(source_cfg.get("price_column", default_cfg["price_column"]))
+            item["price_column"] = price_column if price_column in ("Vip", "Дил", "Опт") else default_cfg["price_column"]
+            for field in ("stock_delivery_days", "order_delivery_days"):
+                try:
+                    item[field] = max(0, min(365, int(source_cfg.get(field, default_cfg[field]))))
+                except (TypeError, ValueError):
+                    item[field] = default_cfg[field]
         out[key] = item
     return out
 

@@ -70,15 +70,15 @@ def _run_upload(
 
 
 def test_new_upload_restores_different_ids_for_same_name_across_all_suppliers(tmp_path):
-    suppliers = ["IVEN", "IVEN_zakaz", "Tradex", "N-Tech"]
-    ids = ["111", "222", "333", "444"]
+    suppliers = ["IVEN", "IVEN_zakaz", "Tradex", "N-Tech", "Techlab"]
+    ids = ["111", "222", "333", "444", "555"]
     product_name = "Одинаковая материнская плата"
     source_df = pd.DataFrame({
         "Поставщик": suppliers,
-        "Название": [product_name] * 4,
-        "OnlinerID": [""] * 4,
-        "Ссылка": [""] * 4,
-        "Категория": ["Материнская плата"] * 4,
+        "Название": [product_name] * len(suppliers),
+        "OnlinerID": [""] * len(suppliers),
+        "Ссылка": [""] * len(suppliers),
+        "Категория": ["Материнская плата"] * len(suppliers),
     })
     bindings = {
         supplier_scoped_binding_key(normalize_name_key(product_name), supplier):
@@ -89,7 +89,7 @@ def test_new_upload_restores_different_ids_for_same_name_across_all_suppliers(tm
     _result, uploaded = _run_upload(tmp_path, source_df, bindings)
 
     assert uploaded["OnlinerID"].tolist() == ids
-    assert uploaded["Ссылка"].tolist() == ["u111", "u222", "u333", "u444"]
+    assert uploaded["Ссылка"].tolist() == ["u111", "u222", "u333", "u444", "u555"]
 
 
 def test_new_upload_applies_block_only_to_its_supplier(tmp_path):

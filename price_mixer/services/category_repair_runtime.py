@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from price_mixer.product_schema import ProductField, ProductWireIndex
+from price_mixer.services.product_type_categories import specific_product_category
 
 
 def json_row_needs_category_repair(
@@ -171,7 +172,9 @@ class CategoryRepairRuntime:
                     if str(category or "").strip()
                 }
                 rows = [
-                    row for row in rows if self.canonical_ui_category_name(row[ProductWireIndex.CATEGORY]) not in hidden
+                    row for row in rows
+                    if self.canonical_ui_category_name(row[ProductWireIndex.CATEGORY]) not in hidden
+                    and self.canonical_ui_category_name(specific_product_category(row[ProductWireIndex.NAME])) not in hidden
                 ]
             self.set_cached_rows(cache_key, rows)
             return rows
@@ -230,7 +233,10 @@ class CategoryRepairRuntime:
                     product_name,
                     known_raw_categories,
                 )
-            if onliner_id and catalog:
+            product_type = specific_product_category(product_name)
+            if product_type:
+                category_name = product_type
+            elif onliner_id and catalog:
                 category_name = catalog
             elif exact:
                 category_name = exact

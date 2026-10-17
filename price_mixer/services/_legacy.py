@@ -1283,6 +1283,12 @@ def consolidate(all_data, url_cache=None):
 
 def parse_generic_excel(filepath, supplier_name):
     """Универсальный парсер Excel - пытается найти колонки автоматически."""
+    if re.sub(r"[-_\s]+", "", str(supplier_name).casefold()) == "techlab":
+        from price_mixer.services.techlab import parse_techlab_excel
+        from price_mixer.settings import load_app_settings
+
+        config = load_app_settings().get("api_sources", {}).get("techlab", {})
+        return parse_techlab_excel(filepath, "Techlab", settings=config)
     source_path = Path(filepath)
 
     def read_table(*, header, nrows=None):
@@ -1646,6 +1652,8 @@ def consolidate_simple(all_data):
         result["Гарантия"] = _single_warranty_values(best)
         result["Дней доставки"] = _single_delivery_values(best)
         result["РРЦ"] = _rrc_values(best)
+        if "onliner_url" in best.columns:
+            result["Ссылка"] = _text_series(best, "onliner_url")
 
         # Almost all source keys are unique. Run the richer aggregation helpers
         # only for actual duplicate groups instead of once per source row.

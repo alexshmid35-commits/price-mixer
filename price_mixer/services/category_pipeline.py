@@ -4,6 +4,8 @@ import re
 
 import pandas as pd
 
+from price_mixer.services.product_type_categories import specific_product_category
+
 GLOBAL_VISIBILITY_KEY = "__global__"
 
 _MARKUP_CATEGORY_ALWAYS_RECHECK = {
@@ -144,6 +146,9 @@ def get_effective_category(row, overrides=None, build_item_category_keys=None, i
 
 
 def row_category(row, overrides=None, build_item_category_keys=None, infer_category=None):
+    product_type = specific_product_category(row.get("Название", ""))
+    if product_type:
+        return product_type
     existing = str(row.get("Категория", "")).strip()
     if existing:
         inferred = (infer_category or (lambda name: ""))(row.get("Название", ""))
@@ -299,6 +304,9 @@ def apply_visibility_filter(
         effective = row_category(row, overrides, build_item_category_keys, infer_category)
         if effective:
             categories.append(effective)
+        product_type = specific_product_category(row.get("Название", ""))
+        if product_type:
+            categories.append(product_type)
         if callable(normalize_category):
             categories = [normalize_category(category) for category in categories]
         categories = [category for category in categories if str(category or "").strip()]

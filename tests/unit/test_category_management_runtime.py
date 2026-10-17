@@ -201,10 +201,10 @@ def test_visibility_canonicalizes_supplier_and_saves_successful_update():
 
     assert result == ({"status": "ok", "supplier": "__all__"}, 200)
     assert calls["payload"]["supplier"] == "N-Tech"
-    assert calls["current"] == {"__all__": ["RAM"]}
+    assert calls["current"] == {"__all__": ["Ram"]}
     assert calls["load_path"] == "session"
     assert calls["save_path"] == "session"
-    assert calls["saved"] == {"__all__": ["SSD", "Мышь"]}
+    assert calls["saved"] == {"__all__": ["Ssd", "Мышь"]}
 
 
 def test_visibility_does_not_save_invalid_update():

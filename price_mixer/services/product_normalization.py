@@ -7,6 +7,8 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 
+from price_mixer.services.product_type_categories import PRODUCT_TYPE_TITLES, specific_product_category
+
 
 def normalize_onliner_id(value):
     if value is None:
@@ -86,6 +88,10 @@ def infer_category(name):
     text = str(name or "").strip().lower()
     if not text:
         return "Без категории"
+
+    product_type = specific_product_category(text)
+    if product_type:
+        return product_type
 
     text_without_prefix = re.sub(r"^\[[^\]]+\]\s*", "", text).strip()
     norm = re.sub(r"[^a-zа-я0-9\+\s\-]", " ", text)
@@ -713,8 +719,10 @@ def normalize_catalog_category_name(raw_name, available_categories=None):
         return direct
     preserve_titles = {
         "офисные кресла и стулья",
+        "автомобильная акустика",
+        "fm-модуляторы",
     }
-    if text.lower() in preserve_titles:
+    if text.lower() in preserve_titles or text.casefold() in PRODUCT_TYPE_TITLES:
         return text
 
     aliases = {
