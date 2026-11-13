@@ -12,6 +12,7 @@ import time
 import uuid
 
 from price_mixer.logging_config import get_logger, log_context
+from price_mixer.services.tradex_pc import is_tradex_pc_name
 
 
 TIER_ORDER_SQL = (
@@ -42,6 +43,8 @@ def is_separate_pevm_row(
         return bool(is_ntech_pevm_name(name))
     if supplier == "IVEN":
         return bool(is_iven_pevm_name(name))
+    if supplier == "Tradex":
+        return is_tradex_pc_name(name)
     return False
 
 

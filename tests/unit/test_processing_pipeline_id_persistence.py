@@ -19,6 +19,8 @@ def _run_upload(
     *,
     ensure_category_column=None,
     apply_saved_markups_to_df=None,
+    id_cache=None,
+    cache_key_for_name=None,
 ):
     source = tmp_path / "prices.xlsx"
     source.touch()
@@ -41,7 +43,7 @@ def _run_upload(
         load_manual_id_bindings=lambda: dict(bindings),
         expand_iven_pc_manual_aliases=lambda records: (records, False),
         save_manual_id_bindings=lambda records: None,
-        load_id_cache=lambda: {},
+        load_id_cache=lambda: dict(id_cache or {}),
         sanitize_id_cache=lambda cache: (cache, False),
         save_id_cache=lambda cache: None,
         build_id_fanout_map=lambda cache: {},
@@ -52,8 +54,8 @@ def _run_upload(
         allow_manual_binding_for_supplier=lambda supplier, name, category: True,
         lookup_manual_binding_for_name=lookup,
         id_cache_keys_for_iven_pc_name=lambda name: [],
-        get_id_cache_key_for_name=lambda name: "",
-        is_trusted_cached_id=lambda *args, **kwargs: False,
+        get_id_cache_key_for_name=cache_key_for_name or (lambda name: ""),
+        is_trusted_cached_id=lambda *args, **kwargs: bool(id_cache),
         iven_pc_onliner_id_matches_name=lambda name, oid: False,
         clear_duplicate_onliner_ids_for_suppliers=lambda df, suppliers: 0,
         write_consolidated_df=lambda session_dir, df: (_ for _ in ()).throw(
@@ -90,6 +92,28 @@ def test_new_upload_restores_different_ids_for_same_name_across_all_suppliers(tm
 
     assert uploaded["OnlinerID"].tolist() == ids
     assert uploaded["Ссылка"].tolist() == ["u111", "u222", "u333", "u444", "u555"]
+
+
+def test_wouk_manual_id_survives_new_price_without_spreading_to_other_suppliers(tmp_path):
+    name = "WOUK Game N000021BK"
+    source = pd.DataFrame({
+        "Поставщик": ["Tradex", "IVEN"], "Название": [name, name],
+        "OnlinerID": ["", ""], "Ссылка": ["", ""], "Категория": ["Компьютеры", "Компьютеры"],
+    })
+    bindings = {supplier_scoped_binding_key(normalize_name_key(name), "Tradex"): build_supplier_binding_record("123", "url", "Tradex")}
+    _, uploaded = _run_upload(tmp_path, source, bindings)
+    assert uploaded["OnlinerID"].tolist() == ["123", ""]
+
+
+def test_wouk_does_not_receive_a_foreign_id_from_the_old_global_cache(tmp_path):
+    source = pd.DataFrame({
+        "Поставщик": ["Tradex"], "Название": ["WOUK Game N000021BK"],
+        "OnlinerID": [""], "Категория": ["Компьютеры"],
+    })
+    _, uploaded = _run_upload(
+        tmp_path, source, {}, id_cache={"shared": {"id": "wrong"}}, cache_key_for_name=lambda _: "shared",
+    )
+    assert uploaded["OnlinerID"].tolist() == [""]
 
 
 def test_new_upload_applies_block_only_to_its_supplier(tmp_path):

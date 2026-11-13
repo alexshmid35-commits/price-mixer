@@ -92,6 +92,7 @@ def build_id_replace_candidates_payload(
                 "strict_article_conflict",
                 "tgpc_code_mismatch",
                 "tgpc_gpu_mismatch",
+                "wouk_code_mismatch",
             }
             if comparison_reason in hard_mismatch_reasons:
                 continue

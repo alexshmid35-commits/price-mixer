@@ -1,6 +1,8 @@
 """API source runtime, download, and fetch worker helpers."""
 
 import json
+import hashlib
+import math
 import os
 import re
 import shlex
@@ -26,6 +28,72 @@ SOURCE_FETCH_LOCK = threading.RLock()
 IVEN_SOURCE_KEYS = {"iven", "iven_zakaz"}
 IVEN_DOWNLOAD_LOCK = threading.RLock()
 SOURCE_RUNTIME_DIR = get_runtime_paths().cache_dir / "source_runtime"
+
+
+class IvenPricePendingError(RuntimeError):
+    """IVEN accepted the request but is still generating the workbook."""
+
+
+class IvenRateLimitError(RuntimeError):
+    def __init__(self, retry_after):
+        self.retry_after = max(1, min(86400, int(retry_after)))
+        super().__init__(f"IVEN ограничил частоту скачивания. Повторная загрузка через {math.ceil(self.retry_after / 60)} мин.")
+
+
+def _iven_cooldown_path(url):
+    return SOURCE_RUNTIME_DIR / "iven_cooldowns" / (hashlib.sha256(url.encode()).hexdigest() + ".json")
+
+
+def _remember_iven_cooldown(url, error):
+    save_dict(_iven_cooldown_path(url), {"retry_at": time.time() + error.retry_after})
+
+
+def _transport_error(stderr, default):
+    text = (stderr or b"").decode("utf-8", errors="ignore")
+    lines = re.findall(r"(?m)^(?:curl:|ssh:|Read from remote host|client_loop:).*$", text)
+    return re.sub(r"https?://\S+", "[URL]", "\n".join(lines)) or default
+
+
+def _validate_iven_download(target_path, response_headers=""):
+    path = Path(target_path)
+    preview = ""
+    if path.exists():
+        with path.open("rb") as handle:
+            raw = handle.read(4096)
+        preview = raw.decode("utf-8", errors="ignore").casefold().replace("ё", "е")
+    if re.search(r"(?im)^HTTP/\S+\s+429\b", response_headers) or "слишком частое" in preview or "too many requests" in preview:
+        retry = re.findall(r"(?im)^Retry-After:\s*(\d+)\s*$", response_headers)
+        body_delay = re.search(r"через\s+(\d+)\s*(мин|сек)", preview)
+        delay = int(retry[-1]) if retry else (int(body_delay[1]) * (60 if body_delay[2] == "мин" else 1) if body_delay else 600)
+        raise IvenRateLimitError(delay)
+    if path.exists() and zipfile.is_zipfile(path):
+        return
+    if any(marker in preview for marker in ("bad password", "bad login", "unauthorized")):
+        raise PermissionError("IVEN отклонил логин или пароль")
+    if re.search(r"прайс.{0,60}(?:формиру|генериру)|повторите\s+запрос\s+через\s+\d+\s+сек", preview):
+        raise IvenPricePendingError("IVEN формирует прайс. Повторю запрос через 5 секунд.")
+    raise RuntimeError("IVEN вернул поврежденный файл вместо XLSX")
+
+
+def _wait_for_iven_price(download, target_path, source_key, client_key, *, max_waits=24):
+    deadline = time.monotonic() + 120
+    for attempt in range(max_waits + 1):
+        if attempt and time.monotonic() >= deadline:
+            raise TimeoutError("IVEN пока не подготовил прайс. Лимит ожидания исчерпан, попробуйте позже.")
+        try:
+            download()
+            return
+        except IvenPricePendingError:
+            Path(target_path).unlink(missing_ok=True)
+            if attempt == max_waits or time.monotonic() >= deadline:
+                raise TimeoutError("IVEN пока не подготовил прайс. Лимит ожидания исчерпан, попробуйте позже.")
+            LOGGER.info("IVEN price generation pending source=%s poll=%s", source_key, attempt + 1)
+            update_source_runtime(
+                source_key, client_key=client_key, status="waiting", ready=False,
+                progress=5, downloaded=0, total_bytes=0,
+                message=f"IVEN формирует прайс. Жду готовности ({attempt + 1}/{max_waits}), повтор через 5 сек.",
+            )
+            time.sleep(5)
 
 
 def get_api_source_status_key(session_obj):
@@ -502,6 +570,7 @@ def ssh_download_to_path(
         curl_parts.append("-k")
     if is_iven_source(source_key):
         curl_parts.append("--http1.1")
+        curl_parts.extend(["--dump-header", "/dev/stderr"])
     for key, value in headers.items():
         curl_parts.extend(["-H", f"{key}: {value}"])
     curl_parts.append("$URL")
@@ -556,10 +625,12 @@ def ssh_download_to_path(
             raise
 
     if proc.returncode != 0:
-        err = (stderr or b"").decode("utf-8", errors="ignore").strip()
+        err = _transport_error(stderr, f"SSH fallback exited with code {proc.returncode}")
         raise RuntimeError(err or f"SSH fallback exited with code {proc.returncode}")
     size = target_path.stat().st_size if target_path.exists() else 0
-    if size <= 0 or not zipfile.is_zipfile(target_path):
+    if is_iven_source(source_key):
+        _validate_iven_download(target_path, (stderr or b"").decode("utf-8", errors="ignore"))
+    elif size <= 0 or not zipfile.is_zipfile(target_path):
         raise RuntimeError("Резервный сервер вернул поврежденный файл вместо XLSX")
     update_source_runtime(
         source_key,
@@ -600,6 +671,8 @@ def curl_download_to_path(url, target_path, verify_ssl, source_key, client_key, 
         cmd.append("-k")
     if is_iven:
         cmd.append("--http1.1")
+        cmd.extend(["--connect-timeout", "15", "--max-time", "180"])
+        cmd.extend(["--dump-header", "/dev/stderr" if os.name != "nt" else "-"])
     for key, value in headers.items():
         cmd.extend(["-H", f"{key}: {value}"])
     cmd.append(url)
@@ -635,18 +708,12 @@ def curl_download_to_path(url, target_path, verify_ssl, source_key, client_key, 
         proc.kill()
         raise
     if proc.returncode != 0 and not completed_early:
-        err = (stderr or b"").decode("utf-8", errors="ignore").strip()
+        err = _transport_error(stderr, f"curl exited with code {proc.returncode}")
         raise RuntimeError(err or f"curl exited with code {proc.returncode}")
     size = target_path.stat().st_size if target_path.exists() else 0
-    if is_iven and (size <= 0 or not zipfile.is_zipfile(target_path)):
-        preview = ""
-        try:
-            preview = target_path.read_bytes()[:256].decode("utf-8", errors="ignore").strip().lower()
-        except Exception:
-            pass
-        if "bad password" in preview or "bad login" in preview or "unauthorized" in preview:
-            raise PermissionError("IVEN отклонил логин или пароль")
-        raise RuntimeError("IVEN вернул поврежденный файл вместо XLSX")
+    if is_iven:
+        header_bytes = (_stdout or b"") if os.name == "nt" else (stderr or b"")
+        _validate_iven_download(target_path, header_bytes.decode("utf-8", errors="ignore"))
     update_source_runtime(source_key, client_key=client_key, downloaded=size, total_bytes=total or size, progress=100)
 
 
@@ -665,6 +732,9 @@ def curl_download_to_path_with_retries(
     attempts = max(1, int(attempts or 1))
     last_error = None
     fallback_host = iven_ssh_fallback_host(source_key)
+    retry_at = float(load_dict(_iven_cooldown_path(url)).get("retry_at", 0) or 0)
+    if retry_at > time.time():
+        raise IvenRateLimitError(math.ceil(retry_at - time.time()))
     for attempt in range(1, attempts + 1):
         if attempt > 1:
             update_source_runtime(
@@ -676,26 +746,38 @@ def curl_download_to_path_with_retries(
                 ready=False,
             )
         try:
-            curl_download_to_path(url, target_path, verify_ssl, source_key, client_key, headers=headers)
+            _wait_for_iven_price(
+                lambda: curl_download_to_path(url, target_path, verify_ssl, source_key, client_key, headers=headers),
+                target_path, source_key, client_key,
+            )
             return
         except Exception as exc:
             last_error = exc
-            if isinstance(exc, PermissionError):
+            if isinstance(exc, IvenRateLimitError):
+                _remember_iven_cooldown(url, exc)
+                target_path.unlink(missing_ok=True)
+                raise
+            if isinstance(exc, (PermissionError, TimeoutError)):
                 target_path.unlink(missing_ok=True)
                 break
             if fallback_host and _is_retryable_iven_network_error(exc):
                 try:
                     target_path.unlink(missing_ok=True)
-                    ssh_download_to_path(
-                        url,
-                        target_path,
-                        verify_ssl,
-                        source_key,
-                        client_key,
-                        headers=headers,
-                        host=fallback_host,
+                    _wait_for_iven_price(
+                        lambda: ssh_download_to_path(
+                            url, target_path, verify_ssl, source_key, client_key,
+                            headers=headers, host=fallback_host,
+                        ),
+                        target_path, source_key, client_key,
                     )
                     return
+                except IvenRateLimitError as rate_error:
+                    _remember_iven_cooldown(url, rate_error)
+                    target_path.unlink(missing_ok=True)
+                    raise
+                except (PermissionError, TimeoutError):
+                    target_path.unlink(missing_ok=True)
+                    raise
                 except Exception as fallback_exc:
                     last_error = RuntimeError(
                         f"Локальная и резервная загрузка IVEN не удались: {fallback_exc}"
@@ -1125,6 +1207,7 @@ def _fetch_api_source_worker(
             ready=False,
             status="error",
             message=error_message,
+            retry_after=exc.retry_after if isinstance(exc, IvenRateLimitError) else 0,
             finished_at=time.time(),
         )
         finished_at = int(time.time())

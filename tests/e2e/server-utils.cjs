@@ -97,6 +97,7 @@ async function startServer() {
     ADMIN_USERNAME: adminUsername,
     ADMIN_PASSWORD: adminPassword,
     FLASK_SECRET_KEY: 'e2e-flask-secret-key-long-and-isolated',
+    GOOGLE_SHEETS_SPREADSHEET_ID: '',
     PRICE_MIXER_ENV: 'development',
     PRICE_MIXER_PORT: '5011',
     PRICE_MIXER_STATE_DIR: runtimeDirs.state,

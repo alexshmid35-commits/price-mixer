@@ -453,6 +453,12 @@ class SessionProductStore:
             if current is None:
                 missing = True
             elif str(current["rows_sha256"]) == digest and bool(current["complete"]):
+                if resolved_badges is not None and json.loads(str(current["badge_counts_json"] or "{}")) != resolved_badges:
+                    connection.execute(
+                        "UPDATE session_product_meta SET badge_counts_json=? "
+                        "WHERE session_id=? AND revision=? AND rows_sha256=?",
+                        (json.dumps(resolved_badges, ensure_ascii=False, sort_keys=True), session_id, int(current["revision"]), digest),
+                    )
                 return {
                     "status": "ok",
                     "changed": False,

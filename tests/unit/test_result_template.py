@@ -32,6 +32,7 @@ def test_duplicate_id_counter_visible_for_multiple_suppliers():
     assert 'id="run-all-pevm-checks-btn"' in html
     assert 'id="autofill-ntech-pc-btn"' in html
     assert 'id="autofill-iven-pc-btn"' in html
+    assert 'id="autofill-tradex-pc-btn"' in html
     assert 'src="/static/js/result-pevm.js"' in html
     assert 'data-generic-review-key=' not in html
     assert 'id="cpu-review-btn"' not in html
@@ -55,7 +56,8 @@ def test_duplicate_id_counter_visible_for_multiple_suppliers():
     pevm_text = pevm_js.read_text(encoding="utf-8")
     assert "'/api/autofill-ntech-pc-ids'" in pevm_text
     assert "'/api/autofill-iven-pc-ids'" in pevm_text
-    assert "['ntech', 'iven'].reduce" in pevm_text
+    assert "'/api/autofill-tradex-pc-ids'" in pevm_text
+    assert "var keys = Object.keys(profiles)" in pevm_text
 
 
 def test_gsheet_import_button_forces_fresh_download():

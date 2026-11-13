@@ -10,6 +10,25 @@ from price_mixer.workers.durable_worker import DurableWorker
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_iven_rate_limit_defers_worker_job_without_blocking_other_jobs(tmp_path, monkeypatch):
+    from price_mixer.workers import durable_worker
+    now = [1000]
+    queue = DurableJobQueue(tmp_path / 'jobs.db', clock=lambda: now[0])
+    job = queue.enqueue('api_source_fetch', {'source_key': 'iven_zakaz', 'client_key': 'rate-client'})
+    def fetch(*args, **kwargs):
+        api_sources.update_source_runtime('iven_zakaz', 'rate-client', status='error', running=False,
+            retry_after=537, message='IVEN ограничил частоту скачивания.')
+    monkeypatch.setattr(durable_worker, 'fetch_api_source_worker', fetch)
+    monkeypatch.setattr(api_sources, 'SOURCE_RUNTIME_DIR', tmp_path / 'runtime')
+    worker = DurableWorker(queue, uploads_dir=tmp_path / 'uploads', settings_loader=lambda: {})
+    worker.run_once()
+    record = queue.get(job['job_id'])
+    assert record['state'] == 'queued'
+    assert record['available_at'] == 1537
+    assert api_sources.get_source_runtime('iven_zakaz', 'rate-client')['status'] == 'waiting'
+    assert queue.claim('other', kinds={'api_source_fetch'}) is None
+
+
 def test_durable_queue_persists_claim_and_completion(tmp_path):
     path = tmp_path / "jobs.db"
     queue = DurableJobQueue(path)

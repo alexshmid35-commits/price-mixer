@@ -38,6 +38,9 @@ _MARKUP_CATEGORY_ALWAYS_RECHECK = {
 
 def _markup_category_needs_recheck(name, current_category):
     current = str(current_category or "").strip()
+    product_type = specific_product_category(name)
+    if product_type and product_type != current:
+        return True
     if not current or current in _MARKUP_CATEGORY_ALWAYS_RECHECK:
         return True
     text = str(name or "").strip().lower()

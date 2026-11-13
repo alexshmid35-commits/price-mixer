@@ -138,7 +138,12 @@ from price_mixer.services.category_repair_runtime import (
     CategoryRepairRuntime,
     json_row_needs_category_repair as _category_json_row_needs_repair,
 )
-from price_mixer.services.product_type_categories import specific_product_category
+from price_mixer.services.product_type_categories import specific_product_category, is_appliance_accessory
+from price_mixer.services.tradex_pc import (
+    extract_tradex_pc_code,
+    find_tradex_pc_candidates,
+    is_tradex_pc_name,
+)
 from price_mixer.services.consolidated_io import (
     consolidated_json_rows as _consolidated_json_rows,
     dataframe_from_consolidated_json_rows as _consolidated_dataframe_from_rows,
@@ -522,6 +527,11 @@ autofill_iven_pc_status = {
     "message": "",
 }
 AUTOFILL_IVEN_PC_LOCK = threading.RLock()
+autofill_tradex_pc_status = {
+    "running": False, "total": 0, "done": 0, "applied": 0,
+    "skipped": 0, "percent": 0, "items": [], "message": "",
+}
+AUTOFILL_TRADEX_PC_LOCK = threading.RLock()
 id_review_status = {
     "running": False,
     "total": 0,
@@ -1399,6 +1409,9 @@ def _native_catalog_category_for_product(raw_category, product_name):
     if raw.casefold() == "thermal" and re.search(r"\bтермо[\s-]?принтер\b|\bпринтер\b", name, flags=re.IGNORECASE):
         return "Принтеры"
     category = normalize_catalog_category_name(raw)
+    if is_appliance_accessory(name):
+        allowed = {"Пылесосы", "Автомобильные пылесосы", "Специнструмент"} if re.search(r"пылесос", name, re.IGNORECASE) else {"Очистители и мойки воздуха", "Очистители воздуха"}
+        return category if category in allowed else ""
     if category != "Кабели и переходники":
         return category
     inferred = normalize_catalog_category_name(infer_category(name))
@@ -1766,6 +1779,12 @@ def db_find_top_candidates(product_name, top_n=5, min_score=0.40, allow_b2b=True
         top_n=top_n,
         min_score=min_score,
         allow_b2b=allow_b2b,
+    )
+
+
+def db_search_tradex_pc_candidates(local_name, limit=12):
+    return find_tradex_pc_candidates(
+        local_name, search=_onliner_db_search, get_product_by_id=db_get_product_by_id, limit=limit,
     )
 
 
@@ -2168,6 +2187,7 @@ def _strict_candidate_allowed(local_name, candidate_name):
         "paren_model",
         "motherboard_model",
         "tgpc_code_exact",
+        "wouk_code_exact",
     }
     if bool(comparison.get("match", False)) and (categories_compatible or not local_prefix_category) and (
         comparison_reason in strong_identity_reasons and comparison_score >= 0.74
@@ -2811,7 +2831,7 @@ def _finalize_processed_session(session_id, session_dir, output_path):
 
 
 def _process_supplier_files(file_entries, session_id=None, session_dir=None):
-    return _processing_process_supplier_files(
+    result = _processing_process_supplier_files(
         file_entries,
         session_id=session_id,
         session_dir=session_dir,
@@ -2849,6 +2869,12 @@ def _process_supplier_files(file_entries, session_id=None, session_dir=None):
         maybe_cleanup_old_uploads=_maybe_cleanup_old_uploads,
         last_active_session_dir=LAST_ACTIVE_SESSION_DIR,
     )
+    if result.get("session_id"):
+        try:
+            _maybe_refresh_catalog_after_processing()
+        except Exception:
+            APP_LOGGER.exception("weekly catalog refresh could not start")
+    return result
 
 
 def _infer_supplier_from_filename(filename, app_settings=None):
@@ -3128,7 +3154,7 @@ def _main_table_badge_counts(rows):
         for key in (
             "cpu", "board", "monitor", "gpu", "ram", "ssd", "psu", "case", "hdd",
             "cooler", "printer", "peripheral", "usb", "network", "ups", "keyboard",
-            "mouse", "headphones", "audio", "misc", "ntech-pc", "iven-pc",
+            "mouse", "headphones", "audio", "misc", "ntech-pc", "iven-pc", "tradex-pc",
             "iven-laptop", "iven-zakaz-laptop", "tradex-laptop",
         )
     }
@@ -3160,6 +3186,9 @@ def _main_table_badge_counts(rows):
         supplier_token = re.sub(r"[\s-]+", "_", supplier.lower()).strip("_")
         if supplier_token in {"iven", "ивен"} and _is_iven_pc_name(name):
             counts["iven-pc"] += 1
+            continue
+        if supplier_token in {"tradex", "традекс"} and is_tradex_pc_name(name):
+            counts["tradex-pc"] += 1
             continue
         if supplier_token in {"iven", "ивен"} and _is_iven_laptop_name(name, category):
             counts["iven-laptop"] += 1
@@ -3442,6 +3471,36 @@ def _autofill_iven_pc_worker(session_dir, max_items=0):
     )
 
 
+@_serialized_price_mutation
+def _autofill_tradex_pc_worker(session_dir, max_items=0):
+    return _autofill_run_tgpc_pc(
+        session_dir,
+        max_items=max_items,
+        status=autofill_tradex_pc_status,
+        lock=AUTOFILL_TRADEX_PC_LOCK,
+        read_consolidated_df=read_consolidated_json_fast_df,
+        load_app_settings=load_app_settings,
+        row_category=row_category,
+        is_tgpc_pc_name=is_tradex_pc_name,
+        db_search_tgpc_pc_candidates=db_search_tradex_pc_candidates,
+        get_id_cache_key_for_name=_get_id_cache_key_for_name,
+        normalize_name_key=_normalize_name_key,
+        load_id_cache=load_id_cache,
+        save_id_cache=save_id_cache,
+        load_manual_id_bindings=load_manual_id_bindings,
+        save_manual_id_bindings=save_manual_id_bindings,
+        append_id_change_journal=append_id_change_journal,
+        write_consolidated_df=lambda target, frame: write_consolidated_df_background(target, frame, label="autofill-tradex-pc"),
+        write_consolidated_json=write_consolidated_json,
+        target_supplier_names=["Tradex"],
+        pc_label="Компьютеры Tradex",
+        action_name="autofill_tradex_pc_ids",
+        source_name="db_autofill_tradex_pc_ids",
+        get_id_cache_keys_for_name=lambda _name: [],
+        get_match_identity_for_name=extract_tradex_pc_code,
+    )
+
+
 def _start_pevm_autofill(status, lock, status_label, worker):
     session_dir = get_active_session_dir()
     payload = request.get_json(silent=True) or {}
@@ -3498,6 +3557,17 @@ def api_autofill_iven_pc_status():
     )
 
 
+def api_autofill_tradex_pc_ids():
+    return _start_pevm_autofill(
+        autofill_tradex_pc_status, AUTOFILL_TRADEX_PC_LOCK,
+        "Компьютеры Tradex", _autofill_tradex_pc_worker,
+    )
+
+
+def api_autofill_tradex_pc_status():
+    return _autofill_status_payload(autofill_tradex_pc_status, AUTOFILL_TRADEX_PC_LOCK)
+
+
 app.register_blueprint(create_autofill_bp(
     handlers={
         "/api/autofill-ntech-pc-ids": (
@@ -3516,6 +3586,8 @@ app.register_blueprint(create_autofill_bp(
             api_autofill_iven_pc_status,
             ("GET",),
         ),
+        "/api/autofill-tradex-pc-ids": (api_autofill_tradex_pc_ids, ("POST",)),
+        "/api/autofill-tradex-pc-status": (api_autofill_tradex_pc_status, ("GET",)),
     },
 ))
 
@@ -3539,6 +3611,19 @@ def _onliner_db_rebuild_payload(session_dir):
 def _onliner_db_import_gsheet_payload(payload):
     return _onliner_db_import_gsheet(
         payload,
+        normalize_name_key=_normalize_name_key,
+        start_thread=lambda target: threading.Thread(target=target, daemon=True).start(),
+    )
+
+
+def _maybe_refresh_catalog_after_processing():
+    config = load_app_settings().get("onliner_db_import", {})
+    sheet_id = str(config.get("google_sheet_id") or "").strip()
+    if not sheet_id:
+        return {"status": "not_configured"}
+    return _onliner_db_import_gsheet(
+        {"sheet_id": sheet_id, "sheet_name": config.get("google_sheet_name") or "All_Catalog", "force_refresh": True},
+        automatic=True,
         normalize_name_key=_normalize_name_key,
         start_thread=lambda target: threading.Thread(target=target, daemon=True).start(),
     )
@@ -3979,6 +4064,8 @@ def _get_manual_id_search_runtime():
             is_iven_laptop_candidate=_is_iven_laptop_candidate,
             get_review_handler=_ntech_review_handler,
             clock=time.time,
+            is_tradex_pc_name=is_tradex_pc_name,
+            search_tradex_pc_candidates=db_search_tradex_pc_candidates,
         ),
     )
 
@@ -4523,10 +4610,12 @@ def _supplier_visibility_known_categories():
 
 def _looks_like_raw_supplier_category(category):
     text = str(category or "").strip()
+    if text == "Без категории":
+        return True
     if text in {"SSD", "HDD", "ИБП", "БП", "NAS"}:
         return False
-    if len(text) < 2:
-        return False
+    if text and (len(text) < 2 or re.fullmatch(r"[\d\W]+", text)):
+        return True
     if text != text.upper():
         return False
     return bool(re.fullmatch(r"[A-ZА-ЯЁ0-9\s\-\+/_\.]+", text)) and len(text.split()) <= 2

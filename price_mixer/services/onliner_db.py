@@ -25,6 +25,7 @@ from price_mixer.services.product_normalization import (
     normalize_onliner_id,
 )
 from price_mixer.services.sqlite_runtime import connect_sqlite
+from price_mixer.services.catalog_refresh import CatalogRefreshState, last_import_summary, save_import_summary
 
 LOGGER = get_logger("price_mixer.database.catalog")
 
@@ -940,7 +941,8 @@ def stats_payload():
                     "SELECT source, COUNT(*) FROM onliner_catalog GROUP BY source ORDER BY COUNT(*) DESC"
                 ).fetchall()
             }
-        return {"total_products": total_products, "total_names": total_names, "by_source": by_source}
+            summary = last_import_summary(conn)
+        return {"total_products": total_products, "total_names": total_names, "by_source": by_source, "last_import": summary}
     except Exception:
         return {"total_products": 0, "total_names": 0, "by_source": {}}
 
@@ -1076,8 +1078,36 @@ def _catalog_rows(filepath, file_ext):
         workbook = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
         worksheet = workbook.active
         return [[str(cell.value or "") for cell in row] for row in worksheet.iter_rows()]
+    csv.field_size_limit(max(csv.field_size_limit(), 1024 * 1024))
     with open(filepath, encoding="utf-8-sig", newline="") as handle:
-        return [[str(cell) for cell in row] for row in csv.reader(handle)]
+        reader = csv.reader(handle)
+        header = next(reader, None)
+        if header is None:
+            return []
+        compact = [str(value).strip().casefold().replace("_", "") for value in header]
+        if compact == ["category", "model", "onlinerid", "specs"]:
+            # Google projection omits prices and image/URL columns unused by this import.
+            rows = [["Category", "", "Model", "", "OnlinerID", "", "", "FullName"]]
+            for row in reader:
+                padded = row + [""] * max(0, 4 - len(row))
+                rows.append([padded[0], "", padded[1], "", padded[2], "", "", padded[3]])
+            return rows
+        return [header, *reader]
+
+
+def _validate_catalog_download(filepath):
+    csv.field_size_limit(max(csv.field_size_limit(), 1024 * 1024))
+    with open(filepath, encoding="utf-8-sig", newline="") as handle:
+        header = next(csv.reader(handle), [])
+    compact = [str(value).strip().casefold().replace("_", "") for value in header]
+    projected = compact == ["category", "model", "onlinerid", "specs"]
+    full = (
+        len(compact) >= 8 and compact[0] == "category"
+        and compact[2] == "model" and compact[4] == "onlinerid"
+        and compact[7] in {"specs", "fullname"}
+    )
+    if not (projected or full):
+        raise ValueError("Google Sheets вернул неверный заголовок каталога вместо товарных колонок")
 
 
 def catalog_import_worker(
@@ -1105,6 +1135,7 @@ def _catalog_import_worker(
     normalize_name_key,
     cleanup_file: bool,
 ):
+    started = time.monotonic()
     try:
         existing_ids = set()
         try:
@@ -1128,16 +1159,20 @@ def _catalog_import_worker(
         if rows:
             rows = rows[1:]
         total = len(rows)
+        LOGGER.info("catalog file parsed rows=%s elapsed=%.2fs", total, time.monotonic() - started)
         with CATALOG_IMPORT_LOCK:
             catalog_import_status["total"] = total
             catalog_import_status["message"] = f"В файле {total:,} строк. Фильтрую новые..."
 
         inserted = 0
         categories_updated = 0
+        updated_ids = set()
+        inserted_ids = set()
         skipped = 0
         already_existing = 0
         now_ts = int(time.time())
         batch_size = 2000
+        category_cache = {}
 
         for batch_start in range(0, total, batch_size):
             batch = rows[batch_start: batch_start + batch_size]
@@ -1147,7 +1182,10 @@ def _catalog_import_worker(
             for row in batch:
                 while len(row) < 8:
                     row.append("")
-                category = normalize_catalog_category_name(row[0].strip())
+                raw_category = row[0].strip()
+                if raw_category not in category_cache:
+                    category_cache[raw_category] = normalize_catalog_category_name(raw_category)
+                category = category_cache[raw_category]
                 model_short = row[2].strip()
                 oid = normalize_onliner_id(row[4].strip())
                 full_name = row[7].strip()
@@ -1181,6 +1219,16 @@ def _catalog_import_worker(
                 if product_rows:
                     with DB_WRITE_LOCK:
                         with db_connection() as conn:
+                            batch_by_id = {item[0]: item for item in product_rows}
+                            old = {}
+                            ids = list(batch_by_id)
+                            for offset in range(0, len(ids), 800):
+                                chunk = ids[offset:offset + 800]
+                                marks = ','.join('?' for _ in chunk)
+                                old.update({r[0]: (r[1], r[2]) for r in conn.execute(
+                                    f"SELECT onliner_id,name,category FROM onliner_catalog WHERE onliner_id IN ({marks})", chunk)})
+                            changed = {oid for oid, item in batch_by_id.items() if oid in old and oid not in inserted_ids
+                                       and (old[oid][0] != item[1] or (item[3] and old[oid][1] != item[3]))}
                             conn.executemany(
                                 "INSERT INTO onliner_catalog "
                                 "(onliner_id, name, url, category, source, updated_at) VALUES (?,?,?,?,?,?) "
@@ -1195,6 +1243,8 @@ def _catalog_import_worker(
                                 "(name_key, onliner_id, raw_name) VALUES (?,?,?)",
                                 name_rows,
                             )
+                        updated_ids.update(changed)
+                        inserted_ids.update(new_product_ids)
                     for product_row in product_rows:
                         existing_ids.add(product_row[0])
                 inserted += len(new_product_ids)
@@ -1228,6 +1278,9 @@ def _catalog_import_worker(
                             inserted += len(new_product_ids)
                     except Exception as retry_exc:
                         LOGGER.error("catalog import batch retry failed: %s", retry_exc)
+                        raise
+                else:
+                    raise
 
             done = batch_start + len(batch)
             percent = round(done / total * 100) if total else 100
@@ -1253,6 +1306,11 @@ def _catalog_import_worker(
         except Exception:
             pass
         with CATALOG_IMPORT_LOCK:
+            finished_at = int(time.time())
+            summary = {"finished_at": finished_at, "inserted": inserted, "updated": len(updated_ids)}
+            with DB_WRITE_LOCK:
+                with db_connection() as conn:
+                    save_import_summary(conn, summary)
             catalog_import_status.update({
                 "running": False,
                 "done": total,
@@ -1265,18 +1323,21 @@ def _catalog_import_worker(
                     f"{already_existing:,} уже было, {categories_updated:,} категорий обновлено, "
                     f"{skipped:,} пропущено)"
                 ),
-                "finished_at": int(time.time()),
+                "finished_at": finished_at,
+                "updated": len(updated_ids),
             })
         LOGGER.info(
             "catalog import completed existing_before=%s new_inserted=%s "
-            "categories_updated=%s skipped=%s already_existing=%s total_now=%s",
+            "categories_updated=%s skipped=%s already_existing=%s total_now=%s elapsed=%.2fs",
             existing_count,
             inserted,
             categories_updated,
             skipped,
             already_existing,
             new_total,
+            time.monotonic() - started,
         )
+        return True
     except Exception as exc:
         with CATALOG_IMPORT_LOCK:
             catalog_import_status.update({
@@ -1285,6 +1346,7 @@ def _catalog_import_worker(
                 "finished_at": int(time.time()),
             })
         LOGGER.exception("catalog import failed")
+        return False
     finally:
         if cleanup_file:
             try:
@@ -1293,31 +1355,42 @@ def _catalog_import_worker(
                 pass
 
 
-def import_gsheet_payload(payload, *, normalize_name_key, start_thread: Callable[[Callable[[], None]], None]):
-    with CATALOG_IMPORT_LOCK:
-        if catalog_import_status.get("running"):
-            return {"status": "already_running", "message": "Импорт уже запущен"}, 409
-
+def import_gsheet_payload(payload, *, normalize_name_key, start_thread: Callable[[Callable[[], None]], None], automatic=False):
     payload = payload if isinstance(payload, dict) else {}
     sheet_id = str(payload.get("sheet_id", "")).strip()
     sheet_name = str(payload.get("sheet_name", "All_Catalog")).strip() or "All_Catalog"
     force_refresh = bool(payload.get("force_refresh", False))
     if not sheet_id:
         return {"status": "error", "message": "sheet_id required"}, 400
+    with CATALOG_IMPORT_LOCK:
+        if catalog_import_status.get("running"):
+            return {"status": "already_running", "message": "Импорт уже запущен"}, 409
+        refresh = CatalogRefreshState(db_connection)
+        token, reason = refresh.claim(f"{sheet_id}:{sheet_name}", automatic=automatic)
+        if not token:
+            return {"status": reason, "message": "Импорт уже запущен или каталог обновлялся недавно"}, 409 if reason == "already_running" else 200
+        _reset_import_status("Подключаюсь к Google Sheets…")
 
     def _download_and_import():
+        started = time.monotonic()
+        succeeded = False
+        temp_path = None
+        query = urllib.parse.urlencode({
+            "tqx": "out:csv", "sheet": sheet_name, "headers": "1", "tq": "select A,C,E,H",
+        })
         urls = [
+            f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?{query}",
             (
                 f"https://docs.google.com/spreadsheets/d/{sheet_id}"
                 f"/export?format=csv&sheet={urllib.parse.quote(sheet_name)}"
             ),
             (
                 f"https://docs.google.com/spreadsheets/d/{sheet_id}"
-                f"/gviz/tq?tqx=out:csv&sheet={urllib.parse.quote(sheet_name)}"
+                f"/gviz/tq?tqx=out:csv&headers=1&sheet={urllib.parse.quote(sheet_name)}"
             ),
         ]
         safe_sheet = re.sub(r"[^a-zA-Z0-9._-]+", "_", sheet_name).strip("._-") or "sheet"
-        cache_path = ONLINER_DB_GSHEET_CACHE_DIR / f"{sheet_id}_{safe_sheet}.csv"
+        cache_path = ONLINER_DB_GSHEET_CACHE_DIR / f"{sheet_id}_{safe_sheet}_core_v2.csv"
         with CATALOG_IMPORT_LOCK:
             catalog_import_status.update({
                 "running": True,
@@ -1349,10 +1422,12 @@ def import_gsheet_payload(payload, *, normalize_name_key, start_thread: Callable
             else:
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
                 tmp.close()
+                temp_path = Path(tmp.name)
                 downloaded = False
                 last_error = None
-                for url in urls:
+                for attempt, url in enumerate(urls, 1):
                     try:
+                        LOGGER.info("catalog download started attempt=%s projected=%s", attempt, attempt == 1)
                         request = urllib.request.Request(
                             url,
                             headers={"User-Agent": "Mozilla/5.0 (compatible; PriceMixer/1.0)"},
@@ -1377,10 +1452,16 @@ def import_gsheet_payload(payload, *, normalize_name_key, start_thread: Callable
                                     percent = int(received / total_size * 15) if total_size else 5
                                     with CATALOG_IMPORT_LOCK:
                                         catalog_import_status.update({"message": message, "percent": percent})
+                        _validate_catalog_download(tmp.name)
+                        LOGGER.info(
+                            "catalog download completed attempt=%s bytes=%s elapsed=%.2fs",
+                            attempt, received, time.monotonic() - started,
+                        )
                         downloaded = True
                         break
                     except Exception as exc:
                         last_error = exc
+                        LOGGER.warning("catalog download attempt failed attempt=%s error=%s", attempt, type(exc).__name__)
                         continue
                 if not downloaded:
                     raise RuntimeError(f"Не удалось скачать файл: {last_error}")
@@ -1394,16 +1475,37 @@ def import_gsheet_payload(payload, *, normalize_name_key, start_thread: Callable
                         "percent": 16,
                     })
 
-            catalog_import_worker(str(cache_path), ".csv", normalize_name_key=normalize_name_key, cleanup_file=False)
+            succeeded = catalog_import_worker(str(cache_path), ".csv", normalize_name_key=normalize_name_key, cleanup_file=False) is True
         except Exception as exc:
+            LOGGER.exception("catalog download failed elapsed=%.2fs", time.monotonic() - started)
             with CATALOG_IMPORT_LOCK:
                 catalog_import_status.update({
                     "running": False,
                     "message": f"Ошибка скачивания: {exc}",
                     "finished_at": int(time.time()),
                 })
+        finally:
+            try:
+                refresh.finish(token, success=succeeded, status=catalog_import_status)
+            except Exception:
+                LOGGER.exception("catalog refresh state persistence failed")
+            if temp_path is not None and temp_path != cache_path:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    LOGGER.warning("catalog temporary download cleanup failed")
 
-    start_thread(_download_and_import)
+    try:
+        start_thread(_download_and_import)
+    except Exception:
+        with CATALOG_IMPORT_LOCK:
+            catalog_import_status.update({
+                "running": False, "message": "Ошибка: не удалось запустить импорт",
+                "finished_at": int(time.time()),
+            })
+        LOGGER.exception("catalog import thread did not start")
+        refresh.finish(token, success=False, status=catalog_import_status)
+        return {"status": "error", "message": "Не удалось запустить импорт"}, 500
     return {"status": "started", "message": "Скачиваю и импортирую…"}
 
 
@@ -1434,4 +1536,8 @@ def import_csv_payload(file, *, normalize_name_key, start_thread: Callable[[Call
 
 def import_status_payload():
     with CATALOG_IMPORT_LOCK:
-        return dict(catalog_import_status)
+        local = dict(catalog_import_status)
+    shared = CatalogRefreshState(db_connection).status()
+    if not local.get("running") and (shared.get("running") or (shared.get("finished_at") or 0) >= (local.get("finished_at") or 0)):
+        return {**local, **shared}
+    return local

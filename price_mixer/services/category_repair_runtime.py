@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from price_mixer.product_schema import ProductField, ProductWireIndex
-from price_mixer.services.product_type_categories import specific_product_category
+from price_mixer.services.product_type_categories import specific_product_category, is_appliance_accessory
 
 
 def json_row_needs_category_repair(
@@ -28,6 +28,8 @@ def json_row_needs_category_repair(
     if normalize_internal_category_name(raw) != raw:
         return True
     current = str(current_category or "").strip()
+    if re.fullmatch(r"[\d\W]+|[A-Za-zА-Яа-яЁё]", current):
+        return True
     text = str(name or "").strip().lower()
     text_without_prefix = re.sub(r"^\[[^\]]+\]\s*", "", text).strip()
     inferred = canonical_ui_category_name(normalize_catalog_category_name(infer_category(name)))
@@ -242,6 +244,8 @@ class CategoryRepairRuntime:
                 category_name = exact
             elif explicit:
                 category_name = explicit
+            elif is_appliance_accessory(product_name):
+                category_name = manual or self.sorting_review_category(current)
             elif onliner_id:
                 category_name = self.strong_inferred_category_for_product(product_name) or self.sorting_review_category(
                     current

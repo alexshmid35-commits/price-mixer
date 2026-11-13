@@ -7,6 +7,20 @@ from price_mixer.services.product_type_categories import specific_product_catego
 
 
 CASES = [
+    ("Картридж HP LaserJet 106A для MFP M134", "Картриджи"),
+    ("G&G toner-cartridge for Kyocera M2540dn (GG-TK1178)", "Картриджи"),
+    ("G&G NT-CB436A", "Картриджи"),
+    ("G&G GG-CEXV64Y для Canon imageRUNNER", "Картриджи"),
+    ('G&G (GG-AT 60P) DT, 203 dpi, USB, TSPL', "Принтеры"),
+    ('1.92Tb Netac ENSP401 (NS1T921P4HH6PA01), 2.5", U.3', "SSD"),
+    ('3.84Tb Lenovo ThinkSystem 4XB7A38275, 2.5", SATA III', "SSD"),
+    ("4 пары для 110 кросса LANMASTER кат. 6 (LAN-S110P4/6)", "Сеть"),
+    ("Щёточный ввод ЦМО КВ-Щ-55.420А-9005", "Аксессуары для серверов"),
+    ("Таблетки для посудомоечных машин Finish Powerball Quantum", "Бытовая химия"),
+    ("Технический фен Зубр ФТ-1600", "Промышленные фены"),
+    ("Промышленный фен Bosch", "Промышленные фены"),
+    ("Дрель-миксер Зубр ЗДМ-1200", "Дрели"),
+    ("Миксер планетарный Starwind SPM2151", "Кухонные комбайны, машины и планетарные миксеры"),
     ("Чайник электрический Bosch TWK3P420 1.7л. (корпус: нержавеющая сталь)", "Электрочайники и термопоты"),
     ("Термопот Starwind корпус металл USB", "Электрочайники и термопоты"),
     ("Сплит-система Centek CT-65K07 WiFi белый", "Кондиционеры"),
@@ -79,12 +93,12 @@ def test_product_type_precedes_incidental_pc_attributes(name, category):
 
 @pytest.mark.parametrize("name", [
     "Корпус Chieftec ATX с вентиляторами", "Кулер ID-Cooling SE-224 для процессора",
-    "Водяное охлаждение Arctic Liquid Freezer III 360", "Картридж HP LaserJet 106A",
+    "Водяное охлаждение Arctic Liquid Freezer III 360",
     "Кулер Cooler Master Hyper 212", "Вентилятор 12x12 Jonsbo SL-120B",
     "Wi-Fi роутер TP-Link", "Материнская плата ASUS Wi-Fi",
     "Жесткий диск Seagate NAS IronWolf ST8000VN002", "Кабель D-Link ANT24 антенный",
     "Мобильный аккумулятор Xiaomi 10000mAh", "Кронштейн для телевизора с крепежом",
-    "Строительный миксер Bosch", "Промышленный фен Bosch", "Кондиционер для белья",
+    "Строительный миксер Bosch", "Кондиционер для белья",
     "Набор инструментов для СЖО Thermaltake Pacific",
 ])
 def test_specific_rules_do_not_confuse_pc_hardware_and_accessories(name):
@@ -93,7 +107,7 @@ def test_specific_rules_do_not_confuse_pc_hardware_and_accessories(name):
 
 @pytest.mark.parametrize("supplier", ["IVEN", "IVEN_zakaz", "Tradex", "N-Tech", "Techlab"])
 def test_blocked_product_type_cannot_bypass_visibility_with_a_stale_pc_category(supplier):
-    name = CASES[0][0]
+    name = "Чайник электрический Bosch TWK3P420 1.7л. (корпус: нержавеющая сталь)"
     source = pd.DataFrame([
         {"Название": name, "Категория": "Корпус", "Поставщик": supplier},
         {"Название": "Корпус Chieftec ATX", "Категория": "Корпус", "Поставщик": supplier},
@@ -106,3 +120,20 @@ def test_blocked_product_type_cannot_bypass_visibility_with_a_stale_pc_category(
     assert visible(["Электрочайники и термопоты"])["Название"].tolist() == ["Корпус Chieftec ATX"]
     assert len(visible([])) == 2
     assert source["Категория"].tolist() == ["Корпус", "Корпус"]
+
+
+@pytest.mark.parametrize("name", [
+    "Фильтр для пылесоса Trouver Filter (RHF17)",
+    "Фильтр для очистителя воздуха Dreame Pad (DVK7)",
+    "Набор аксессуаров для пылесоса Milwaukee M12 DE",
+    "Компоненты для пылесоса Trouver Water Filter",
+])
+def test_accessory_does_not_inherit_device_type_from_compatibility(name):
+    assert specific_product_category(name) == ""
+    assert infer_category(name) == "Без категории"
+    assert row_category({"Название": name, "Категория": "Каталог аксессуаров"}) == "Каталог аксессуаров"
+
+
+@pytest.mark.parametrize("name", ["1 unknown product", "G&G unknown model", "4 неизвестных товара"])
+def test_unknown_names_do_not_create_first_word_categories(name):
+    assert infer_category(name) == "Без категории"

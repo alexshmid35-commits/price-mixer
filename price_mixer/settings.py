@@ -545,7 +545,9 @@ def _overlay_env_secrets(data):
     iven = sources.setdefault("iven", {})
     if not str(iven.get("file_url") or "").strip():
         iven["file_url"] = cfg.iven_file_url
-    sources.setdefault("iven_zakaz", {})
+    iven_zakaz = sources.setdefault("iven_zakaz", {})
+    if cfg.iven_zakaz_file_url:
+        iven_zakaz["file_url"] = cfg.iven_zakaz_file_url
     tradex = sources.setdefault("tradex", {})
     if not str(tradex.get("file_url") or "").strip():
         tradex["file_url"] = cfg.tradex_file_url

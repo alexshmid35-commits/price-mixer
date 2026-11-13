@@ -13,6 +13,12 @@
             startUrl: '/api/autofill-iven-pc-ids',
             statusUrl: '/api/autofill-iven-pc-status',
             buttonId: 'autofill-iven-pc-btn'
+        },
+        tradex: {
+            label: 'Компьютеры Tradex',
+            startUrl: '/api/autofill-tradex-pc-ids',
+            statusUrl: '/api/autofill-tradex-pc-status',
+            buttonId: 'autofill-tradex-pc-btn'
         }
     };
     var active = false;
@@ -149,16 +155,17 @@
         active = true;
         setButtonsDisabled(true);
         var completed = 0;
-        ['ntech', 'iven'].reduce(function(chain, key){
+        var keys = Object.keys(profiles);
+        keys.reduce(function(chain, key){
             return chain.then(function(){
-                setStatus('Проверка ' + (completed + 1) + ' из 2: ' + profiles[key].label);
+                setStatus('Проверка ' + (completed + 1) + ' из ' + keys.length + ': ' + profiles[key].label);
                 return runProfile(key, false).then(function(){
                     completed += 1;
                 });
             });
         }, Promise.resolve()).then(function(){
             setProgress(100, false);
-            setStatus('Обе проверки ПЭВМ завершены.');
+            setStatus('Все проверки ПЭВМ завершены.');
         }).catch(function(error){
             setStatus('Проверки остановлены: ' + error.message, true);
         }).finally(function(){

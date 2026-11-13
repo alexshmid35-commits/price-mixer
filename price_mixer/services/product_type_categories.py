@@ -2,9 +2,20 @@
 
 from functools import lru_cache
 import re
+from price_mixer.services.tradex_pc import is_tradex_pc_name
 
 
 RULES = (
+    ("Бытовая химия", r"^(?:таблетк\w*|соль|ополаскивател\w*|средство)\b.*\b(?:посудомоечн\w*|стиральн\w*)\b"),
+    ("Промышленные фены", r"^(?:(?:техническ\w*|промышленн\w*|строительн\w*)\s+фен\w*|фен\w*\s+(?:техническ\w*|промышленн\w*|строительн\w*)|термофен\w*)\b"),
+    ("Дрели", r"^дрель[\s-]+миксер\w*\b"),
+    ("Кухонные комбайны, машины и планетарные миксеры", r"^миксер\w*\s+планетарн\w*\b"),
+    ("Фильтры и системы для очистки воды", r"^картридж\w*\s+(?:аквафор|гейзер)\b|^картридж\w*\b.*\bдля\s+(?:проточн\w+\s+)?фильтр\w*"),
+    ("Картриджи", r"^(?:картридж\w*\b|тонер[\s-]+картридж\w*\b|(?:g&g\s+)?(?:toner[\s-]*cartridge|drum[\s-]*cartridge)\b|g&g\s+(?:gg[\s-]+(?:c\w*|tk\w*|dr\w*)|nt[\s-]+c\w*))"),
+    ("Принтеры", r"^g&g\s+\(?gg[\s-]+at\s*\d+\w*\b.*\b(?:dpi|tspl)\b"),
+    ("SSD", r"^\d+(?:[.,]\d+)?\s*tb\s+(?:netac\s+ensp\d+|lenovo\s+thinksystem\s+4xb7a38275)\b"),
+    ("Сеть", r"^4\s+пары\s+для\s+110\s+кросса\s+lanmaster\b"),
+    ("Аксессуары для серверов", r"^щ[её]точн\w*\s+ввод\b"),
     ("Электрочайники и термопоты", r"\b(?:электрочайник\w*|чайник\w*|термопот\w*|electric\s+kettle)\b"),
     ("Кондиционеры", r"\b(?:сплит[\s-]?систем\w*|кондиционер\w*)\b"),
     ("Диспенсеры", r"\b(?:кулер\w*\s+(?:для\s+)?вод\w*|диспенсер\w*\s+(?:для\s+)?вод\w*|кулер\w*\s+(?:ael|aqua\s+work|hotfrost|vatten)\b|кулер\w*\b.*\b(?:напольн\w*|настольн\w*))"),
@@ -63,12 +74,26 @@ PRODUCT_TYPE_TITLES = frozenset(category.casefold() for category, _ in RULES)
 
 @lru_cache(maxsize=100_000)
 def specific_product_category(name):
+    if is_tradex_pc_name(name):
+        return "Компьютеры"
     text = str(name or "").casefold().replace("ё", "е")
     text = re.sub(r"^\[[^\]]+\]\s*", "", text).strip()
     # These words also name PC hardware, tools and laundry consumables.
-    if re.search(r"кондиционер\w*\s+для\s+бель|строительн\w+\s+миксер|миксер\w*\s+строительн|промышленн\w+\s+фен|фен\w*\s+(?:промышленн|строительн)|термофен|аудиомикшер|набор\s+инструмент\w*\s+для\s+(?:сжо|водяного\s+охлаждения)", text):
+    if re.search(r"кондиционер\w*\s+для\s+бель|строительн\w+\s+миксер|миксер\w*\s+строительн|аудиомикшер|набор\s+инструмент\w*\s+для\s+(?:сжо|водяного\s+охлаждения)", text):
+        return ""
+    if is_appliance_accessory(text):
         return ""
     for category, pattern in COMPILED_RULES:
         if pattern.search(text):
             return category
     return ""
+
+
+def is_appliance_accessory(name):
+    text = str(name or "").casefold().replace("ё", "е")
+    text = re.sub(r"^\[[^\]]+\]\s*", "", text).strip()
+    return bool(re.search(
+        r"^(?:фильтр\w*|hepa[\s-]*фильтр\w*|компонент\w*|аксессуар\w*|мешок\w*|мешки|"
+        r"щетк\w*|насадк\w*|набор\s+аксессуар\w*)\b.*\b(?:пылесос\w*|очистител\w*\s+воздуха)\b",
+        text,
+    ))

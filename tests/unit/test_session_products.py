@@ -51,6 +51,19 @@ def test_same_source_revision_skips_rehash_and_replacement(tmp_path, monkeypatch
     assert result["row_count"] == len(ROWS)
 
 
+def test_reconcile_refreshes_new_badges_without_rewriting_unchanged_products(tmp_path):
+    store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
+    session = tmp_path / "abc123"
+    store.replace_rows(session, ROWS, source_revision="r1")
+    before = store.metadata(session)
+    result = store.reconcile_rows(session, ROWS, source_revision="r1", badge_counts={"tradex-pc": 2})
+    after = store.metadata(session)
+    assert result["changed"] is False
+    assert before["revision"] == after["revision"]
+    assert before["rows_sha256"] == after["rows_sha256"]
+    assert store.query_page(session)["meta"]["badge_counts"] == {"tradex-pc": 2}
+
+
 def test_query_page_filters_searches_sorts_and_returns_global_meta(tmp_path):
     store = SessionProductStore(tmp_path / "sessions.db", mode="canonical")
     session = tmp_path / "abc123"

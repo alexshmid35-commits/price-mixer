@@ -13,6 +13,7 @@ import pandas as pd
 
 from price_mixer.logging_config import get_logger
 from price_mixer.product_schema import ProductField
+from price_mixer.services.tradex_pc import is_tradex_pc_name
 
 LOGGER = get_logger("price_mixer.processing")
 
@@ -263,6 +264,8 @@ def process_supplier_files(
         allow_id_cache = (not is_iven_supplier and not is_ntech_supplier) or (
             is_iven_supplier and is_iven_pc_name(name)
         )
+        if supplier_name == "TRADEX" and is_tradex_pc_name(name):
+            allow_id_cache = False
         if allow_id_cache:
             oid = row.get(ProductField.ONLINER_ID)
             if not oid or str(oid).strip() == "" or str(oid) == "nan":

@@ -7,7 +7,8 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 
-from price_mixer.services.product_type_categories import PRODUCT_TYPE_TITLES, specific_product_category
+from price_mixer.services.product_type_categories import PRODUCT_TYPE_TITLES, specific_product_category, is_appliance_accessory
+from price_mixer.services.tradex_pc import is_tradex_pc_name
 
 
 def normalize_onliner_id(value):
@@ -89,9 +90,13 @@ def infer_category(name):
     if not text:
         return "Без категории"
 
+    if is_tradex_pc_name(text):
+        return "Системный блок"
     product_type = specific_product_category(text)
     if product_type:
         return product_type
+    if is_appliance_accessory(text):
+        return "Без категории"
 
     text_without_prefix = re.sub(r"^\[[^\]]+\]\s*", "", text).strip()
     norm = re.sub(r"[^a-zа-я0-9\+\s\-]", " ", text)
@@ -667,7 +672,7 @@ def infer_category(name):
             if re.search(pattern, norm_without_prefix):
                 return category_name
 
-    return _fallback_category_token(norm)
+    return "Без категории"
 
 
 def normalize_internal_category_name(category):
@@ -722,7 +727,7 @@ def normalize_catalog_category_name(raw_name, available_categories=None):
         "автомобильная акустика",
         "fm-модуляторы",
     }
-    if text.lower() in preserve_titles or text.casefold() in PRODUCT_TYPE_TITLES:
+    if text.lower() in preserve_titles or (text.casefold() in PRODUCT_TYPE_TITLES and text.casefold() not in {"ssd", "сеть"}):
         return text
 
     aliases = {

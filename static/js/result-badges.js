@@ -63,6 +63,12 @@ function isTradexLaptopName(value, category){
     return isIvenLaptopName(value, category);
 }
 
+function isTradexPcName(value){
+    return /^(?:(?:компьютер|системный\s+блок|пэвм|desktop|pc)\s+)?wouk\b/i.test(
+        String(value || '').trim().replace(/^\[[^\]]+\]\s*/, '')
+    );
+}
+
 function ntechCheckKeyForCategory(rawCategory, rawName){
     var c = String(rawCategory || '').trim().toLowerCase();
     var name = String(rawName || '').trim().toLowerCase();
@@ -103,6 +109,8 @@ function setNtechCheckBadge(key, count){
             titlePrefix = 'N-Tech ПЭВМ без ID: ';
         } else if(key === 'iven-pc'){
             titlePrefix = 'IVEN ПЭВМ без ID: ';
+        } else if(key === 'tradex-pc'){
+            titlePrefix = 'Компьютеры Tradex без ID: ';
         } else if(key === 'iven-laptop'){
             titlePrefix = 'Ноутбуки IVEN без ID: ';
         } else if(key === 'iven-zakaz-laptop'){
@@ -128,6 +136,7 @@ function updateNtechCheckCategoryBadges(rows){
     var total = 0;
     var ntechPcTotal = 0;
     var ivenPcTotal = 0;
+    var tradexPcTotal = 0;
     var ivenLaptopTotal = 0;
     var ivenZakazLaptopTotal = 0;
     var tradexLaptopTotal = 0;
@@ -136,6 +145,10 @@ function updateNtechCheckCategoryBadges(rows){
         if(String((row && row[0]) || '').trim()){ return; }
         if(isIvenSupplierName(row[3]) && isIvenPcName(row[1])){
             ivenPcTotal += 1;
+            return;
+        }
+        if(isTradexSupplierName(row[3]) && isTradexPcName(row[1])){
+            tradexPcTotal += 1;
             return;
         }
         if(isIvenSupplierName(row[3]) && isIvenLaptopName(row[1], row[9])){
@@ -164,10 +177,11 @@ function updateNtechCheckCategoryBadges(rows){
     NTECH_CHECK_KEYS.forEach(function(key){ setNtechCheckBadge(key, counts[key] || 0); });
     setNtechCheckBadge('ntech-pc', ntechPcTotal);
     setNtechCheckBadge('iven-pc', ivenPcTotal);
+    setNtechCheckBadge('tradex-pc', tradexPcTotal);
     setNtechCheckBadge('iven-laptop', ivenLaptopTotal);
     setNtechCheckBadge('iven-zakaz-laptop', ivenZakazLaptopTotal);
     setNtechCheckBadge('tradex-laptop', tradexLaptopTotal);
-    var blockTotal = total + ntechPcTotal + ivenPcTotal + ivenLaptopTotal + ivenZakazLaptopTotal + tradexLaptopTotal;
+    var blockTotal = total + ntechPcTotal + ivenPcTotal + tradexPcTotal + ivenLaptopTotal + ivenZakazLaptopTotal + tradexLaptopTotal;
     if(blockTotal > 0){
         setActionBadge('checks-block-badge', blockTotal, {
             title: 'Товары без ID для подбора в блоке проверок: {count}'
@@ -185,7 +199,7 @@ function applyNtechCheckBadgeCounts(rawCounts){
         setNtechCheckBadge(key, count);
         total += count;
     });
-    ['ntech-pc', 'iven-pc', 'iven-laptop', 'iven-zakaz-laptop', 'tradex-laptop'].forEach(function(key){
+    ['ntech-pc', 'iven-pc', 'tradex-pc', 'iven-laptop', 'iven-zakaz-laptop', 'tradex-laptop'].forEach(function(key){
         var count = Number(counts[key] || 0);
         setNtechCheckBadge(key, count);
         total += count;

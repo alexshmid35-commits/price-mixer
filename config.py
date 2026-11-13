@@ -93,6 +93,7 @@ class Config:
 
     # IVEN / Tradex direct URLs
     iven_file_url = _env_str("IVEN_FILE_URL", "")
+    iven_zakaz_file_url = _env_str("IVEN_ZAKAZ_FILE_URL", "")
     tradex_file_url = _env_str("TRADEX_FILE_URL", "")
 
     # Onliner API caching / proxy settings

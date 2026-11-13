@@ -1,7 +1,7 @@
 function initOnlinerDbWidget(){
     var countEl  = document.getElementById('db-products-count');
-    var detailEl = document.getElementById('db-stats-detail');
-    var noteEl   = document.getElementById('db-stats-note');
+    var updatedEl = document.getElementById('db-last-updated');
+    var changesEl = document.getElementById('db-last-changes');
     var searchInput = document.getElementById('db-search-query');
     var searchResults = document.getElementById('db-search-results');
 
@@ -9,14 +9,18 @@ function initOnlinerDbWidget(){
         fetch('/api/onliner-db-stats?_ts=' + Date.now(), {cache:'no-store'})
         .then(function(r){ return r.json(); })
         .then(function(s){
-            if(countEl) countEl.textContent = (s.total_products || 0).toLocaleString();
-            var lines = [];
-            lines.push((s.total_names || 0).toLocaleString() + ' вариантов названий');
-            var src = s.by_source || {};
-            Object.keys(src).slice(0,4).forEach(function(k){
-                lines.push(k + ': ' + src[k].toLocaleString());
-            });
-            if(detailEl) detailEl.innerHTML = lines.join('<br>');
+            if(countEl) countEl.textContent = (s.total_products || 0).toLocaleString('ru-RU');
+            var last = s.last_import;
+            if(updatedEl){
+                updatedEl.textContent = last && last.finished_at ? new Date(last.finished_at * 1000).toLocaleString('ru-RU', {timeZone:'Europe/Minsk', dateStyle:'short', timeStyle:'short'}) : 'Нет данных';
+                if(last && last.finished_at) updatedEl.dateTime = new Date(last.finished_at * 1000).toISOString();
+            }
+            if(changesEl){
+                var changes = [];
+                if(last && last.inserted != null) changes.push('Новых: ' + Number(last.inserted).toLocaleString('ru-RU'));
+                if(last && last.updated != null) changes.push('Изменено: ' + Number(last.updated).toLocaleString('ru-RU'));
+                changesEl.textContent = changes.length ? changes.join(' · ') : 'Нет данных о последнем импорте';
+            }
         }).catch(function(){ if(countEl) countEl.textContent = '?'; });
     }
 
@@ -33,8 +37,9 @@ function initOnlinerDbWidget(){
         .then(function(st){
             var pct = parseInt(st.percent || 0);
             if(importBar)  importBar.style.width  = Math.max(2, pct) + '%';
-            if(importMsg)  importMsg.textContent  = st.message || '';
-            if(importWrap) importWrap.style.display = 'block';
+            var failed = st.message && st.message.indexOf('Ошибка') === 0;
+            if(importMsg) importMsg.textContent = failed ? 'Не удалось обновить каталог. Показан последний успешный импорт.' : 'Обновление каталога · ' + pct + '%';
+            if(importWrap) importWrap.style.display = st.running || failed ? 'block' : 'none';
             if(!st.running && st.finished_at){
                 stopImportPoll();
                 if(gsheetBtn){ gsheetBtn.disabled = false; gsheetBtn.textContent = '▶ Импорт GSheets'; }
@@ -144,8 +149,6 @@ function initOnlinerDbWidget(){
                 searchResults.style.display = 'block';
                 searchResults.innerHTML = '<div style="font-size:12px;color:#b91c1c;">Ошибка поиска: ' + escapeHtml(String((err && err.message) || err || 'unknown')) + '</div>';
             }
-        }).finally(function(){
-            if(searchBtn){ searchBtn.disabled = false; searchBtn.textContent = 'Найти в БД'; }
         });
     }
 
@@ -173,27 +176,6 @@ function initOnlinerDbWidget(){
         });
     }
 
-    // Also re-enable gsheetBtn when import finishes (patch pollImportStatus)
-    var _origPollImport = pollImportStatus;
-    pollImportStatus = function(){
-        fetch('/api/onliner-db-import-status?_ts='+Date.now(), {cache:'no-store'})
-        .then(function(r){ return r.json(); })
-        .then(function(st){
-            var pct = parseInt(st.percent || 0);
-            if(importBar)  importBar.style.width  = Math.max(2, pct) + '%';
-            if(importMsg)  importMsg.textContent  = st.message || '';
-            if(importWrap) importWrap.style.display = 'block';
-            if(!st.running && st.finished_at){
-                stopImportPoll();
-                if(gsheetBtn){ gsheetBtn.disabled = false; gsheetBtn.textContent = '▶ Импорт GSheets'; }
-                importBar && (importBar.style.background = st.message && st.message.indexOf('Ошибка') === 0
-                    ? 'linear-gradient(90deg,#f87171,#dc2626)'
-                    : 'linear-gradient(90deg,#0891b2,#0e7490)');
-                loadDbStats();
-            }
-        }).catch(function(){});
-    };
-
     // Resume poll if import was running before page load
     fetch('/api/onliner-db-import-status?_ts='+Date.now(), {cache:'no-store'})
     .then(function(r){ return r.json(); })
@@ -203,12 +185,12 @@ function initOnlinerDbWidget(){
             if(gsheetBtn){ gsheetBtn.disabled = true; gsheetBtn.textContent = 'Импортирую...'; }
             if(importWrap) importWrap.style.display = 'block';
             if(importBar)  importBar.style.width = Math.max(2, parseInt(st.percent||0)) + '%';
-            if(importMsg)  importMsg.textContent  = st.message || '';
+            if(importMsg)  importMsg.textContent  = 'Обновление каталога · ' + parseInt(st.percent || 0) + '%';
             stopImportPoll();
             importPollTimer = setInterval(pollImportStatus, 1200);
-        } else if(st.finished_at && st.message){
+        } else if(st.finished_at && st.message && st.message.indexOf('Ошибка') === 0){
             if(importWrap) importWrap.style.display = 'block';
-            if(importMsg)  importMsg.textContent  = st.message;
+            if(importMsg)  importMsg.textContent  = 'Не удалось обновить каталог. Показан последний успешный импорт.';
             if(importBar)  importBar.style.width  = '100%';
         }
     }).catch(function(){});

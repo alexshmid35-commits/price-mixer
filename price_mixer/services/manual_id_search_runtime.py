@@ -68,6 +68,8 @@ class ManualIdSearchRuntime:
     is_iven_laptop_candidate: Callable
     get_review_handler: Callable
     clock: Callable[[], float]
+    is_tradex_pc_name: Callable | None = None
+    search_tradex_pc_candidates: Callable | None = None
 
     def candidates(self, local_name, category="", top_n=12):
         name = str(local_name or "").strip()
@@ -81,6 +83,8 @@ class ManualIdSearchRuntime:
         if prefix_category in EXPLICIT_PREFIX_CATEGORIES:
             normalized_category = prefix_category
 
+        if callable(self.is_tradex_pc_name) and self.is_tradex_pc_name(name):
+            return self.search_tradex_pc_candidates(name, limit=limit)
         if self.is_iven_pc_name(name):
             return self.search_iven_pc_candidates(name, limit=limit)
         if self.is_tgpc_pc_name(name):

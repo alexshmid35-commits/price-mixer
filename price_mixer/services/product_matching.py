@@ -2,6 +2,7 @@
 
 import re
 from difflib import SequenceMatcher
+from price_mixer.services.tradex_pc import tradex_pc_match
 
 
 NAME_TOKEN_STOP_WORDS = {
@@ -784,6 +785,10 @@ def calc_name_match(
     onliner = str(onliner_name or "").strip()
     if not local or not onliner:
         return {"score": 0.0, "match": False, "reason": "no_name"}
+
+    pc_match = tradex_pc_match(local, onliner)
+    if pc_match is not None:
+        return pc_match
 
     local_identity_articles = strict_identity_article_tokens(local)
     onliner_identity_articles = strict_identity_article_tokens(onliner)

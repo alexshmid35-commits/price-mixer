@@ -6,6 +6,45 @@ import app
 import pandas as pd
 
 
+def test_current_session_repairs_junk_categories_without_changing_products(tmp_path, monkeypatch):
+    app.APP_SERVICES.reset("category_repair")
+    original = [
+        ["", "G&G toner-cartridge for Kyocera MFP (GG-TK1178)", 40, "Techlab", 12, 2, 50, 60, 0, "G"],
+        ["", "1.92Tb Netac ENSP401 (NS1T921P4HH6PA01)", 100, "IVEN_zakaz", 12, 2, 120, 140, 1, "1"],
+        ["", "3.84Tb Lenovo ThinkSystem 4XB7A38275", 200, "IVEN_zakaz", 12, 2, 220, 240, 2, "3"],
+    ]
+    (tmp_path / "consolidated.json").write_text(json.dumps({"data": original}))
+    monkeypatch.setattr(app, "db_get_categories_by_ids", lambda ids: {})
+    monkeypatch.setattr(app, "db_get_categories_by_exact_names", lambda names: {})
+    monkeypatch.setattr(app, "load_category_overrides", lambda: {})
+    monkeypatch.setattr(app, "load_manual_category_overrides", lambda: {})
+    monkeypatch.setattr(app, "load_visibility_map", lambda _: {"__global__": ["Картриджи"]})
+    full = app._correct_consolidated_json_rows(tmp_path, apply_visibility=False)
+    assert [r[9] for r in full] == ["Картриджи", "SSD", "SSD"]
+    assert [r[:9] for r in full] == [r[:9] for r in original]
+    visible = app._correct_consolidated_json_rows(tmp_path, apply_visibility=True)
+    assert len(visible) == 2
+    app.APP_SERVICES.reset("category_repair")
+
+
+def test_appliance_accessory_rejects_unrelated_catalog_parent():
+    name = "Компоненты для пылесоса Trouver Water Filter"
+    assert app._native_catalog_category_for_product("Миски, поилки, кормушки для животных", name) == ""
+    assert app._native_catalog_category_for_product("Пылесосы", name) == "Пылесосы"
+
+
+def test_cartridge_markup_does_not_use_printer_percentage(monkeypatch):
+    frame = pd.DataFrame([{
+        "Название": "Картридж HP LaserJet для MFP M134", "Категория": "Принтеры",
+        "Цена": 100, "OnlinerID": "",
+    }])
+    monkeypatch.setattr(app, "load_category_markups", lambda: {
+        "Принтеры": {"percent": 15}, "Картриджи": {"percent": 25},
+    })
+    result = app.apply_saved_markups_to_df(frame)
+    assert result.iloc[0]["РРЦ"] == app.round_price_to_90(125)
+
+
 def test_ensure_category_column_only_infers_rows_missing_catalog_category(monkeypatch):
     df = pd.DataFrame({
         "OnlinerID": ["1", "2", ""],

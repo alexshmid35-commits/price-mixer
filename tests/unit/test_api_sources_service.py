@@ -444,6 +444,136 @@ def test_iven_ssh_fallback_host_is_scoped_and_validated(monkeypatch):
         api_sources.iven_ssh_fallback_host("iven_zakaz")
 
 
+@pytest.mark.parametrize("text", [
+    "Прайс уже формируется. Повторите запрос через 5 секунд.",
+    "Прайс-лист генерируется. Повторите запрос через 5 секунд.",
+])
+def test_iven_generation_response_is_not_a_corrupt_workbook(tmp_path, text):
+    path = tmp_path / 'order.xlsx'
+    path.write_text(text, encoding='utf-8')
+    with pytest.raises(api_sources.IvenPricePendingError):
+        api_sources._validate_iven_download(path)
+
+
+def test_pending_order_price_is_polled_on_ssh_without_restarting_direct_route(tmp_path, monkeypatch):
+    path = tmp_path / 'order.xlsx'
+    calls, sleeps = [], []
+    monkeypatch.setenv('PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST', 'root@example.test')
+    monkeypatch.setattr(api_sources.time, 'sleep', sleeps.append)
+    def local(*args, **kwargs):
+        calls.append('direct')
+        raise RuntimeError('curl: (56) Connection reset by peer')
+    def remote(*args, **kwargs):
+        calls.append('ssh')
+        if calls.count('ssh') <= 2:
+            path.write_text('Прайс уже формируется. Повторите запрос через 5 секунд.')
+        else:
+            with zipfile.ZipFile(path, 'w') as archive:
+                archive.writestr('xl/workbook.xml', '<workbook/>')
+        api_sources._validate_iven_download(path)
+    monkeypatch.setattr(api_sources, 'curl_download_to_path', local)
+    monkeypatch.setattr(api_sources, 'ssh_download_to_path', remote)
+    api_sources.curl_download_to_path_with_retries('https://example.test', path, False, 'iven_zakaz', 'test')
+    assert calls == ['direct', 'ssh', 'ssh', 'ssh']
+    assert sleeps == [5, 5]
+    assert zipfile.is_zipfile(path)
+
+
+def test_generation_wait_is_bounded_and_never_marks_pending_ready(tmp_path, monkeypatch):
+    path = tmp_path / 'order.xlsx'
+    calls = []
+    monkeypatch.setattr(api_sources.time, 'sleep', lambda _: None)
+    def pending():
+        calls.append(True)
+        path.write_text('Прайс уже формируется.')
+        api_sources._validate_iven_download(path)
+    with pytest.raises(TimeoutError):
+        api_sources._wait_for_iven_price(pending, path, 'iven_zakaz', 'bounded', max_waits=2)
+    assert len(calls) == 3
+    assert not path.exists()
+    assert not get_source_runtime('iven_zakaz', 'bounded')['ready']
+
+
+def test_generation_deadline_stops_polling_even_with_fewer_attempts(tmp_path, monkeypatch):
+    path = tmp_path / 'order.xlsx'
+    clock = iter([0, 121])
+    monkeypatch.setattr(api_sources.time, 'monotonic', lambda: next(clock))
+    monkeypatch.setattr(api_sources.time, 'sleep', lambda _: pytest.fail('deadline expired'))
+    def pending():
+        path.write_text('Прайс уже формируется.')
+        api_sources._validate_iven_download(path)
+    with pytest.raises(TimeoutError):
+        api_sources._wait_for_iven_price(pending, path, 'iven_zakaz', 'deadline')
+    assert not path.exists()
+
+
+def test_iven_rate_limit_uses_retry_after_not_generic_file_error(tmp_path):
+    path = tmp_path / 'order.xlsx'
+    path.write_text('Слишком частое скачивание прайса. Повторите через 9 мин.')
+    with pytest.raises(api_sources.IvenRateLimitError) as exc:
+        api_sources._validate_iven_download(path, 'HTTP/1.1 429 Too Many Requests\r\nRetry-After: 537\r\n')
+    assert exc.value.retry_after == 537
+    assert '9 мин' in str(exc.value)
+    assert 'поврежденный' not in str(exc.value)
+
+
+def test_iven_rate_limit_body_is_recognized_without_headers(tmp_path):
+    path = tmp_path / 'order.xlsx'
+    path.write_text('Слишком частое скачивание прайса. Повторите через 9 мин.')
+    with pytest.raises(api_sources.IvenRateLimitError) as exc:
+        api_sources._validate_iven_download(path)
+    assert exc.value.retry_after == 540
+
+
+def test_rate_limit_does_not_switch_ip_or_retry_until_deadline(tmp_path, monkeypatch):
+    path = tmp_path / 'order.xlsx'
+    monkeypatch.setattr(api_sources, 'SOURCE_RUNTIME_DIR', tmp_path / 'runtime')
+    monkeypatch.setenv('PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST', 'root@example.test')
+    clock = [1000]
+    monkeypatch.setattr(api_sources.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(api_sources.time, 'sleep', lambda _: pytest.fail('must defer, not block worker'))
+    calls = []
+    def local(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == 1:
+            path.write_text('limited')
+            raise api_sources.IvenRateLimitError(537)
+        path.write_bytes(b'price')
+    monkeypatch.setattr(api_sources, 'curl_download_to_path', local)
+    monkeypatch.setattr(api_sources, 'ssh_download_to_path', lambda *a, **k: pytest.fail('must not evade rate limit'))
+    url = 'https://example.test/?password=secret'
+    for _ in range(2):
+        with pytest.raises(api_sources.IvenRateLimitError):
+            api_sources.curl_download_to_path_with_retries(url, path, False, 'iven_zakaz', 'rate')
+    assert len(calls) == 1 and not path.exists()
+    cache = list((tmp_path / 'runtime' / 'iven_cooldowns').glob('*.json'))[0]
+    assert 'secret' not in cache.name + cache.read_text()
+    clock[0] = 1538
+    api_sources.curl_download_to_path_with_retries(url, path, False, 'iven_zakaz', 'rate')
+    assert len(calls) == 2
+
+
+def test_transport_errors_do_not_expose_redirect_header_credentials():
+    stderr = b'HTTP/1.1 302 Found\r\nLocation: https://example.test/?password=secret\r\ncurl: (56) Recv failure\n'
+    assert api_sources._transport_error(stderr, 'error') == 'curl: (56) Recv failure'
+
+
+def test_bad_password_on_ssh_is_not_wrapped_or_retried(tmp_path, monkeypatch):
+    path = tmp_path / 'order.xlsx'
+    monkeypatch.setenv('PRICE_MIXER_IVEN_ZAKAZ_SSH_HOST', 'root@example.test')
+    def local(*args, **kwargs):
+        raise RuntimeError('curl: (56) Connection reset by peer')
+    def remote(*args, **kwargs):
+        path.write_bytes(b'Bad password')
+        api_sources._validate_iven_download(path)
+    monkeypatch.setattr(api_sources, 'curl_download_to_path', local)
+    monkeypatch.setattr(api_sources, 'ssh_download_to_path', remote)
+    monkeypatch.setattr(api_sources.time, 'sleep', lambda _: pytest.fail('must not retry credentials'))
+    with pytest.raises(PermissionError):
+        api_sources.curl_download_to_path_with_retries('https://example.test', path, False, 'iven_zakaz', 'test')
+    assert not path.exists()
+
+
 def test_fetch_api_source_worker_iven_uses_serialized_retry_downloader(tmp_path, monkeypatch):
     api_sources.source_fetch_statuses.clear()
     history = []

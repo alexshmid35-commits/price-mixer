@@ -20,6 +20,7 @@ from price_mixer.runtime_paths import get_runtime_paths
 from price_mixer.services.api_sources import (
     fetch_api_source_worker,
     get_source_runtime,
+    update_source_runtime,
 )
 from price_mixer.services.durable_jobs import DurableJobQueue
 from price_mixer.services.sqlite_runtime import maintain_runtime_databases
@@ -80,12 +81,23 @@ class DurableWorker:
                     self._cleanup_xlsx_snapshot(job)
                 LOGGER.info("durable job completed kind=%s", job["kind"])
             except Exception as exc:
+                retry_delay = self.retry_delay
+                if job["kind"] == "api_source_fetch":
+                    payload = job.get("payload") or {}
+                    runtime = get_source_runtime(payload.get("source_key"), payload.get("client_key"))
+                    retry_delay = max(retry_delay, float(runtime.get("retry_after") or 0))
                 state = self.queue.fail(
                     job["job_id"],
                     exc,
-                    retry_delay=self.retry_delay,
+                    retry_delay=retry_delay,
                     worker_id=self.worker_id,
                 )
+                if job["kind"] == "api_source_fetch" and runtime.get("retry_after") and state and state["state"] == "queued":
+                    update_source_runtime(
+                        payload['source_key'], payload['client_key'], running=True, status="waiting",
+                        message=str(runtime.get("message", "")) + " Повторю автоматически.",
+                        retry_at=time.time() + retry_delay,
+                    )
                 LOGGER.exception(
                     "durable job failed kind=%s retry=%s",
                     job["kind"],

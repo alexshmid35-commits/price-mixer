@@ -1,6 +1,7 @@
 """Unit tests for local Onliner database service."""
 
 from pathlib import Path
+import csv
 
 import pandas as pd
 
@@ -214,6 +215,40 @@ def test_catalog_import_worker_imports_new_rows(monkeypatch, tmp_path):
     assert onliner_db.stats_payload()["total_products"] == 2
 
 
+def test_import_summary_counts_actual_changes_and_survives_failure(monkeypatch, tmp_path):
+    _use_temp_db(monkeypatch, tmp_path)
+    path = tmp_path / 'catalog.csv'
+    header = 'Category,B,Model,D,OnlinerID,F,G,FullName\n'
+    path.write_text(header + 'SSD,,A,,1,,,Drive A\nSSD,,B,,2,,,Drive B\n')
+    def run():
+        return onliner_db.catalog_import_worker(str(path), '.csv', normalize_name_key=_name_key, cleanup_file=False)
+    assert run() is True
+    assert onliner_db.stats_payload()['last_import']['inserted'] == 2
+    assert onliner_db.stats_payload()['last_import']['updated'] == 0
+    path.write_text(header + 'SSD,,A,,1,,,Drive A renamed\nSSD,,B,,2,,,Drive B\nSSD,,C,,3,,,Drive C\n')
+    assert run() is True
+    last = onliner_db.stats_payload()['last_import']
+    assert last['inserted'] == 1 and last['updated'] == 1
+    # Source and timestamp updates alone are not product changes.
+    assert run() is True
+    last = onliner_db.stats_payload()['last_import']
+    assert last['inserted'] == 0 and last['updated'] == 0
+    assert last['finished_at'] > 0
+    path.unlink()
+    assert run() is False
+    assert onliner_db.stats_payload()['last_import'] == last
+
+
+def test_import_summary_counts_category_changes_once_per_product(monkeypatch, tmp_path):
+    _use_temp_db(monkeypatch, tmp_path)
+    path = tmp_path / 'catalog.csv'
+    path.write_text('Category,B,Model,D,OnlinerID,F,G,FullName\nSSD,,A,,1,,,A\n')
+    onliner_db.catalog_import_worker(str(path), '.csv', normalize_name_key=_name_key, cleanup_file=False)
+    path.write_text('Category,B,Model,D,OnlinerID,F,G,FullName\nCPU,,A,,1,,,A\nCPU,,A,,1,,,A\n')
+    onliner_db.catalog_import_worker(str(path), '.csv', normalize_name_key=_name_key, cleanup_file=False)
+    assert onliner_db.stats_payload()['last_import']['updated'] == 1
+
+
 def test_catalog_import_worker_reports_skipped_rows(monkeypatch, tmp_path):
     _use_temp_db(monkeypatch, tmp_path)
     csv_path = tmp_path / "catalog.csv"
@@ -251,3 +286,58 @@ def test_import_csv_payload_validates_extension(monkeypatch, tmp_path):
 
     assert status == 400
     assert body["message"] == "Поддерживаются только CSV и XLSX"
+
+
+def test_catalog_import_accepts_projected_columns_without_losing_first_product(monkeypatch, tmp_path):
+    _use_temp_db(monkeypatch, tmp_path)
+    path = tmp_path / "core.csv"
+    path.write_text(
+        '"Category","Model","onliner_id","Specs"\n'
+        '"Процессоры","AMD Ryzen 7 7800X3D","3808268","Процессор AMD Ryzen 7 7800X3D"\n'
+        '"SSD","NV2 1TB","12345","Kingston NV2 1TB"\n', encoding="utf-8",
+    )
+    onliner_db.catalog_import_worker(str(path), ".csv", normalize_name_key=_name_key, cleanup_file=False)
+    status = onliner_db.import_status_payload()
+    assert status["inserted"] == 2
+    assert status["done"] == 2
+    assert status["percent"] == 100
+    assert onliner_db.get_product_by_id("3808268")["name"] == "Процессор AMD Ryzen 7 7800X3D"
+    assert onliner_db.get_product_by_id("12345")["category"] == "SSD"
+
+
+def test_catalog_csv_accepts_large_ignored_field_without_field_limit_failure(monkeypatch, tmp_path):
+    _use_temp_db(monkeypatch, tmp_path)
+    path = tmp_path / "large.csv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["Category", "B", "Model", "D", "OnlinerID", "URL", "image_url", "FullName"])
+        writer.writerow(["SSD", "", "NV2 1TB", "", "12345", "", "x" * 150_000, "Kingston NV2 1TB"])
+    old_limit = csv.field_size_limit()
+    try:
+        csv.field_size_limit(131072)
+        onliner_db.catalog_import_worker(str(path), ".csv", normalize_name_key=_name_key, cleanup_file=False)
+        assert onliner_db.import_status_payload()["inserted"] == 1
+        assert onliner_db.get_product_by_id("12345")["name"] == "Kingston NV2 1TB"
+    finally:
+        csv.field_size_limit(old_limit)
+
+
+def test_projected_import_updates_existing_category_and_preserves_url(monkeypatch, tmp_path):
+    _use_temp_db(monkeypatch, tmp_path)
+    svc = onliner_db
+    svc.upsert_product("12345", "Old name", "https://catalog.onliner.by/ssd/kingston/nv2", normalize_name_key=_name_key)
+    path = tmp_path / "core.csv"
+    path.write_text(
+        'Category,Model,onliner_id,Specs\nSSD,NV2,12345,Kingston NV2\nSSD,NV3,67890,\n', encoding="utf-8",
+    )
+    normalized = []
+    normalize = svc.normalize_catalog_category_name
+    monkeypatch.setattr(svc, "normalize_catalog_category_name", lambda name: normalized.append(name) or normalize(name))
+    svc.catalog_import_worker(str(path), ".csv", normalize_name_key=_name_key, cleanup_file=False)
+    assert normalized == ["SSD"]
+    assert svc.import_status_payload()["inserted"] == 1
+    assert svc.import_status_payload()["existing"] == 1
+    product = svc.get_product_by_id("12345")
+    assert product["name"] == "Kingston NV2"
+    assert product["url"] == "https://catalog.onliner.by/ssd/kingston/nv2"
+    assert svc.get_product_by_id("67890")["name"] == "SSD NV3"

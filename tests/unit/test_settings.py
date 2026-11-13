@@ -50,10 +50,36 @@ def test_load_app_settings_uses_safe_export_defaults(monkeypatch, tmp_path):
 def test_load_app_settings_does_not_ship_credential_urls(monkeypatch, tmp_path):
     app_path = tmp_path / "app_settings.json"
     monkeypatch.setattr(settings, "APP_SETTINGS_FILE", app_path)
+    monkeypatch.setattr(settings.cfg, "iven_zakaz_file_url", "")
 
     loaded = settings.load_app_settings()
 
     assert loaded["api_sources"]["iven_zakaz"]["file_url"] == ""
+
+
+def test_order_price_env_overrides_stale_saved_url(monkeypatch, tmp_path):
+    path = tmp_path / "app_settings.json"
+    path.write_text(json.dumps({"api_sources": {
+        "iven_zakaz": {"file_url": "https://example.test/old-order.xlsx"},
+    }}))
+    monkeypatch.setattr(settings, "APP_SETTINGS_FILE", path)
+    monkeypatch.setattr(settings.cfg, "iven_zakaz_file_url", "https://example.test/new-order.xlsx")
+    monkeypatch.setattr(settings.cfg, "iven_file_url", "https://example.test/stock.xlsx")
+    loaded = settings.load_app_settings()["api_sources"]
+    assert loaded["iven_zakaz"]["file_url"] == "https://example.test/new-order.xlsx"
+    assert loaded["iven"]["file_url"] == "https://example.test/stock.xlsx"
+    saved = settings.save_app_settings({"api_sources": loaded})
+    assert saved["api_sources"]["iven_zakaz"]["file_url"] == ""
+
+
+def test_order_price_preserves_legacy_url_without_env(monkeypatch, tmp_path):
+    path = tmp_path / "app_settings.json"
+    path.write_text(json.dumps({"api_sources": {
+        "iven_zakaz": {"file_url": "https://example.test/order.xlsx"},
+    }}))
+    monkeypatch.setattr(settings, "APP_SETTINGS_FILE", path)
+    monkeypatch.setattr(settings.cfg, "iven_zakaz_file_url", "")
+    assert settings.load_app_settings()["api_sources"]["iven_zakaz"]["file_url"] == "https://example.test/order.xlsx"
 
 
 def test_save_app_settings_strips_secrets_and_syncs_api_settings(monkeypatch, tmp_path):
