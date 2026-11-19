@@ -33,11 +33,16 @@ SOURCE_RUNTIME_DIR = get_runtime_paths().cache_dir / "source_runtime"
 class IvenPricePendingError(RuntimeError):
     """IVEN accepted the request but is still generating the workbook."""
 
+    def __init__(self, retry_after=5):
+        self.retry_after = max(1, int(retry_after))
+        super().__init__(f"IVEN формирует прайс. Повторю запрос через {self.retry_after} секунд.")
+
 
 class IvenRateLimitError(RuntimeError):
     def __init__(self, retry_after):
         self.retry_after = max(1, min(86400, int(retry_after)))
-        super().__init__(f"IVEN ограничил частоту скачивания. Повторная загрузка через {math.ceil(self.retry_after / 60)} мин.")
+        delay = f"{self.retry_after} сек." if self.retry_after < 60 else f"{math.ceil(self.retry_after / 60)} мин."
+        super().__init__(f"IVEN ограничил частоту скачивания. Повторная загрузка через {delay}")
 
 
 def _iven_cooldown_path(url):
@@ -61,7 +66,13 @@ def _validate_iven_download(target_path, response_headers=""):
         with path.open("rb") as handle:
             raw = handle.read(4096)
         preview = raw.decode("utf-8", errors="ignore").casefold().replace("ё", "е")
-    if re.search(r"(?im)^HTTP/\S+\s+429\b", response_headers) or "слишком частое" in preview or "too many requests" in preview:
+    rate_limited = "слишком частое" in preview or "too many requests" in preview
+    # IVEN also uses HTTP 429 while generating a price, not only for quotas.
+    if not rate_limited and re.search(r"прайс.{0,60}(?:формиру|генериру)", preview):
+        retry = re.findall(r"(?im)^Retry-After:\s*(\d+)\s*$", response_headers)
+        LOGGER.info("IVEN response classified state=generating bytes=%s", path.stat().st_size)
+        raise IvenPricePendingError(int(retry[-1]) if retry else 5)
+    if re.search(r"(?im)^HTTP/\S+\s+429\b", response_headers) or rate_limited:
         retry = re.findall(r"(?im)^Retry-After:\s*(\d+)\s*$", response_headers)
         body_delay = re.search(r"через\s+(\d+)\s*(мин|сек)", preview)
         delay = int(retry[-1]) if retry else (int(body_delay[1]) * (60 if body_delay[2] == "мин" else 1) if body_delay else 600)
@@ -71,7 +82,7 @@ def _validate_iven_download(target_path, response_headers=""):
     if any(marker in preview for marker in ("bad password", "bad login", "unauthorized")):
         raise PermissionError("IVEN отклонил логин или пароль")
     if re.search(r"прайс.{0,60}(?:формиру|генериру)|повторите\s+запрос\s+через\s+\d+\s+сек", preview):
-        raise IvenPricePendingError("IVEN формирует прайс. Повторю запрос через 5 секунд.")
+        raise IvenPricePendingError()
     raise RuntimeError("IVEN вернул поврежденный файл вместо XLSX")
 
 
@@ -83,17 +94,19 @@ def _wait_for_iven_price(download, target_path, source_key, client_key, *, max_w
         try:
             download()
             return
-        except IvenPricePendingError:
+        except IvenPricePendingError as pending:
             Path(target_path).unlink(missing_ok=True)
             if attempt == max_waits or time.monotonic() >= deadline:
+                raise TimeoutError("IVEN пока не подготовил прайс. Лимит ожидания исчерпан, попробуйте позже.")
+            if pending.retry_after > deadline - time.monotonic():
                 raise TimeoutError("IVEN пока не подготовил прайс. Лимит ожидания исчерпан, попробуйте позже.")
             LOGGER.info("IVEN price generation pending source=%s poll=%s", source_key, attempt + 1)
             update_source_runtime(
                 source_key, client_key=client_key, status="waiting", ready=False,
                 progress=5, downloaded=0, total_bytes=0,
-                message=f"IVEN формирует прайс. Жду готовности ({attempt + 1}/{max_waits}), повтор через 5 сек.",
+                message=f"IVEN формирует прайс. Жду готовности ({attempt + 1}/{max_waits}), повтор через {pending.retry_after} сек.",
             )
-            time.sleep(5)
+            time.sleep(pending.retry_after)
 
 
 def get_api_source_status_key(session_obj):

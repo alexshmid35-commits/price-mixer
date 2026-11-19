@@ -517,6 +517,36 @@ def test_iven_rate_limit_uses_retry_after_not_generic_file_error(tmp_path):
     assert 'поврежденный' not in str(exc.value)
 
 
+def test_http_429_with_generation_body_waits_instead_of_consuming_rate_limit_attempts(tmp_path, monkeypatch):
+    path = tmp_path / 'order.xlsx'
+    calls, sleeps = [], []
+    monkeypatch.setattr(api_sources.time, 'sleep', sleeps.append)
+    def download():
+        calls.append(True)
+        if len(calls) == 1:
+            path.write_text('Прайс уже формируется. Повторите запрос через 5 секунд.')
+            api_sources._validate_iven_download(path, 'HTTP/1.1 429 Too Many Requests\r\nRetry-After: 7\r\n')
+        else:
+            with zipfile.ZipFile(path, 'w') as archive:
+                archive.writestr('xl/workbook.xml', '<workbook/>')
+            api_sources._validate_iven_download(path)
+    api_sources._wait_for_iven_price(download, path, 'iven_zakaz', 'http429')
+    assert len(calls) == 2
+    assert sleeps == [7]
+    assert zipfile.is_zipfile(path)
+
+
+def test_actual_rate_limit_has_priority_over_incidental_generation_words(tmp_path):
+    path = tmp_path / 'order.xlsx'
+    path.write_text('Слишком частое скачивание. Прайс формируется не чаще одного раза в 10 минут.')
+    with pytest.raises(api_sources.IvenRateLimitError):
+        api_sources._validate_iven_download(path, 'HTTP/1.1 429 Too Many Requests\r\nRetry-After: 537\r\n')
+
+
+def test_short_rate_limit_is_not_rounded_to_a_minute():
+    assert '5 сек.' in str(api_sources.IvenRateLimitError(5))
+
+
 def test_iven_rate_limit_body_is_recognized_without_headers(tmp_path):
     path = tmp_path / 'order.xlsx'
     path.write_text('Слишком частое скачивание прайса. Повторите через 9 мин.')
