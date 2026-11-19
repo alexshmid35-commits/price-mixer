@@ -264,87 +264,66 @@ function initMarkupUI(){
     if(state.previewMinProfit){ document.getElementById('preview-min-profit').value = state.previewMinProfit; }
     if(state.previewNoDiscountPercent){ document.getElementById('preview-no-discount-percent').value = state.previewNoDiscountPercent; }
     if(state.previewBaseMode){ document.getElementById('preview-base-mode').value = state.previewBaseMode; }
-    loadCategoryMarkups();
-    loadCategories(state.categories || []);
-    loadSuppliers();
-    loadAutoRefreshSettings();
+    var pricingPanelOpened = false;
     document.getElementById('open-pricing-btn').addEventListener('click', function(){
         document.getElementById('pricing-modal').classList.add('active');
+        if(!pricingPanelOpened){
+            pricingPanelOpened = true;
+            loadCategoryMarkups();
+            loadCategories(state.categories || []);
+            loadSuppliers();
+        }
         loadAutoRefreshSettings();
         setAutoRefreshPoll(true);
     });
     ensureQualityCheckCardUI();
     var exportGoogleBtn = document.getElementById('export-google-sheet-btn');
-    var exportGoogleBtnDefaultText = exportGoogleBtn ? exportGoogleBtn.textContent : 'В Google Таблицу';
-    function startGoogleExportProgress(){
-        if(googleExportProgressTimer){ clearInterval(googleExportProgressTimer); googleExportProgressTimer = null; }
-        if(exportGoogleBtn){
-            exportGoogleBtn.classList.add('is-loading');
-            exportGoogleBtn.textContent = 'Подключаюсь к Google Sheets...';
-        }
-        var ticks = 0;
-        googleExportProgressTimer = setInterval(function(){
-            ticks += 1;
-            if(exportGoogleBtn){
-                if(ticks < 4){
-                    exportGoogleBtn.textContent = 'Подключаюсь к Google Sheets' + '.'.repeat((ticks % 3) + 1);
-                } else {
-                    exportGoogleBtn.textContent = 'Записываю в лист' + '.'.repeat((ticks % 3) + 1);
-                }
-            }
-        }, 420);
-    }
-    function finishGoogleExportProgress(isSuccess, text){
-        if(googleExportProgressTimer){ clearInterval(googleExportProgressTimer); googleExportProgressTimer = null; }
-        if(exportGoogleBtn){
-            exportGoogleBtn.classList.remove('is-loading');
-            exportGoogleBtn.textContent = text || (isSuccess ? 'Готово' : 'Ошибка выгрузки');
-        }
-        setTimeout(function(){
-            if(exportGoogleBtn){
-                exportGoogleBtn.textContent = exportGoogleBtnDefaultText || 'В Google Таблицу';
-            }
-        }, isSuccess ? 1600 : 2600);
+    var exportGoogleLabel = document.getElementById('export-google-sheet-label');
+    function setGoogleExportBusy(busy){
+        exportGoogleBtn.disabled = busy;
+        exportGoogleBtn.classList.toggle('is-loading', busy);
+        exportGoogleBtn.setAttribute('aria-busy', String(busy));
+        exportGoogleLabel.textContent = busy ? 'Записываю в лист' : 'В Google Таблицу';
     }
     if(exportGoogleBtn){
         exportGoogleBtn.addEventListener('click', function(){
             if(!confirm('Записать текущий сводный прайс в Google Таблицу по настройкам (ссылка/ID и имя листа)? Данные на этом листе будут полностью заменены.')){ return; }
-            exportGoogleBtn.disabled = true;
-            startGoogleExportProgress();
+            setGoogleExportBusy(true);
             fetch('/api/export-google-sheets', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})})
             .then(function(r){ return r.json(); })
             .then(function(d){
-                exportGoogleBtn.disabled = false;
+                setGoogleExportBusy(false);
                 if(d && d.status === 'ok'){
-                    finishGoogleExportProgress(true, 'Готово: выгрузка в Google Sheets завершена.');
                     alert(d.message || 'Готово.');
                 } else {
-                    finishGoogleExportProgress(false, (d && d.message) || 'Ошибка выгрузки.');
                     alert((d && d.message) || 'Ошибка выгрузки.');
                 }
             }).catch(function(){
-                exportGoogleBtn.disabled = false;
-                finishGoogleExportProgress(false, 'Ошибка сети при выгрузке в Google Таблицу.');
+                setGoogleExportBusy(false);
                 alert('Ошибка сети при выгрузке в Google Таблицу.');
             });
         });
     }
-    document.getElementById('run-quality-check-btn').addEventListener('click', runPreExportQualityCheck);
-    var qualityToggleBtn = document.getElementById('toggle-quality-check-card-btn');
-    if(qualityToggleBtn){
-        qualityToggleBtn.onclick = function(){
-            toggleQualityCheckCard();
-        };
-    }
+    document.getElementById('run-quality-check-btn').addEventListener('click', function(){
+        runPreExportQualityCheck();
+        document.getElementById('quality-check-title').focus();
+    });
+    document.getElementById('toggle-quality-check-card-btn').addEventListener('click', function(){
+        toggleQualityCheckCard();
+    });
     document.getElementById('quality-reapply-markups-btn').addEventListener('click', reapplySavedMarkupsFromQuality);
-    document.getElementById('close-pricing-btn').addEventListener('click', function(){
+    function closePricingPanel(){
+        if(document.getElementById('preview-modal').classList.contains('active')){
+            closePreviewModal();
+        }
         document.getElementById('pricing-modal').classList.remove('active');
         setAutoRefreshPoll(false);
-    });
+        document.getElementById('open-pricing-btn').focus({preventScroll:true});
+    }
+    document.getElementById('close-pricing-btn').addEventListener('click', closePricingPanel);
     document.getElementById('pricing-modal').addEventListener('click', function(e){
         if(e.target.id === 'pricing-modal'){
-            this.classList.remove('active');
-            setAutoRefreshPoll(false);
+            closePricingPanel();
         }
     });
     document.getElementById('auto-refresh-enabled').addEventListener('change', saveAutoRefreshSettings);
@@ -410,9 +389,8 @@ function initMarkupUI(){
     document.getElementById('onliner-structure-modal').addEventListener('click', function(e){
         if(e.target.id === 'onliner-structure-modal'){ closeOnlinerStructurePreview(); }
     });
-    document.getElementById('close-preview-btn').addEventListener('click', closePreviewModal);
-    document.getElementById('preview-modal').addEventListener('click', function(e){
-        if(e.target.id === 'preview-modal'){ closePreviewModal(); }
+    document.getElementById('close-preview-btn').addEventListener('click', function(){
+        if(document.getElementById('preview-modal').classList.contains('active')){ closePreviewModal(); }
     });
     document.getElementById('preview-percent').addEventListener('input', function(){
         saveUiState();

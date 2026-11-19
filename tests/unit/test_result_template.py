@@ -22,7 +22,9 @@ def test_duplicate_id_counter_visible_for_multiple_suppliers():
 
     assert '<div class="num" id="duplicate-id-count">4</div>' in html
     assert 'id="duplicate-id-count" style="visibility:hidden;"' not in html
-    assert '<span id="total-products-count">10</span><span class="stat-slash">/</span><span class="stat-export-num" id="export-products-count">6</span>' in html
+    assert 'id="total-products-count">10</div>' in html
+    assert 'id="export-products-count">6</span>' in html
+    assert html.index('id="tbl-main"') < html.index('id="onliner-catalog-widget"')
     assert 'id="export-category-analytics-toggle" aria-label="Показать категории выгрузки в Google">▾</button>' in html
     assert 'id="export-category-analytics-btn" style="padding:8px 16px;font-size:13px;">Показать</button>' in html
     assert 'id="hidden-category-analytics-btn" aria-label="Показать скрытые категории">▾</button>' in html
@@ -256,7 +258,7 @@ def test_result_template_uses_static_bootstrap_script():
     assert "function runVerifyAllIds" in verify_ids_text
     assert "function renderVerifyAllIdsStatus" in verify_ids_text
 
-    static_css = Path(__file__).resolve().parents[2] / "static" / "css" / "result.css"
+    static_css = Path(__file__).resolve().parents[2] / "static" / "css" / "consolidated-workspace.css"
     assert ".quality-card-head" in static_css.read_text(encoding="utf-8")
 
 
@@ -266,6 +268,6 @@ def test_experimental_noid_report_removes_only_completed_row():
 
     assert "function applyDecisionLocally(button, action)" in script
     assert "ID сохранён" in script
-    assert "item.classList.add('decision-removing')" in script
+    assert "removeDecidedRows(new Set([item.dataset.itemKey]))" in script
     assert "return loadStatus({skipItemRefresh: true})" in script
     assert 'data-item-key="' in script

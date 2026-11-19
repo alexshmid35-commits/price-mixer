@@ -116,48 +116,50 @@ a:hover { text-decoration: underline; }
 .busy-title { font-size: 16px; font-weight: 700; color: #1f2937; }
 .busy-text { margin-top: 8px; font-size: 13px; color: #5f6368; line-height: 1.45; }
 @keyframes spin { to { transform: rotate(360deg); } }
-</style></head><body>
+</style><link rel="stylesheet" href="{{ asset_url('css/consolidated-workspace.css') }}"><link rel="stylesheet" href="{{ asset_url('css/supplier-workspace.css') }}"></head><body class="supplier-workspace">
 <div class="container">
-<h1>Price <span>Mixer</span></h1>
-<p class="subtitle">Загрузите прайсы и укажите имя поставщика для каждого файла</p>
+<header class="top-bar workspace-header upload-head">
+    <div>
+        <div class="workspace-nav"><span class="workspace-brand"><img src="{{ asset_url('favicon.svg') }}" width="18" height="18" alt=""> Price Mixer</span></div>
+        <h1>Поставщики</h1>
+    </div>
+    <div class="upload-head-actions">
+        <button class="btn btn-outline" type="button" id="open-settings-btn">Настройки</button>
+    </div>
+</header>
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
 <form method="POST" action="/upload" enctype="multipart/form-data" id="upload-form">
-<div class="card">
-    <div class="drop-zone" id="drop-zone">
-        <div class="icon">&#128193;</div>
-        <div class="main-text">Перетащите файлы сюда или нажмите для выбора</div>
-        <div class="sub-text">Поддерживаются .xls и .xlsx</div>
-        <input type="file" name="files" id="file-input" multiple accept=".xls,.xlsx">
-    </div>
-    <div id="native-file-inputs" style="display:none;"></div>
-    <div class="file-list" id="file-list"></div>
-    <div class="hint">Для каждого файла укажите имя поставщика (например: BN, Tradex, TGPC)</div>
-    <div class="actions" id="actions-area" style="display:none; margin-top:12px;">
-        <button type="submit" class="btn" id="submit-btn">Обработать прайсы</button>
-    </div>
-</div>
-<div class="card" id="api-sources-card">
-    <h2 style="font-size:20px; margin-bottom:8px;">Загрузка по ссылке / API</h2>
-    <p class="subtitle" style="margin-bottom:16px;">Выгрузи прайс по ссылке/API, дождись 100% и обработай его тем же пайплайном, что и ручную загрузку.</p>
+<section id="api-sources-card" class="supplier-section" aria-labelledby="api-source-title">
+    <h2 id="api-source-title">Прайсы поставщиков</h2>
     <div class="api-sources-grid" id="api-sources-grid"></div>
-    <div id="api-process-ready-wrap" style="display:none;justify-content:center;margin:12px 0 0;">
-        <button type="button" class="btn btn-outline" id="api-process-ready-btn">Обработать все готовые API-прайсы</button>
+    <div id="api-process-ready-wrap" style="display:none;">
+        <button type="button" class="btn workspace-primary" id="api-process-ready-btn">Обработать готовые прайсы</button>
     </div>
     <div class="api-history-card">
         <div class="api-history-head">
-            <div>
-                <div class="api-history-title">История API-выгрузок</div>
-                <div class="api-history-note">Последние загрузки и обработки по API-источникам.</div>
-            </div>
+            <div class="api-history-title">История загрузок</div>
             <button type="button" class="btn btn-outline api-history-toggle" id="api-history-toggle-btn">Показать историю</button>
         </div>
         <div class="api-history-body" id="api-history-body">
             <div class="api-history-list" id="api-history-list"></div>
         </div>
     </div>
-</div>
+</section>
+<section class="supplier-section" aria-labelledby="manual-upload-title">
+    <h2 id="manual-upload-title">Загрузка файла</h2>
+    <div class="drop-zone" id="drop-zone">
+        <div class="main-text">Выбрать файлы</div>
+        <div class="sub-text">.xls, .xlsx</div>
+        <input type="file" name="files" id="file-input" aria-label="Выбрать файлы прайсов" multiple accept=".xls,.xlsx">
+    </div>
+    <div id="native-file-inputs" style="display:none;"></div>
+    <div class="file-list" id="file-list"></div>
+    <div class="actions" id="actions-area" style="display:none; margin-top:12px;">
+        <button type="submit" class="btn" id="submit-btn">Обработать прайсы</button>
+    </div>
+</section>
 <div class="spinner" id="spinner">
     <div class="dot"></div><div class="dot"></div><div class="dot"></div>
     <p style="margin-top:16px; color:#666;">Обработка прайсов... Это может занять до минуты.</p>
@@ -225,27 +227,6 @@ dropZone.addEventListener('drop', function(e){
 (function setupUploadSettingsUI(){
     var container = document.querySelector('.container');
     if(!container){ return; }
-    var h1 = container.querySelector('h1');
-    var subtitle = container.querySelector('.subtitle');
-    if(h1 && subtitle && !container.querySelector('.upload-head')){
-        var head = document.createElement('div');
-        head.className = 'upload-head';
-        var titleWrap = document.createElement('div');
-        h1.parentNode.insertBefore(head, h1);
-        titleWrap.appendChild(h1);
-        titleWrap.appendChild(subtitle);
-        head.appendChild(titleWrap);
-        var actions = document.createElement('div');
-        actions.className = 'upload-head-actions';
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-outline';
-        btn.id = 'open-settings-btn';
-        btn.textContent = 'Настройки';
-        actions.appendChild(btn);
-        head.appendChild(actions);
-    }
-
     if(!document.getElementById('settings-modal')){
         var modal = document.createElement('div');
         modal.id = 'settings-modal';
@@ -606,7 +587,7 @@ function renderApiHistory(items){
     }).join('');
 }
 
-function renderApiSources(items){
+function renderApiSources(items, history){
     var grid = document.getElementById('api-sources-grid');
     if(!grid){ return; }
     var list = Array.isArray(items) ? items : [];
@@ -621,22 +602,26 @@ function renderApiSources(items){
         var disabledProcess = (!item.ready) ? 'disabled' : '';
         var autoLabel = apiSourceAutoProcessMap[item.source_key] ? 'Жду 100%' : 'Выгрузить и обработать';
         var totalText = item.total_bytes ? (' / ' + item.total_bytes.toLocaleString()) : '';
-        var message = item.message || (item.ready ? 'Прайс готов к обработке.' : 'Нажми "Выгрузить", чтобы получить прайс.');
-        var readyAt = item.ready ? formatApiSourceTime(item.finished_at) : '';
-        var timeText = readyAt ? ('Последняя выгрузка: ' + readyAt) : '';
+        var message = item.running || item.status === 'error' ? item.message || '' : '';
+        var lastSuccess = (history || []).find(function(entry){
+            return entry.source_key === item.source_key && entry.event_type === 'fetch' && entry.status === 'ok';
+        });
+        var readyAt = formatApiSourceTime(item.ready ? item.finished_at : lastSuccess && lastSuccess.finished_at);
+        var timeText = readyAt || 'Нет загрузок';
         var processBtnHtml = item.ready
             ? ('<button type="button" class="btn api-source-process" data-source="' + item.source_key + '" ' + disabledProcess + '>Обработать</button>')
             : '';
         return '' +
-            '<div class="api-source-item" data-source="' + item.source_key + '">' +
+            '<div class="api-source-item" data-source="' + escapeHtml(item.source_key) + '">' +
                 '<div class="api-source-title">' +
-                    '<div><strong>' + item.label + '</strong><div class="api-source-supplier">Поставщик: ' + item.supplier + '</div></div>' +
+                    '<strong>' + escapeHtml(item.label) + '</strong>' +
                     '<span class="' + sourceBadgeClass(item) + '">' + sourceBadgeText(item) + '</span>' +
                 '</div>' +
+                (item.running ? '<div class="api-source-activity">' +
                 '<div class="api-source-progress"><span style="width:' + progress + '%"></span></div>' +
-                '<div class="api-source-meta"><span>' + progress + '%</span><span>' + Number(item.downloaded || 0).toLocaleString() + totalText + '</span></div>' +
-                '<div class="api-source-message">' + message + '</div>' +
-                '<div class="api-source-time">' + timeText + '</div>' +
+                '<div class="api-source-meta"><span>' + progress + '%</span><span>' + Number(item.downloaded || 0).toLocaleString() + totalText + '</span></div></div>' : '') +
+                (message ? '<div class="api-source-message">' + escapeHtml(message) + '</div>' : '') +
+                '<div class="api-source-time"><span>Последняя загрузка</span><strong>' + escapeHtml(timeText) + '</strong></div>' +
                 '<div class="api-source-actions">' +
                     '<button type="button" class="btn btn-outline api-source-fetch" data-source="' + item.source_key + '" ' + disabledFetch + '>Выгрузить</button>' +
                     '<button type="button" class="btn btn-outline api-source-fetch-process" data-source="' + item.source_key + '" ' + disabledFetchProcess + '>' + autoLabel + '</button>' +
@@ -660,7 +645,7 @@ function loadApiSourceStatuses(){
         var processAllWrap = document.getElementById('api-process-ready-wrap');
         if(processAllBtn){
             var readyCount = apiReadySources.length;
-            processAllBtn.textContent = 'Обработать все готовые API-прайсы (' + readyCount + ')';
+            processAllBtn.textContent = 'Обработать готовые прайсы (' + readyCount + ')';
             if(processAllWrap){
                 processAllWrap.style.display = readyCount > 0 ? 'flex' : 'none';
             }
@@ -697,7 +682,7 @@ function loadApiSourceStatuses(){
         } else if(!Object.keys(apiSourceAutoProcessMap).length && busyOverlay && busyOverlay.classList.contains('active') && !busyStageTimer) {
             hideBusyOverlay();
         }
-        renderApiSources(items);
+        renderApiSources(items, Array.isArray(d.history) ? d.history : []);
         if(items.some(function(it){ return !!it.running; }) || Object.keys(apiSourceAutoProcessMap).length){
             scheduleApiSourcePoll();
         }

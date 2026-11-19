@@ -327,12 +327,7 @@
             });
         }).then(function(result){
             if(!result){ return; }
-            (result.item_keys || []).forEach(function(key){
-                state.selected.delete(String(key));
-                var item = document.querySelector('.experimental-noid-item[data-item-key="' + CSS.escape(String(key)) + '"]');
-                if(item){ item.remove(); }
-            });
-            updateBulkControls();
+            removeDecidedRows(new Set((result.item_keys || []).map(String)));
             if(actionButton){ actionButton.textContent = originalLabel; }
             if(typeof reloadMainTable === 'function'){ reloadMainTable(); }
             if(typeof refreshActionBadges === 'function'){ refreshActionBadges(); }
@@ -394,6 +389,36 @@
         }).catch(function(error){ window.alert(error.message); });
     }
 
+    function removeDecidedRows(keys){
+        var list = byId('experimental-noid-list');
+        if(!list){ return; }
+        var rows = Array.from(list.querySelectorAll('.experimental-noid-item'));
+        var removed = rows.filter(function(row){ return keys.has(row.dataset.itemKey); });
+        if(!removed.length){ return; }
+        var bounds = list.getBoundingClientRect();
+        // Preserve a surviving row's viewport position, not its old scroll offset.
+        var anchor = rows.find(function(row){
+            return !keys.has(row.dataset.itemKey) && row.getBoundingClientRect().bottom > bounds.top + 1;
+        });
+        var anchorTop = anchor && anchor.getBoundingClientRect().top;
+        var restoreFocus = removed.some(function(row){ return row.contains(document.activeElement); });
+        removed.forEach(function(row){
+            state.selected.delete(row.dataset.itemKey);
+            row.remove();
+        });
+        if(anchor){ list.scrollTop += anchor.getBoundingClientRect().top - anchorTop; }
+        if(restoreFocus){
+            var next = (anchor && anchor.querySelector('[data-exp-select-toggle]')) || list;
+            next.focus({preventScroll: true});
+        }
+        state.totalItems = Math.max(0, state.totalItems - removed.length);
+        updateLocalPageLabel();
+        updateBulkControls();
+        if(!list.querySelector('.experimental-noid-item')){
+            list.innerHTML = '<div class="experimental-noid-empty">На этой странице всё обработано.</div>';
+        }
+    }
+
     function applyDecisionLocally(button, action){
         if(action === 'reject_candidate'){
             var candidate = button.closest('.experimental-noid-candidate');
@@ -417,22 +442,13 @@
         item.querySelectorAll('[data-exp-action]').forEach(function(control){ control.disabled = true; });
         var note = document.createElement('div');
         note.className = 'experimental-noid-decision-note ' + (action === 'confirm' ? 'confirmed' : 'skipped');
+        note.setAttribute('role', 'status');
         note.textContent = action === 'confirm' ? 'ID сохранён' : 'Товар пропущен';
         item.appendChild(note);
         item.classList.add('decision-complete');
         window.setTimeout(function(){
-            item.style.maxHeight = item.getBoundingClientRect().height + 'px';
-            window.requestAnimationFrame(function(){ item.classList.add('decision-removing'); });
-            window.setTimeout(function(){
-                item.remove();
-                state.totalItems = Math.max(0, state.totalItems - 1);
-                updateLocalPageLabel();
-                var list = byId('experimental-noid-list');
-                if(list && !list.querySelector('.experimental-noid-item')){
-                    list.innerHTML = '<div class="experimental-noid-empty">На этой странице всё обработано. Нажми обновить или перейди дальше.</div>';
-                }
-            }, 260);
-        }, 420);
+            if(item.isConnected){ removeDecidedRows(new Set([item.dataset.itemKey])); }
+        }, 350);
     }
 
     function makeDecision(button){

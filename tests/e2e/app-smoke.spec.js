@@ -39,7 +39,7 @@ test('health, version and request correlation are available', async ({
 
 test('home page renders upload form', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('h1')).toContainText('Price Mixer');
+  await expect(page.getByRole('heading', { name: 'Поставщики', exact: true })).toBeVisible();
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
     'href',
     /\/static\/favicon\.svg\?v=/,

@@ -82,7 +82,15 @@ function ensurePreviewTableLayout(){
     }
 }
 
+function setPricingPreviewVisible(visible){
+    document.getElementById('preview-modal').classList.toggle('active', visible);
+    document.getElementById('workspace-price-rules').hidden = visible;
+    document.getElementById('open-preview-modal-btn').setAttribute('aria-pressed', String(visible));
+    document.getElementById('close-preview-btn').setAttribute('aria-pressed', String(!visible));
+}
+
 function openPreviewModal(){
+    if(document.getElementById('preview-modal').classList.contains('active')){ return; }
     var categories = getSelectedValues('markup-categories');
     if(!categories.length){
         var mainCategories = document.getElementById('markup-categories');
@@ -103,12 +111,12 @@ function openPreviewModal(){
     document.getElementById('preview-no-discount-percent').value = document.getElementById('markup-no-discount-percent').value || '0';
     syncPreviewModalCategorySelector();
     applyStoredPercentForPreviewSelection();
-    document.getElementById('preview-modal').classList.add('active');
+    setPricingPreviewVisible(true);
     schedulePreviewModalItemsLoad();
 }
 
 function closePreviewModal(){
-    document.getElementById('preview-modal').classList.remove('active');
+    setPricingPreviewVisible(false);
     hideMarketOffersTooltip();
     if(marketRefreshPollTimer){ clearTimeout(marketRefreshPollTimer); marketRefreshPollTimer = null; }
     if(previewModalLoadTimer){ clearTimeout(previewModalLoadTimer); previewModalLoadTimer = null; }

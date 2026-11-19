@@ -1,0 +1,52 @@
+.supplier-workspace { min-height: 100vh; }
+.supplier-workspace > .container { max-width: 1520px; padding: 20px 28px; }
+.supplier-workspace .workspace-header { display: flex; align-items: flex-end; justify-content: space-between; }
+.supplier-workspace .btn { padding: 7px 10px; font-size: 12px; font-weight: 650; line-height: 1.4; min-height: 34px; border-radius: 5px; }
+.supplier-workspace .btn:not(.btn-outline) { background: var(--workspace-accent); border-color: var(--workspace-accent); }
+.supplier-workspace .btn-outline { border-color: var(--workspace-line); color: var(--workspace-ink); }
+.supplier-workspace .btn:disabled { opacity: .55; cursor: not-allowed; }
+.supplier-section { margin-bottom: 16px; border-top: 1px solid var(--workspace-line); }
+.supplier-section h2 { font-size: 16px; padding: 12px 0; }
+.supplier-section .api-sources-grid { display: block; border-bottom: 1px solid var(--workspace-line); }
+.supplier-section .api-source-item {
+    display: grid; grid-template-columns: minmax(160px, 1fr) minmax(145px, .85fr) minmax(0, 2fr);
+    gap: 5px 16px; align-items: center; background: var(--workspace-paper);
+    border: 0; border-top: 1px solid var(--workspace-line); border-radius: 0; padding: 10px 14px;
+}
+.supplier-section .api-source-title { grid-column: 1; grid-row: 1; align-items: center; flex-wrap: wrap; justify-content: start; gap: 6px; }
+.supplier-section .api-source-title strong { font-size: 14px; color: var(--workspace-ink); overflow-wrap: anywhere; }
+.supplier-section .api-source-badge { border-radius: 4px; padding: 2px 6px; background: #eef1ef; color: #46534e; }
+.supplier-section .api-source-badge.ready { background: #e7f2ec; color: #176455; }
+.supplier-section .api-source-badge.error { background: #fcece8; color: #9f3028; border: 0; margin: 0; }
+.supplier-section .api-source-time { grid-column: 2; grid-row: 1; display: grid; color: var(--workspace-muted); font-variant-numeric: tabular-nums; }
+.supplier-section .api-source-time strong { color: var(--workspace-ink); font-weight: 650; }
+.supplier-section .api-source-actions { grid-column: 3; grid-row: 1; justify-content: flex-end; gap: 6px; }
+.supplier-section .api-source-message, .supplier-section .api-source-activity { grid-column: 1 / -1; }
+.supplier-section .api-source-message { overflow-wrap: anywhere; color: var(--workspace-muted); }
+.supplier-section .api-source-progress { height: 4px; background: #e8eeea; }
+.supplier-section .api-source-progress > span { background: var(--workspace-accent); }
+.supplier-section .api-source-meta { margin-top: 3px; font-variant-numeric: tabular-nums; }
+#api-process-ready-wrap { justify-content: flex-end; margin-top: 10px; }
+.supplier-section .api-history-card { margin-top: 10px; border-top: 0; padding: 0; }
+.supplier-section .api-history-head { align-items: center; }
+.supplier-section .api-history-row { border-radius: 5px; overflow-wrap: anywhere; }
+.supplier-section .drop-zone { padding: 16px; border: 1px dashed #aabbb2; border-radius: 6px; background: var(--workspace-paper); }
+.supplier-section .drop-zone:is(:hover, :focus-within, .drag-over, .has-files) { background: #edf4ef; border-color: var(--workspace-accent); }
+.supplier-section .drop-zone .main-text { font-size: 14px; margin-bottom: 2px; color: var(--workspace-accent); }
+.supplier-section .drop-zone .sub-text { font-size: 12px; color: var(--workspace-muted); }
+.supplier-section .file-list:empty { display: none; }
+.supplier-section .file-item { background: var(--workspace-paper); border: 1px solid var(--workspace-line); }
+.supplier-section .file-item .fname { min-width: 0; overflow-wrap: anywhere; }
+.supplier-workspace :focus-visible { outline: 2px solid var(--workspace-accent); outline-offset: 2px; }
+
+@media (max-width: 850px) {
+    .supplier-section .api-source-item { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .supplier-section .api-source-actions { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
+}
+@media (max-width: 540px) {
+    .supplier-workspace > .container { padding: 12px; }
+    .supplier-section .api-source-item { gap: 6px 10px; padding: 9px 10px; }
+    .supplier-section .api-source-time { text-align: end; }
+    .supplier-section .file-item { flex-wrap: wrap; padding: 8px; }
+    .supplier-section .file-item .fname { flex-basis: 100%; }
+}
